@@ -85,7 +85,7 @@ sections:
             name: Float (PBFT)
           - entity: sensor.heltec_pi30_display_pi30_battery_float_voltage
             name: Float (PBFT)
-          - entity: select.heltec_pi30_display_pi30_set_battery_recharge_voltage
+          - entity: number.heltec_pi30_display_pi30_set_battery_recharge_voltage
             name: Ripresa carica da rete (PBCV)
           - entity: sensor.heltec_pi30_display_pi30_battery_recharge_voltage
             name: Ripresa carica da rete (PBCV)
@@ -180,6 +180,27 @@ sections:
             name: Comando (senza CRC)
           - entity: button.heltec_pi30_pi30_send_manual_command
             name: Invia
+      - type: entities
+        title: Comandi di lettura
+        show_header_toggle: false
+        entities:
+          - entity: button.heltec_pi30_display_pi30_aggiorna_adesso_qpiri_qpigs_qmod
+            name: Aggiorna adesso (QPIRI / QPIGS / QMOD)
+          - type: divider
+          # Risposta solo nel log ESPHome (serve `debug:` sotto `uart:`)
+          - entity: button.heltec_pi30_display_pi30_qpi_protocollo
+            name: QPI - protocollo
+          - entity: button.heltec_pi30_display_pi30_qid_numero_di_serie
+            name: QID - numero di serie
+          - entity: button.heltec_pi30_display_pi30_qvfw_firmware
+            name: QVFW - firmware
+          - entity: button.heltec_pi30_display_pi30_qdi_valori_di_default
+            name: QDI - valori di default
+          - entity: button.heltec_pi30_display_pi30_qmchgcr_correnti_di_carica_ammesse
+            name: QMCHGCR - correnti di carica ammesse
+          - entity: >-
+              button.heltec_pi30_display_pi30_qmuchgcr_correnti_di_carica_da_rete_ammesse
+            name: QMUCHGCR - correnti da rete ammesse
       - type: entities
         title: Risposte grezze (dal polling)
         show_header_toggle: false

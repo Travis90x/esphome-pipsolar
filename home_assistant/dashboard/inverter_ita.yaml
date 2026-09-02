@@ -34,11 +34,11 @@ sections:
             name: Priorita' letta dall'inverter
           - type: divider
           - entity: switch.heltec_pi30_display_pi30_output_priority_utility
-            name: Utility first (USB)
-          - entity: switch.heltec_pi30_display_pi30_output_priority_sbu
-            name: SBU
+            name: 0 Utility first (USB)
           - entity: switch.heltec_pi30_display_pi30_output_priority_solar
-            name: Solar first (SUB)
+            name: 1 Solar first (SUB)
+          - entity: switch.heltec_pi30_display_pi30_output_priority_sbu
+            name: 2 SBU
       - type: entities
         title: Priorita' carica (PCP)
         show_header_toggle: false
@@ -46,14 +46,14 @@ sections:
           - entity: sensor.heltec_pi30_display_pi30_charger_source_priority
             name: Priorita' letta dall'inverter
           - type: divider
+          - entity: switch.heltec_pi30_display_pi30_carica_solare
+            name: 1 Carica prima da Solare e poi Rete
           - entity: switch.heltec_pi30_display_pi30_carica_solare_rete
-            name: Carica da Solare + Rete (insieme)
+            name: 2 Carica da Solare + Rete (insieme)
           - entity: switch.heltec_pi30_display_pi30_carica_solo_solare
-            name: Carica solo da Solare
+            name: 3 Carica solo da Solare
           - entity: switch.heltec_pi30_display_pi30_carica_rete
             name: Carica solo da Rete
-          - entity: switch.heltec_pi30_display_pi30_carica_solare
-            name: Carica prima da Solare e poi Rete
       - type: entities
         title: Stato inverter
         show_header_toggle: false
@@ -81,18 +81,16 @@ sections:
         title: Batteria
         show_header_toggle: false
         entities:
-          - entity: number.heltec_pi30_display_pi30_set_battery_float_voltage
-            name: Float (PBFT)
-          - entity: sensor.heltec_pi30_display_pi30_battery_float_voltage
-            name: Float (PBFT)
           - entity: number.heltec_pi30_display_pi30_set_battery_recharge_voltage
             name: Ripresa carica da rete (PBCV)
           - entity: sensor.heltec_pi30_display_pi30_battery_recharge_voltage
             name: Ripresa carica da rete (PBCV)
+          - type: divider
           - entity: number.heltec_pi30_display_pi30_set_battery_redischarge_voltage
             name: Ripresa scarica (PBDV)
           - entity: sensor.heltec_pi30_display_pi30_battery_redischarge_voltage
             name: Ripresa scarica (PBDV)
+          - type: divider
           - entity: number.heltec_pi30_display_pi30_set_battery_under_voltage
             name: Cut-off batteria (PSDV)
           - entity: sensor.heltec_pi30_display_pi30_battery_under_voltage
@@ -103,6 +101,11 @@ sections:
           - entity: sensor.heltec_pi30_display_pi30_battery_bulk_voltage
             name: Bulk / C.V. (PCVV)
           - type: divider
+          - entity: number.heltec_pi30_display_pi30_set_battery_float_voltage
+            name: Float (PBFT)
+          - entity: sensor.heltec_pi30_display_pi30_battery_float_voltage
+            name: Float (PBFT)
+          - type: divider
           - entity: select.heltec_pi30_display_pi30_set_max_total_charging_current
             name: Corrente max di carica totale
           - entity: sensor.heltec_pi30_display_pi30_max_total_charging_current
@@ -111,6 +114,14 @@ sections:
             name: Corrente max di carica da rete
           - entity: sensor.heltec_pi30_display_pi30_max_utility_charging_current
             name: Corrente max di carica da rete
+      - type: entities
+        title: Console comandi
+        show_header_toggle: false
+        entities:
+          - entity: text.heltec_pi30_pi30_manual_command
+            name: Comando (senza CRC)
+          - entity: button.heltec_pi30_pi30_send_manual_command
+            name: Invia
   - type: grid
     cards:
       - type: heading
@@ -175,21 +186,12 @@ sections:
         heading_style: title
         icon: mdi:stethoscope
       - type: entities
-        title: Console comandi
-        show_header_toggle: false
-        entities:
-          - entity: text.heltec_pi30_pi30_manual_command
-            name: Comando (senza CRC)
-          - entity: button.heltec_pi30_pi30_send_manual_command
-            name: Invia
-      - type: entities
         title: Comandi di lettura
         show_header_toggle: false
         entities:
           - entity: button.heltec_pi30_display_pi30_aggiorna_adesso_qpiri_qpigs_qmod
             name: Aggiorna adesso (QPIRI / QPIGS / QMOD)
           - type: divider
-          # Risposta solo nel log ESPHome (serve `debug:` sotto `uart:`)
           - entity: button.heltec_pi30_display_pi30_qpi_protocollo
             name: QPI - protocollo
           - entity: button.heltec_pi30_display_pi30_qid_numero_di_serie

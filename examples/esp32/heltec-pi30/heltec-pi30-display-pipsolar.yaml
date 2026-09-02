@@ -552,16 +552,12 @@ output:
          28.4, 28.5, 28.6, 28.7, 28.8, 28.9, 29.0, 29.1, 29.2]
     battery_redischarge_voltage:
       id: out_redischarge_v
+      # Verificato sul campo: a differenza di PBCV, qui l'inverter accetta
+      # SOLO passi da 0.5 (i decimali rispondono NAK), come da manuale.
       # 0.0 disattiva la ripresa di scarica ("PBDV00.0").
-      # Passi da 0.1 per verificare se accetta i decimali come PBCV: i
-      # valori sotto 24.0 verranno rifiutati dall'inverter, non da qui.
       possible_values:
-        [0.0,
-         24.0, 24.1, 24.2, 24.3, 24.4, 24.5, 24.6, 24.7, 24.8, 24.9, 25.0,
-         25.1, 25.2, 25.3, 25.4, 25.5, 25.6, 25.7, 25.8, 25.9, 26.0, 26.1,
-         26.2, 26.3, 26.4, 26.5, 26.6, 26.7, 26.8, 26.9, 27.0, 27.1, 27.2,
-         27.3, 27.4, 27.5, 27.6, 27.7, 27.8, 27.9, 28.0, 28.1, 28.2, 28.3,
-         28.4, 28.5, 28.6, 28.7, 28.8, 28.9, 29.0]
+        [0.0, 24.0, 24.5, 25.0, 25.5, 26.0, 26.5, 27.0, 27.5, 28.0, 28.5,
+         29.0]
     current_max_ac_charging_current:
       id: out_max_ac_charge_a
       possible_values: [2, 10, 20, 30, 40, 50, 60, 70, 80]
@@ -624,23 +620,6 @@ number:
           id: out_recharge_v
           value: !lambda return roundf(x * 10.0f) / 10.0f;
 
-  - platform: template
-    name: "PI30 set battery redischarge voltage"
-    unit_of_measurement: "V"
-    device_class: voltage
-    min_value: 0.0
-    max_value: 29.0
-    step: 0.1
-    mode: box
-    optimistic: true
-    restore_value: true
-    initial_value: 24.5
-    entity_category: config
-    set_action:
-      - output.pipsolar.set_level:
-          id: out_redischarge_v
-          value: !lambda return roundf(x * 10.0f) / 10.0f;
-
   # Il componente pipsolar non espone la tensione di bulk come output,
   # quindi il comando PCVV viene accodato direttamente. Il CRC lo calcola
   # comunque il componente.
@@ -697,21 +676,31 @@ select:
     restore_value: true
     entity_category: config
     initial_option: "20"
-    # Massimo reale di questo inverter: 80 A.
-    #
-    # NOTA: da 60 A in su l'inverter rifiuta il comando via seriale, pur
-    # accettando 60/70/80 dal proprio display. Non e' un problema di
-    # trama: il CRC di "MCHGC060" e' pulito (1D B1, nessun byte
-    # 0x28/0x0D/0x0A da incrementare), quindi il rifiuto arriva dalla
-    # validazione interna dell'inverter.
-    # Il PDF Voltronic documenta MNCHGC<mnnn>: da provare "MNCHGC0060"
-    # dalla console comandi.
-    options: ["10", "20", "30", "40", "50", "60", "70", "80"]
+    # Verificato con la cattura delle trame: MCHGC050 -> (ACK,
+    # MCHGC060 e MCHGC070 -> (NAK. Il listino QMCHGCR arriva a 110 e il
+    # pannello mostra di piu', ma via seriale questa unita' accetta al
+    # massimo 50 A. Non e' la trama (CRC di MCHGC060 = 1D B1, pulito).
+    options: ["10", "20", "30", "40", "50"]
     set_action:
       - output.pipsolar.set_level:
           id: out_max_charge_a
           value: !lambda return atof(x.c_str());
 
+
+  - platform: template
+    name: "PI30 set battery redischarge voltage"
+    id: sel_redischarge_v
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    initial_option: "24.5"
+    # 0.0 = ripresa di scarica disattivata. Solo passi da 0.5: verificato.
+    options: ["0.0", "24.0", "24.5", "25.0", "25.5", "26.0", "26.5",
+              "27.0", "27.5", "28.0", "28.5", "29.0"]
+    set_action:
+      - output.pipsolar.set_level:
+          id: out_redischarge_v
+          value: !lambda return atof(x.c_str());
 
 # =====================================================================
 # CONSOLE COMANDI MANUALI

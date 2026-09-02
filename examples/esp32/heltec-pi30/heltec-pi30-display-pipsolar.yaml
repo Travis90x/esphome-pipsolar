@@ -167,6 +167,8 @@ sensor:
   - platform: wifi_signal
     name: "WiFi Signal dB"
     id: wifi_signal_db
+    unit_of_measurement: "dBm"
+    device_class: signal_strength
     update_interval: 10s
     entity_category: diagnostic
 
@@ -252,6 +254,13 @@ binary_sensor:
       name: "PI30 configuration changed"
       entity_category: diagnostic
 
+
+globals:
+  - id: pi30_charger_priority
+    type: int
+    restore_value: yes
+    initial_value: '2'
+    
 switch:
   - platform: pipsolar
     pipsolar_id: inverter0
@@ -268,6 +277,150 @@ switch:
     pv_power_balance:
       name: "PI30 PV power balance"
 
+# ============================================================
+# PRIORITÀ CARICA
+#
+# 0 = Rete
+# 1 = Solare
+# 2 = Solare + Rete
+# 3 = Solo solare
+#
+# Quando si attiva un pulsante:
+# - viene inviato UN SOLO comando al PI30
+# - gli altri pulsanti vengono portati a OFF solo graficamente
+# - il loro turn_off_action NON viene eseguito
+#
+# Lo spegnimento manuale di un pulsante NON invia comandi
+# all'inverter.
+# ============================================================
+
+  # ==========================================================
+  # PRIORITÀ CARICA: RETE (0)
+  # ==========================================================
+
+  - platform: template
+    name: "PI30 carica: Rete"
+    id: pi30_charger_utility
+
+    lambda: |-
+      return id(pi30_charger_priority) == 0;
+
+    turn_on_action:
+      - globals.set:
+          id: pi30_charger_priority
+          value: '0'
+
+      - output.pipsolar.set_level:
+          id: out_charger_priority
+          value: 0.0
+
+      # Spegnimento grafico degli altri switch.
+      # NON viene inviato alcun comando al PI30.
+      - lambda: |-
+          id(pi30_charger_solar).publish_state(false);
+          id(pi30_charger_solar_utility).publish_state(false);
+          id(pi30_charger_only_solar).publish_state(false);
+
+    turn_off_action:
+      - lambda: |-
+          // Nessun comando all'inverter.
+
+
+  # ==========================================================
+  # PRIORITÀ CARICA: SOLARE (1)
+  # ==========================================================
+
+  - platform: template
+    name: "PI30 carica: Solare"
+    id: pi30_charger_solar
+
+    lambda: |-
+      return id(pi30_charger_priority) == 1;
+
+    turn_on_action:
+      - globals.set:
+          id: pi30_charger_priority
+          value: '1'
+
+      - output.pipsolar.set_level:
+          id: out_charger_priority
+          value: 1.0
+
+      # Spegnimento grafico degli altri switch.
+      # NON viene inviato alcun comando al PI30.
+      - lambda: |-
+          id(pi30_charger_utility).publish_state(false);
+          id(pi30_charger_solar_utility).publish_state(false);
+          id(pi30_charger_only_solar).publish_state(false);
+
+    turn_off_action:
+      - lambda: |-
+          // Nessun comando all'inverter.
+
+
+  # ==========================================================
+  # PRIORITÀ CARICA: SOLARE + RETE (2)
+  # ==========================================================
+
+  - platform: template
+    name: "PI30 carica: Solare + Rete"
+    id: pi30_charger_solar_utility
+
+    lambda: |-
+      return id(pi30_charger_priority) == 2;
+
+    turn_on_action:
+      - globals.set:
+          id: pi30_charger_priority
+          value: '2'
+
+      - output.pipsolar.set_level:
+          id: out_charger_priority
+          value: 2.0
+
+      # Spegnimento grafico degli altri switch.
+      # NON viene inviato alcun comando al PI30.
+      - lambda: |-
+          id(pi30_charger_utility).publish_state(false);
+          id(pi30_charger_solar).publish_state(false);
+          id(pi30_charger_only_solar).publish_state(false);
+
+    turn_off_action:
+      - lambda: |-
+          // Nessun comando all'inverter.
+
+
+  # ==========================================================
+  # PRIORITÀ CARICA: SOLO SOLARE (3)
+  # ==========================================================
+
+  - platform: template
+    name: "PI30 carica: Solo solare"
+    id: pi30_charger_only_solar
+
+    lambda: |-
+      return id(pi30_charger_priority) == 3;
+
+    turn_on_action:
+      - globals.set:
+          id: pi30_charger_priority
+          value: '3'
+
+      - output.pipsolar.set_level:
+          id: out_charger_priority
+          value: 3.0
+
+      # Spegnimento grafico degli altri switch.
+      # NON viene inviato alcun comando al PI30.
+      - lambda: |-
+          id(pi30_charger_utility).publish_state(false);
+          id(pi30_charger_solar).publish_state(false);
+          id(pi30_charger_solar_utility).publish_state(false);
+
+    turn_off_action:
+      - lambda: |-
+          // Nessun comando all'inverter.
+          
 # =====================================================================
 # SETPOINT SCRIVIBILI
 # Il componente espone gli `output`; li rendo comodi con dei `number`.
@@ -298,9 +451,11 @@ number:
   - platform: template
     name: "PI30 set battery recharge voltage"
     unit_of_measurement: "V"
+    device_class: voltage
     min_value: 22.0
     max_value: 28.5
     step: 0.1
+    mode: BOX
     optimistic: true
     restore_value: true
     initial_value: 23.5
@@ -313,9 +468,11 @@ number:
   - platform: template
     name: "PI30 set battery float voltage"
     unit_of_measurement: "V"
+    device_class: voltage
     min_value: 24.0
     max_value: 29.0
     step: 0.1
+    mode: BOX
     optimistic: true
     restore_value: true
     initial_value: 27.5
@@ -328,9 +485,11 @@ number:
   - platform: template
     name: "PI30 set battery under voltage"
     unit_of_measurement: "V"
+    device_class: voltage
     min_value: 21.0
     max_value: 24.0
     step: 0.1
+    mode: box
     optimistic: true
     restore_value: true
     initial_value: 23.9
@@ -343,9 +502,11 @@ number:
   - platform: template
     name: "PI30 set battery redischarge voltage"
     unit_of_measurement: "V"
+    device_class: voltage
     min_value: 0.0
     max_value: 29.0
     step: 0.1
+    mode: box
     optimistic: true
     restore_value: true
     initial_value: 24.5
@@ -358,9 +519,11 @@ number:
   - platform: template
     name: "PI30 set max total charging current"
     unit_of_measurement: "A"
+    device_class: current
     min_value: 10
     max_value: 110
     step: 10
+    mode: box
     optimistic: true
     restore_value: true
     initial_value: 20
@@ -373,31 +536,37 @@ number:
   - platform: template
     name: "PI30 set max utility charging current"
     unit_of_measurement: "A"
+    device_class: current
     min_value: 2
     max_value: 80
     step: 1
+    mode: box
     optimistic: true
     restore_value: true
     initial_value: 10
     entity_category: config
     set_action:
-      - output.set_level:
-          id: out_max_ac_charge_a
-          level: !lambda return x;
+      - lambda: |-
+          float value = x;
 
-  - platform: template
-    name: "PI30 set charger source priority"
-    min_value: 0
-    max_value: 3
-    step: 1
-    optimistic: true
-    restore_value: true
-    initial_value: 2
-    entity_category: config
-    set_action:
-      - output.set_level:
-          id: out_charger_priority
-          level: !lambda return x;
+          // Consenti esclusivamente:
+          // 2, 10, 20, 30, 40, 50, 60, 70, 80
+          if (value == 2 ||
+              value == 10 ||
+              value == 20 ||
+              value == 30 ||
+              value == 40 ||
+              value == 50 ||
+              value == 60 ||
+              value == 70 ||
+              value == 80) {
+
+            id(out_max_ac_charge_a).set_level(value);
+
+          } else {
+            ESP_LOGW("PI30", "Valore corrente non valido: %.0f A", value);
+          }
+
 
 # =====================================================================
 # DISPLAY

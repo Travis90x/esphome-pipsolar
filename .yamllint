@@ -10,6 +10,8 @@ ignore: |
   .clang-tidy
   .esphome/
   tests/.esphome/
+  # Contributed diagnostic sweeps, kept verbatim as received.
+  diagnostics/
 
 rules:
   braces:

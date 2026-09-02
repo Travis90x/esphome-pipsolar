@@ -1,0 +1,383 @@
+# =====================================================================
+# PI30 / Voltronic (MAX) inverter - generic ESP32 configuration
+#
+# Read and control the inverter. No display, no external component:
+# `pipsolar` ships with ESPHome, so this file builds as-is with the
+# Home Assistant ESPHome add-on.
+#
+# Verified against a 24V / 3.2kVA PI30 unit (`QPI` replies `(PI30`).
+#
+# For a variant with an SSD1306 OLED already wired up see
+# ../heltec-pi30/heltec-pi30-display-pipsolar.yaml
+# =====================================================================
+
+substitutions:
+  name: pi30
+  tx_pin: GPIO16
+  rx_pin: GPIO17
+
+esphome:
+  name: ${name}
+  friendly_name: ${name}
+
+esp32:
+  board: wemos_d1_mini32
+  framework:
+    type: esp-idf
+
+logger:
+  level: DEBUG
+  # Keep the logger off UART0 when the inverter is wired to GPIO1/GPIO3
+  baud_rate: 0
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  min_auth_mode: WPA2
+
+uart:
+  - id: uart_0
+    baud_rate: 2400
+    tx_pin: ${tx_pin}
+    rx_pin: ${rx_pin}
+    data_bits: 8
+    parity: NONE
+    stop_bits: 1
+    rx_buffer_size: 512
+
+pipsolar:
+  uart_id: uart_0
+  id: inverter0
+
+# =====================================================================
+# SENSORS
+# =====================================================================
+
+sensor:
+  - platform: pipsolar
+    pipsolar_id: inverter0
+
+    # ---- QPIGS: live values ----
+    grid_voltage:
+      name: "Grid voltage"
+    grid_frequency:
+      name: "Grid frequency"
+    ac_output_voltage:
+      name: "AC output voltage"
+    ac_output_frequency:
+      name: "AC output frequency"
+    ac_output_apparent_power:
+      name: "AC output apparent power"
+    ac_output_active_power:
+      name: "AC output active power"
+    output_load_percent:
+      name: "Output load percent"
+    bus_voltage:
+      name: "Bus voltage"
+    battery_voltage:
+      name: "Battery voltage"
+      id: batt_v
+    battery_charging_current:
+      name: "Battery charging current"
+      id: batt_charging_a
+    battery_discharge_current:
+      name: "Battery discharge current"
+      id: batt_discharge_a
+    battery_capacity_percent:
+      name: "Battery capacity"
+    inverter_heat_sink_temperature:
+      name: "Heat sink temperature"
+    pv_input_voltage:
+      name: "PV input voltage"
+    pv_input_current_for_battery:
+      name: "PV input current"
+    pv_charging_power:
+      name: "PV charging power"
+    battery_voltage_scc:
+      name: "Battery voltage from SCC"
+      entity_category: diagnostic
+
+    # ---- QPIRI: ratings and setpoints ----
+    grid_rating_voltage:
+      name: "Grid rating voltage"
+      entity_category: diagnostic
+    grid_rating_current:
+      name: "Grid rating current"
+      entity_category: diagnostic
+    ac_output_rating_voltage:
+      name: "AC output rating voltage"
+      entity_category: diagnostic
+    ac_output_rating_frequency:
+      name: "AC output rating frequency"
+      entity_category: diagnostic
+    ac_output_rating_current:
+      name: "AC output rating current"
+      entity_category: diagnostic
+    ac_output_rating_apparent_power:
+      name: "AC output rating apparent power"
+      entity_category: diagnostic
+    ac_output_rating_active_power:
+      name: "AC output rating active power"
+      entity_category: diagnostic
+    battery_rating_voltage:
+      name: "Battery rating voltage"
+      entity_category: diagnostic
+    # Careful with the names here: `battery_recharge_voltage` is the
+    # utility recharge threshold (PBCV), not the bulk voltage. Bulk is
+    # `battery_bulk_voltage` (PCVV) and float is PBFT.
+    battery_recharge_voltage:
+      name: "Battery recharge voltage"
+    battery_under_voltage:
+      name: "Battery under voltage"
+    battery_bulk_voltage:
+      name: "Battery bulk voltage"
+    battery_float_voltage:
+      name: "Battery float voltage"
+    battery_redischarge_voltage:
+      name: "Battery redischarge voltage"
+    current_max_ac_charging_current:
+      name: "Max AC charging current"
+    current_max_charging_current:
+      name: "Max total charging current"
+    output_source_priority:
+      name: "Output source priority"
+    charger_source_priority:
+      name: "Charger source priority"
+    battery_type:
+      name: "Battery type"
+      entity_category: diagnostic
+    input_voltage_range:
+      name: "Input voltage range"
+      entity_category: diagnostic
+
+  # Battery current and power: charging current minus discharge current
+  - platform: template
+    name: "Battery current"
+    id: batt_a
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 10s
+    lambda: |-
+      if (!id(batt_charging_a).has_state() || !id(batt_discharge_a).has_state())
+        return {};
+      return id(batt_charging_a).state - id(batt_discharge_a).state;
+
+  - platform: template
+    name: "Battery power"
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: |-
+      if (!id(batt_a).has_state() || !id(batt_v).has_state())
+        return {};
+      return id(batt_a).state * id(batt_v).state;
+
+# =====================================================================
+# TEXT SENSORS
+# =====================================================================
+
+text_sensor:
+  - platform: pipsolar
+    pipsolar_id: inverter0
+    device_mode:
+      name: "Device mode"
+      filters:
+        map:
+          - P -> Power on
+          - S -> Standby
+          - L -> Line mode
+          - B -> Battery mode
+          - F -> Fault
+          - D -> Shutdown
+
+# =====================================================================
+# BINARY SENSORS - QPIGS device status bits
+# =====================================================================
+
+binary_sensor:
+  - platform: pipsolar
+    pipsolar_id: inverter0
+    load_status:
+      name: "Load on"
+    charging_status:
+      name: "Charging"
+    scc_charging_status:
+      name: "SCC charging"
+    ac_charging_status:
+      name: "AC charging"
+    charging_to_floating_mode:
+      name: "Charging to floating mode"
+    battery_voltage_to_steady_while_charging:
+      name: "Battery voltage steady while charging"
+      entity_category: diagnostic
+    switch_on:
+      name: "Switch on"
+      entity_category: diagnostic
+    configuration_status:
+      name: "Configuration changed"
+      entity_category: diagnostic
+    add_sbu_priority_version:
+      name: "Add SBU priority version"
+      entity_category: diagnostic
+
+# =====================================================================
+# SWITCHES
+# =====================================================================
+
+switch:
+  - platform: pipsolar
+    pipsolar_id: inverter0
+    output_source_priority_utility:
+      name: "Output priority: utility first"
+    output_source_priority_solar:
+      name: "Output priority: solar first"
+    output_source_priority_battery:
+      name: "Output priority: SBU"
+    input_voltage_range:
+      name: "Input voltage range: UPS"
+    pv_ok_condition_for_parallel:
+      name: "PV OK condition for parallel"
+    pv_power_balance:
+      name: "PV power balance"
+
+# =====================================================================
+# WRITABLE SETPOINTS
+# The component exposes them as outputs; template numbers make them
+# usable from the Home Assistant UI.
+# =====================================================================
+
+output:
+  - platform: pipsolar
+    pipsolar_id: inverter0
+    battery_recharge_voltage:
+      id: out_recharge_v
+    battery_under_voltage:
+      id: out_under_v
+    battery_float_voltage:
+      id: out_float_v
+    battery_redischarge_voltage:
+      id: out_redischarge_v
+    current_max_ac_charging_current:
+      id: out_max_ac_charge_a
+      possible_values: [2, 10, 20, 30, 40, 50, 60, 70, 80]
+    current_max_charging_current:
+      id: out_max_charge_a
+      possible_values: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110]
+    charger_source_priority:
+      id: out_charger_priority
+      possible_values: [0, 1, 2, 3]
+
+number:
+  - platform: template
+    name: "Set battery recharge voltage"
+    unit_of_measurement: "V"
+    min_value: 22.0
+    max_value: 28.5
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 23.5
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_recharge_v
+          level: !lambda return x;
+
+  - platform: template
+    name: "Set battery float voltage"
+    unit_of_measurement: "V"
+    min_value: 24.0
+    max_value: 29.0
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 27.5
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_float_v
+          level: !lambda return x;
+
+  - platform: template
+    name: "Set battery under voltage"
+    unit_of_measurement: "V"
+    min_value: 21.0
+    max_value: 24.0
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 23.9
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_under_v
+          level: !lambda return x;
+
+  - platform: template
+    name: "Set battery redischarge voltage"
+    unit_of_measurement: "V"
+    min_value: 0.0
+    max_value: 29.0
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 24.5
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_redischarge_v
+          level: !lambda return x;
+
+  - platform: template
+    name: "Set max total charging current"
+    unit_of_measurement: "A"
+    min_value: 10
+    max_value: 110
+    step: 10
+    optimistic: true
+    restore_value: true
+    initial_value: 20
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_max_charge_a
+          level: !lambda return x;
+
+  - platform: template
+    name: "Set max AC charging current"
+    unit_of_measurement: "A"
+    min_value: 2
+    max_value: 80
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 10
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_max_ac_charge_a
+          level: !lambda return x;
+
+  # 0 = utility first, 1 = solar first, 2 = solar + utility, 3 = solar only
+  - platform: template
+    name: "Set charger source priority"
+    min_value: 0
+    max_value: 3
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 2
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_charger_priority
+          level: !lambda return x;

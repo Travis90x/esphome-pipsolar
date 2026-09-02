@@ -486,9 +486,13 @@ jobs:
       - name: Validate example configurations
         run: |
           . venv/bin/activate
-          echo -e "wifi_ssid: ssid\nwifi_password: password\nmqtt_host: host\nmqtt_username: username\nmqtt_password: password" > secrets.yaml
-          for YAML in esp*.yaml; do
-            esphome -s external_components_source components config $YAML
+          # ESPHome resolves `secrets.yaml` next to the main config file, so
+          # every example directory needs its own copy.
+          for YAML in $(find examples -name 'esp*.yaml' | sort); do
+            DIR=$(dirname "$YAML")
+            echo -e "wifi_ssid: ssid\nwifi_password: password\nmqtt_host: host\nmqtt_username: username\nmqtt_password: password" > "$DIR/secrets.yaml"
+            RELATIVE_ROOT=$(realpath --relative-to="$DIR" .)
+            esphome -s external_components_source "$RELATIVE_ROOT/components" config "$YAML"
           done
 
       - name: Validate test configurations
@@ -537,9 +541,11 @@ jobs:
       - name: Compile example configurations
         run: |
           . venv/bin/activate
-          echo -e "wifi_ssid: ssid\nwifi_password: password\nmqtt_host: host\nmqtt_username: username\nmqtt_password: password" > secrets.yaml
-          for YAML in esp*faker.yaml; do
-            esphome -s external_components_source components compile $YAML
+          for YAML in $(find examples -name 'esp*faker.yaml' | sort); do
+            DIR=$(dirname "$YAML")
+            echo -e "wifi_ssid: ssid\nwifi_password: password\nmqtt_host: host\nmqtt_username: username\nmqtt_password: password" > "$DIR/secrets.yaml"
+            RELATIVE_ROOT=$(realpath --relative-to="$DIR" .)
+            esphome -s external_components_source "$RELATIVE_ROOT/components" compile "$YAML"
           done
         env:
           PLATFORMIO_LIBDEPS_DIR: ~/.platformio/libdeps

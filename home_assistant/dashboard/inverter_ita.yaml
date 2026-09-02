@@ -43,11 +43,17 @@ sections:
         title: Priorita' carica (PCP)
         show_header_toggle: false
         entities:
-          - entity: number.heltec_pi30_display_pi30_set_charger_source_priority
-            name: Imposta (0=Rete 1=Solare 2=Solare+Rete 3=Solo solare)
-          - type: divider
           - entity: sensor.heltec_pi30_display_pi30_charger_source_priority
             name: Priorita' letta dall'inverter
+          - type: divider
+          - entity: switch.heltec_pi30_display_pi30_carica_solare_rete
+            name: Carica da Solare + Rete (insieme)
+          - entity: switch.heltec_pi30_display_pi30_carica_solo_solare
+            name: Carica solo da Solare
+          - entity: switch.heltec_pi30_display_pi30_carica_rete
+            name: Carica solo da Rete
+          - entity: switch.heltec_pi30_display_pi30_carica_solare
+            name: Carica prima da Solare e poi Rete
       - type: entities
         title: Stato inverter
         show_header_toggle: false

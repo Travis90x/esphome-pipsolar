@@ -258,14 +258,33 @@ switch:
 output:
   - platform: pipsolar
     pipsolar_id: inverter0
+    # The component's built-in possible_values are for a 48V unit.
+    # write_state() drops, silently, any value not present in this list,
+    # so a 24V bank needs its own. Halve these for a 12V bank, or use the
+    # component defaults for 48V.
     battery_recharge_voltage:
       id: out_recharge_v
+      possible_values: [22.0, 22.5, 23.0, 23.5, 24.0, 24.5, 25.0, 25.5]
     battery_under_voltage:
       id: out_under_v
+      possible_values:
+        [20.0, 20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 20.8, 20.9, 21.0,
+         21.1, 21.2, 21.3, 21.4, 21.5, 21.6, 21.7, 21.8, 21.9, 22.0, 22.1,
+         22.2, 22.3, 22.4, 22.5, 22.6, 22.7, 22.8, 22.9, 23.0, 23.1, 23.2,
+         23.3, 23.4, 23.5, 23.6, 23.7, 23.8, 23.9, 24.0]
     battery_float_voltage:
       id: out_float_v
+      possible_values:
+        [24.0, 24.1, 24.2, 24.3, 24.4, 24.5, 24.6, 24.7, 24.8, 24.9, 25.0,
+         25.1, 25.2, 25.3, 25.4, 25.5, 25.6, 25.7, 25.8, 25.9, 26.0, 26.1,
+         26.2, 26.3, 26.4, 26.5, 26.6, 26.7, 26.8, 26.9, 27.0, 27.1, 27.2,
+         27.3, 27.4, 27.5, 27.6, 27.7, 27.8, 27.9, 28.0, 28.1, 28.2, 28.3,
+         28.4, 28.5, 28.6, 28.7, 28.8, 28.9, 29.0, 29.1, 29.2]
     battery_redischarge_voltage:
       id: out_redischarge_v
+      possible_values:
+        [0.0, 24.0, 24.5, 25.0, 25.5, 26.0, 26.5, 27.0, 27.5, 28.0, 28.5,
+         29.0]
     current_max_ac_charging_current:
       id: out_max_ac_charge_a
       possible_values: [2, 10, 20, 30, 40, 50, 60, 70, 80]
@@ -288,9 +307,9 @@ number:
     initial_value: 23.5
     entity_category: config
     set_action:
-      - output.set_level:
+      - output.pipsolar.set_level:
           id: out_recharge_v
-          level: !lambda return x;
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
 
   - platform: template
     name: "Set battery float voltage"
@@ -303,9 +322,9 @@ number:
     initial_value: 27.5
     entity_category: config
     set_action:
-      - output.set_level:
+      - output.pipsolar.set_level:
           id: out_float_v
-          level: !lambda return x;
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
 
   - platform: template
     name: "Set battery under voltage"
@@ -318,9 +337,9 @@ number:
     initial_value: 23.9
     entity_category: config
     set_action:
-      - output.set_level:
+      - output.pipsolar.set_level:
           id: out_under_v
-          level: !lambda return x;
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
 
   - platform: template
     name: "Set battery redischarge voltage"
@@ -333,9 +352,9 @@ number:
     initial_value: 24.5
     entity_category: config
     set_action:
-      - output.set_level:
+      - output.pipsolar.set_level:
           id: out_redischarge_v
-          level: !lambda return x;
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
 
   - platform: template
     name: "Set max total charging current"
@@ -348,9 +367,9 @@ number:
     initial_value: 20
     entity_category: config
     set_action:
-      - output.set_level:
+      - output.pipsolar.set_level:
           id: out_max_charge_a
-          level: !lambda return x;
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
 
   - platform: template
     name: "Set max AC charging current"
@@ -363,9 +382,9 @@ number:
     initial_value: 10
     entity_category: config
     set_action:
-      - output.set_level:
+      - output.pipsolar.set_level:
           id: out_max_ac_charge_a
-          level: !lambda return x;
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
 
   # 0 = utility first, 1 = solar first, 2 = solar + utility, 3 = solar only
   - platform: template
@@ -378,6 +397,6 @@ number:
     initial_value: 2
     entity_category: config
     set_action:
-      - output.set_level:
+      - output.pipsolar.set_level:
           id: out_charger_priority
-          level: !lambda return x;
+          value: !lambda return roundf(x * 10.0f) / 10.0f;

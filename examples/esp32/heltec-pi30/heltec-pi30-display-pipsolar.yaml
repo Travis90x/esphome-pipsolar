@@ -220,6 +220,25 @@ text_sensor:
           - F -> Fault
           - D -> Shutdown
 
+    # Risposte grezze dei comandi che il componente interroga da solo.
+    # Sostituiscono il vecchio sensore "PI30 last reply" per questi
+    # comandi: il CRC e' gia' verificato e rimosso dal componente.
+    last_qpiri:
+      name: "PI30 last QPIRI"
+      entity_category: diagnostic
+    last_qpigs:
+      name: "PI30 last QPIGS"
+      entity_category: diagnostic
+    last_qmod:
+      name: "PI30 last QMOD"
+      entity_category: diagnostic
+    last_qflag:
+      name: "PI30 last QFLAG"
+      entity_category: diagnostic
+    last_qpiws:
+      name: "PI30 last QPIWS"
+      entity_category: diagnostic
+
   - platform: wifi_info
     ip_address:
       name: ESP IP Address
@@ -258,9 +277,9 @@ binary_sensor:
 globals:
   - id: pi30_charger_priority
     type: int
-    restore_value: yes
+    restore_value: true
     initial_value: '2'
-    
+
 switch:
   - platform: pipsolar
     pipsolar_id: inverter0
@@ -420,7 +439,7 @@ switch:
     turn_off_action:
       - lambda: |-
           // Nessun comando all'inverter.
-          
+
 # =====================================================================
 # SETPOINT SCRIVIBILI
 # Il componente espone gli `output`; li rendo comodi con dei `number`.
@@ -429,14 +448,33 @@ switch:
 output:
   - platform: pipsolar
     pipsolar_id: inverter0
+    # ATTENZIONE: le possible_values di default del componente sono per
+    # unita' a 48V. write_state() confronta il valore con questa lista e
+    # scarta in silenzio tutto cio' che non vi compare, quindi per un
+    # banco a 24V vanno dichiarate esplicitamente.
     battery_recharge_voltage:
       id: out_recharge_v
+      possible_values: [22.0, 22.5, 23.0, 23.5, 24.0, 24.5, 25.0, 25.5]
     battery_under_voltage:
       id: out_under_v
+      possible_values:
+        [20.0, 20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 20.8, 20.9, 21.0,
+         21.1, 21.2, 21.3, 21.4, 21.5, 21.6, 21.7, 21.8, 21.9, 22.0, 22.1,
+         22.2, 22.3, 22.4, 22.5, 22.6, 22.7, 22.8, 22.9, 23.0, 23.1, 23.2,
+         23.3, 23.4, 23.5, 23.6, 23.7, 23.8, 23.9, 24.0]
     battery_float_voltage:
       id: out_float_v
+      possible_values:
+        [24.0, 24.1, 24.2, 24.3, 24.4, 24.5, 24.6, 24.7, 24.8, 24.9, 25.0,
+         25.1, 25.2, 25.3, 25.4, 25.5, 25.6, 25.7, 25.8, 25.9, 26.0, 26.1,
+         26.2, 26.3, 26.4, 26.5, 26.6, 26.7, 26.8, 26.9, 27.0, 27.1, 27.2,
+         27.3, 27.4, 27.5, 27.6, 27.7, 27.8, 27.9, 28.0, 28.1, 28.2, 28.3,
+         28.4, 28.5, 28.6, 28.7, 28.8, 28.9, 29.0, 29.1, 29.2]
     battery_redischarge_voltage:
       id: out_redischarge_v
+      possible_values:
+        [0.0, 24.0, 24.5, 25.0, 25.5, 26.0, 26.5, 27.0, 27.5, 28.0, 28.5,
+         29.0]
     current_max_ac_charging_current:
       id: out_max_ac_charge_a
       possible_values: [2, 10, 20, 30, 40, 50, 60, 70, 80]
@@ -461,9 +499,9 @@ number:
     initial_value: 23.5
     entity_category: config
     set_action:
-      - output.set_level:
+      - output.pipsolar.set_level:
           id: out_recharge_v
-          level: !lambda return x;
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
 
   - platform: template
     name: "PI30 set battery float voltage"
@@ -478,9 +516,9 @@ number:
     initial_value: 27.5
     entity_category: config
     set_action:
-      - output.set_level:
+      - output.pipsolar.set_level:
           id: out_float_v
-          level: !lambda return x;
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
 
   - platform: template
     name: "PI30 set battery under voltage"
@@ -495,9 +533,9 @@ number:
     initial_value: 23.9
     entity_category: config
     set_action:
-      - output.set_level:
+      - output.pipsolar.set_level:
           id: out_under_v
-          level: !lambda return x;
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
 
   - platform: template
     name: "PI30 set battery redischarge voltage"
@@ -512,9 +550,9 @@ number:
     initial_value: 24.5
     entity_category: config
     set_action:
-      - output.set_level:
+      - output.pipsolar.set_level:
           id: out_redischarge_v
-          level: !lambda return x;
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
 
   - platform: template
     name: "PI30 set max total charging current"
@@ -529,9 +567,9 @@ number:
     initial_value: 20
     entity_category: config
     set_action:
-      - output.set_level:
+      - output.pipsolar.set_level:
           id: out_max_charge_a
-          level: !lambda return x;
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
 
   - platform: template
     name: "PI30 set max utility charging current"
@@ -567,6 +605,49 @@ number:
             ESP_LOGW("PI30", "Valore corrente non valido: %.0f A", value);
           }
 
+
+# =====================================================================
+# CONSOLE COMANDI MANUALI
+#
+# Pipsolar::queue_command() e' pubblico, quindi si possono ancora
+# inviare comandi arbitrari senza toccare la UART a mano.
+#
+# LIMITE IMPORTANTE: per i comandi in coda il componente verifica solo
+# lunghezza e CRC della risposta e controlla se e' "(ACK". Il contenuto
+# NON viene pubblicato da nessuna parte. Quindi:
+#
+#   - comandi di SCRITTURA (POP.., PCP.., PBCV.., F50, PGR..): l'esito
+#     si vede nel log come "command successful" / "command not successful"
+#   - comandi di LETTURA (QPI, QID, QVFW, QDI, QMCHGCR, QMUCHGCR): la
+#     risposta non e' recuperabile. Per QPIRI/QPIGS/QMOD/QFLAG/QPIWS usa
+#     i text sensor "PI30 last Q..." qui sopra, aggiornati dal polling.
+#
+# Il CRC viene calcolato dal componente: scrivi il comando senza CRC.
+# =====================================================================
+
+text:
+  - platform: template
+    name: "PI30 manual command"
+    id: txt_cmd
+    optimistic: true
+    mode: text
+    initial_value: "QPI"
+    restore_value: true
+    entity_category: config
+
+button:
+  - platform: template
+    name: "PI30 send manual command"
+    entity_category: config
+    on_press:
+      - lambda: |-
+          const std::string &c = id(txt_cmd).state;
+          if (c.empty()) {
+            ESP_LOGW("PI30", "comando vuoto, non inviato");
+            return;
+          }
+          ESP_LOGI("PI30", "invio comando manuale: %s", c.c_str());
+          id(inverter0).queue_command(c);
 
 # =====================================================================
 # DISPLAY

@@ -223,6 +223,31 @@ sections:
             name: WiFi Signal %
           - entity: sensor.heltec_wifi_signal
             name: WiFi Signal
+      # "PI30 manual command" e "PI30 send manual command" esistevano gia'
+      # nel firmware precedente: stesso nome -> stesso unique_id, quindi
+      # Home Assistant riusa i vecchi entity_id senza il suffisso _display.
+      - type: entities
+        title: Console comandi
+        show_header_toggle: false
+        entities:
+          - entity: text.heltec_pi30_pi30_manual_command
+            name: Comando (senza CRC)
+          - entity: button.heltec_pi30_pi30_send_manual_command
+            name: Invia
+      - type: entities
+        title: Risposte grezze (dal polling)
+        show_header_toggle: false
+        entities:
+          - entity: sensor.heltec_pi30_display_pi30_last_qpiri
+            name: QPIRI
+          - entity: sensor.heltec_pi30_display_pi30_last_qpigs
+            name: QPIGS
+          - entity: sensor.heltec_pi30_display_pi30_last_qmod
+            name: QMOD
+          - entity: sensor.heltec_pi30_display_pi30_last_qflag
+            name: QFLAG
+          - entity: sensor.heltec_pi30_display_pi30_last_qpiws
+            name: QPIWS
       - type: logbook
         title: Cambi di modo
         target:

@@ -85,11 +85,11 @@ sections:
             name: Float (PBFT)
           - entity: sensor.heltec_pi30_display_pi30_battery_float_voltage
             name: Float (PBFT)
-          - entity: number.heltec_pi30_display_pi30_set_battery_recharge_voltage
+          - entity: select.heltec_pi30_display_pi30_set_battery_recharge_voltage
             name: Ripresa carica da rete (PBCV)
           - entity: sensor.heltec_pi30_display_pi30_battery_recharge_voltage
             name: Ripresa carica da rete (PBCV)
-          - entity: number.heltec_pi30_display_pi30_set_battery_redischarge_voltage
+          - entity: select.heltec_pi30_display_pi30_set_battery_redischarge_voltage
             name: Ripresa scarica (PBDV)
           - entity: sensor.heltec_pi30_display_pi30_battery_redischarge_voltage
             name: Ripresa scarica (PBDV)
@@ -101,11 +101,11 @@ sections:
           - entity: sensor.heltec_pi30_display_pi30_battery_bulk_voltage
             name: Bulk / C.V. (PCVV)
           - type: divider
-          - entity: number.heltec_pi30_display_pi30_set_max_total_charging_current
+          - entity: select.heltec_pi30_display_pi30_set_max_total_charging_current
             name: Corrente max di carica totale
           - entity: sensor.heltec_pi30_display_pi30_max_total_charging_current
             name: Corrente max di carica totale
-          - entity: number.heltec_pi30_display_pi30_set_max_utility_charging_current
+          - entity: select.heltec_pi30_display_pi30_set_max_utility_charging_current
             name: Corrente max di carica da rete
           - entity: sensor.heltec_pi30_display_pi30_max_utility_charging_current
             name: Corrente max di carica da rete
@@ -190,10 +190,6 @@ sections:
             name: QPIGS
           - entity: sensor.heltec_pi30_display_pi30_last_qmod
             name: QMOD
-          - entity: sensor.heltec_pi30_display_pi30_last_qflag
-            name: QFLAG
-          - entity: sensor.heltec_pi30_display_pi30_last_qpiws
-            name: QPIWS
       - type: logbook
         title: Cambi di modo
         target:

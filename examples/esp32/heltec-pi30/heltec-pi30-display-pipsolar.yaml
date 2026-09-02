@@ -578,8 +578,16 @@ select:
     restore_value: true
     entity_category: config
     initial_option: "20"
-    options: ["10", "20", "30", "40", "50", "60", "70", "80", "90",
-              "100", "110"]
+    # Fermo a 90 A di proposito. Il componente formatta il comando come
+    # "MCHGC0" + %02.0f: fino a 90 esce "MCHGC090" (8 caratteri, la forma
+    # che questo inverter accetta), ma da 100 in su diventa "MCHGC0100"
+    # (9 caratteri) e viene rifiutato.
+    #
+    # Il PDF Voltronic documenta invece MNCHGC<mnnn> -> "MNCHGC0100", e la
+    # vecchia configurazione standalone mandava "MCHGC100". Quale delle
+    # due accetti questo inverter non e' verificato: provale dalla console
+    # comandi e guarda nel log se risponde "command successful".
+    options: ["10", "20", "30", "40", "50", "60", "70", "80", "90"]
     set_action:
       - output.pipsolar.set_level:
           id: out_max_charge_a

@@ -89,7 +89,7 @@ sections:
             name: Ripresa carica da rete (PBCV)
           - entity: sensor.heltec_pi30_display_pi30_battery_recharge_voltage
             name: Ripresa carica da rete (PBCV)
-          - entity: select.heltec_pi30_display_pi30_set_battery_redischarge_voltage
+          - entity: number.heltec_pi30_display_pi30_set_battery_redischarge_voltage
             name: Ripresa scarica (PBDV)
           - entity: sensor.heltec_pi30_display_pi30_battery_redischarge_voltage
             name: Ripresa scarica (PBDV)
@@ -98,6 +98,8 @@ sections:
           - entity: sensor.heltec_pi30_display_pi30_battery_under_voltage
             name: Cut-off batteria (PSDV)
           - type: divider
+          - entity: number.heltec_pi30_display_pi30_set_battery_bulk_voltage
+            name: Bulk / C.V. (PCVV)
           - entity: sensor.heltec_pi30_display_pi30_battery_bulk_voltage
             name: Bulk / C.V. (PCVV)
           - type: divider
@@ -201,6 +203,17 @@ sections:
           - entity: >-
               button.heltec_pi30_display_pi30_qmuchgcr_correnti_di_carica_da_rete_ammesse
             name: QMUCHGCR - correnti da rete ammesse
+      - type: entities
+        title: Trame grezze
+        show_header_toggle: false
+        state_color: true
+        entities:
+          - entity: switch.heltec_pi30_display_pi30_cattura_trame_grezze
+            name: Cattura attiva
+          - entity: sensor.heltec_pi30_display_pi30_last_tx
+            name: Inviato
+          - entity: sensor.heltec_pi30_display_pi30_last_rx
+            name: Ricevuto
       - type: entities
         title: Risposte grezze (dal polling)
         show_header_toggle: false

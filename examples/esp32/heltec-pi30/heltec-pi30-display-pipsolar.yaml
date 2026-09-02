@@ -63,18 +63,35 @@ uart:
     parity: NONE
     stop_bits: 1
     rx_buffer_size: 512
-    # Scommenta per vedere nel log ESPHome il traffico grezzo, comprese
-    # le risposte ai comandi manuali che il componente non pubblica
-    # (QPI, QID, QVFW, QDI, QMCHGCR, QMUCHGCR).
-    # dummy_receiver deve restare false: il componente deve continuare a
-    # leggere i byte.
-    # debug:
-    #   direction: BOTH
-    #   dummy_receiver: false
-    #   after:
-    #     delimiter: "\r"
-    #   sequence:
-    #     - lambda: UARTDebug::log_string(direction, bytes);
+    # Intercetta il traffico senza sottrarre byte al componente
+    # (dummy_receiver: false). Serve a rivedere le risposte ai comandi
+    # che pipsolar non pubblica: QPI, QID, QVFW, QDI, QMCHGCR, QMUCHGCR,
+    # e l'ACK/NAK di ogni scrittura.
+    debug:
+      direction: BOTH
+      dummy_receiver: false
+      after:
+        delimiter: "\r"
+      sequence:
+        - lambda: |-
+            if (!id(g_sniff))
+              return;
+
+            // La trama e' payload + CRC(2) + CR: i byte di CRC sono spesso
+            // ASCII stampabili e finirebbero in coda al testo.
+            size_t n = bytes.size();
+            if (n >= 3 && bytes[n - 1] == 0x0D)
+              n -= 3;
+
+            std::string t;
+            for (size_t i = 0; i < n; i++)
+              if (bytes[i] >= 0x20 && bytes[i] <= 0x7E)
+                t += (char) bytes[i];
+
+            if (direction == UART_DIRECTION_TX)
+              id(ts_last_tx).publish_state(t);
+            else
+              id(ts_last_rx).publish_state(t);
 
 pipsolar:
   uart_id: uart_0
@@ -265,6 +282,18 @@ text_sensor:
     #   name: "PI30 last QPIWS"
     #   entity_category: diagnostic
 
+  - platform: template
+    name: "PI30 last TX"
+    id: ts_last_tx
+    update_interval: never
+    entity_category: diagnostic
+
+  - platform: template
+    name: "PI30 last RX"
+    id: ts_last_rx
+    update_interval: never
+    entity_category: diagnostic
+
   - platform: wifi_info
     ip_address:
       name: ESP IP Address
@@ -301,12 +330,31 @@ binary_sensor:
 
 
 globals:
+  # Cattura delle trame grezze. Spenta di default: da accesa pubblica due
+  # stati per ogni comando, e a 5s di polling sono circa 1,2 al secondo
+  # verso Home Assistant.
+  - id: g_sniff
+    type: bool
+    restore_value: true
+    initial_value: "false"
+
   - id: pi30_charger_priority
     type: int
     restore_value: true
     initial_value: '2'
 
 switch:
+  - platform: template
+    name: "PI30 cattura trame grezze"
+    id: sw_sniff
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    turn_on_action:
+      - lambda: id(g_sniff) = true;
+    turn_off_action:
+      - lambda: id(g_sniff) = false;
+
   - platform: pipsolar
     pipsolar_id: inverter0
     output_source_priority_utility:
@@ -504,9 +552,16 @@ output:
          28.4, 28.5, 28.6, 28.7, 28.8, 28.9, 29.0, 29.1, 29.2]
     battery_redischarge_voltage:
       id: out_redischarge_v
+      # 0.0 disattiva la ripresa di scarica ("PBDV00.0").
+      # Passi da 0.1 per verificare se accetta i decimali come PBCV: i
+      # valori sotto 24.0 verranno rifiutati dall'inverter, non da qui.
       possible_values:
-        [0.0, 24.0, 24.5, 25.0, 25.5, 26.0, 26.5, 27.0, 27.5, 28.0, 28.5,
-         29.0]
+        [0.0,
+         24.0, 24.1, 24.2, 24.3, 24.4, 24.5, 24.6, 24.7, 24.8, 24.9, 25.0,
+         25.1, 25.2, 25.3, 25.4, 25.5, 25.6, 25.7, 25.8, 25.9, 26.0, 26.1,
+         26.2, 26.3, 26.4, 26.5, 26.6, 26.7, 26.8, 26.9, 27.0, 27.1, 27.2,
+         27.3, 27.4, 27.5, 27.6, 27.7, 27.8, 27.9, 28.0, 28.1, 28.2, 28.3,
+         28.4, 28.5, 28.6, 28.7, 28.8, 28.9, 29.0]
     current_max_ac_charging_current:
       id: out_max_ac_charge_a
       possible_values: [2, 10, 20, 30, 40, 50, 60, 70, 80]
@@ -569,6 +624,45 @@ number:
           id: out_recharge_v
           value: !lambda return roundf(x * 10.0f) / 10.0f;
 
+  - platform: template
+    name: "PI30 set battery redischarge voltage"
+    unit_of_measurement: "V"
+    device_class: voltage
+    min_value: 0.0
+    max_value: 29.0
+    step: 0.1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 24.5
+    entity_category: config
+    set_action:
+      - output.pipsolar.set_level:
+          id: out_redischarge_v
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
+
+  # Il componente pipsolar non espone la tensione di bulk come output,
+  # quindi il comando PCVV viene accodato direttamente. Il CRC lo calcola
+  # comunque il componente.
+  - platform: template
+    name: "PI30 set battery bulk voltage"
+    unit_of_measurement: "V"
+    device_class: voltage
+    min_value: 24.0
+    max_value: 29.2
+    step: 0.1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 29.0
+    entity_category: config
+    set_action:
+      - lambda: |-
+          char buf[16];
+          snprintf(buf, sizeof(buf), "PCVV%04.1f", roundf(x * 10.0f) / 10.0f);
+          ESP_LOGI("PI30", "invio %s", buf);
+          id(inverter0).queue_command(buf);
+
 # =====================================================================
 # SETPOINT A VALORI DISCRETI
 #
@@ -618,20 +712,6 @@ select:
           id: out_max_charge_a
           value: !lambda return atof(x.c_str());
 
-  - platform: template
-    name: "PI30 set battery redischarge voltage"
-    id: sel_redischarge_v
-    optimistic: true
-    restore_value: true
-    entity_category: config
-    initial_option: "24.5"
-    # 0.0 = ripresa di scarica disattivata (comando "PBDV00.0").
-    options: ["0.0", "24.0", "24.5", "25.0", "25.5", "26.0", "26.5",
-              "27.0", "27.5", "28.0", "28.5", "29.0"]
-    set_action:
-      - output.pipsolar.set_level:
-          id: out_redischarge_v
-          value: !lambda return atof(x.c_str());
 
 # =====================================================================
 # CONSOLE COMANDI MANUALI

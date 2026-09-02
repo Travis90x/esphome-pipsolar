@@ -9,10 +9,6 @@ cards: []
 sections:
   - type: grid
     cards:
-      - type: heading
-        heading: Controllo
-        heading_style: title
-        icon: mdi:tune-variant
       - type: entities
         title: Automazioni
         show_header_toggle: false
@@ -73,10 +69,6 @@ sections:
             name: In float
   - type: grid
     cards:
-      - type: heading
-        heading: Setpoint
-        heading_style: title
-        icon: mdi:sliders
       - type: entities
         title: Batteria
         show_header_toggle: false
@@ -122,12 +114,21 @@ sections:
             name: Comando (senza CRC)
           - entity: button.heltec_pi30_pi30_send_manual_command
             name: Invia
+      - type: entities
+        title: Configurazione
+        show_header_toggle: false
+        state_color: true
+        entities:
+          - entity: switch.heltec_pi30_display_pi30_input_voltage_range_ups
+            name: PGR (ON= UPS 170–280V / OFF= APL 90–280V)
+          - entity: switch.heltec_pi30_display_pi30_pv_power_balance
+            name: >-
+              Power balance (PSPB) // ON= +autoconsumo -stress-relè // OFF=
+              salvaguardia della batteria
+          - entity: switch.heltec_pi30_display_pi30_pv_ok_condition_for_parallel
+            name: Inverter in parallelo
   - type: grid
     cards:
-      - type: heading
-        heading: Batteria
-        heading_style: title
-        icon: mdi:battery-charging-high
       - type: entities
         title: Batteria
         show_header_toggle: false
@@ -152,7 +153,7 @@ sections:
           - entity: sensor.heltec_pi30_batteria_energia_scaricata
           - entity: sensor.heltec_pi30_batteria_energia_scaricata_giornaliera
       - type: entities
-        title: Letture inverter
+        title: Inverter
         show_header_toggle: false
         entities:
           - entity: sensor.heltec_pi30_pi30_grid_voltage
@@ -181,10 +182,6 @@ sections:
             name: PI30 PV power
   - type: grid
     cards:
-      - type: heading
-        heading: Diagnostica
-        heading_style: title
-        icon: mdi:stethoscope
       - type: entities
         title: Comandi di lettura
         show_header_toggle: false
@@ -205,19 +202,19 @@ sections:
           - entity: >-
               button.heltec_pi30_display_pi30_qmuchgcr_correnti_di_carica_da_rete_ammesse
             name: QMUCHGCR - correnti da rete ammesse
-      - type: entities
-        title: Trame grezze
+      - color: state
+        type: entities
+        title: Dati grezzi
         show_header_toggle: false
-        state_color: true
         entities:
           - entity: switch.heltec_pi30_display_pi30_cattura_trame_grezze
-            name: Cattura attiva
+            name: Cattura dati grezzi
           - entity: sensor.heltec_pi30_display_pi30_last_tx
             name: Inviato
           - entity: sensor.heltec_pi30_display_pi30_last_rx
             name: Ricevuto
       - type: entities
-        title: Risposte grezze (dal polling)
+        title: Risposte dal polling
         show_header_toggle: false
         entities:
           - entity: sensor.heltec_pi30_display_pi30_last_qpiri
@@ -226,24 +223,12 @@ sections:
             name: QPIGS
           - entity: sensor.heltec_pi30_display_pi30_last_qmod
             name: QMOD
-      - type: logbook
-        title: Cambi di modo
-        target:
-          entity_id:
-            - sensor.heltec_pi30_display_pi30_device_mode
-        grid_options:
-          columns: 12
-          rows: 8
   - type: grid
     cards:
-      - type: heading
-        heading: Letture live
-        heading_style: title
-        icon: mdi:chart-line
-      - type: entities
-        title: Dispositivo
+      - color: state
+        type: entities
+        title: ESP32
         show_header_toggle: false
-        state_color: true
         entities:
           - entity: binary_sensor.heltec_pi30_display_pi30_switch_on
             name: Inverter acceso
@@ -264,20 +249,12 @@ sections:
             name: WiFi Signal
   - type: grid
     cards:
-      - type: heading
-        heading: Opzioni inverter
-        heading_style: title
-        icon: mdi:cog-outline
-      - type: entities
-        title: Configurazione
-        show_header_toggle: false
-        state_color: true
-        entities:
-          - entity: switch.heltec_pi30_display_pi30_input_voltage_range_ups
-            name: PGR (ON= UPS 170–280V / OFF= APL 90–280V)
-          - entity: switch.heltec_pi30_display_pi30_pv_power_balance
-            name: >-
-              Power balance (PSPB) // ON= +autoconsumo -stress-relè // OFF=
-              salvaguardia della batteria
-          - entity: switch.heltec_pi30_display_pi30_pv_ok_condition_for_parallel
-            name: Inverter in parallelo
+      - type: logbook
+        title: Modalità
+        target:
+          entity_id:
+            - sensor.heltec_pi30_display_pi30_device_mode
+        grid_options:
+          columns: 12
+          rows: 8
+        name_detail: auto

@@ -1,0 +1,648 @@
+# =====================================================================
+# HELTEC WiFi Kit 32 V3  -  INVERTER PI30
+# Variante basata sul componente CORE `pipsolar` di ESPHome.
+#
+# Nessun external_components: `pipsolar` fa parte di ESPHome, quindi
+# questo file si compila con l'add-on ESPHome di Home Assistant senza
+# installare nulla.
+#
+# Differenze rispetto a heltec-pi30-display.yaml (versione standalone):
+#   + protocollo gestito dal componente ufficiale (CRC, framing, stato)
+#   + lettura non bloccante, senza script con delay
+#   + i setpoint diventano `output` con `number`/azioni native
+#   - niente console per comandi arbitrari
+#   - la tensione di bulk (PCVV) non e' esposta dal componente core
+#
+# Cablaggio: vedi heltec-pi30-display.yaml
+# =====================================================================
+
+esphome:
+  name: "heltec-inverter"
+  friendly_name: Heltec PI30 Display
+
+esp32:
+  board: heltec_wifi_kit_32_V3
+  variant: esp32s3
+  framework:
+    type: arduino
+
+logger:
+  level: DEBUG
+  baud_rate: 0
+
+api:
+  encryption:
+    key: !secret api_key_heltec_v3
+  reboot_timeout: 0s
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  manual_ip:
+    static_ip: 192.168.1.125
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+    dns1: 8.8.8.8
+    dns2: 192.168.1.1
+  power_save_mode: none
+  ap:
+    ssid: "Heltec-PI30"
+    password: !secret wifi_hotspot_password
+
+captive_portal:
+
+uart:
+  - id: uart_0
+    tx_pin: GPIO5
+    rx_pin: GPIO3
+    baud_rate: 2400
+    data_bits: 8
+    parity: NONE
+    stop_bits: 1
+    rx_buffer_size: 512
+
+pipsolar:
+  uart_id: uart_0
+  id: inverter0
+
+# =====================================================================
+# SENSORI DALL'INVERTER
+# =====================================================================
+
+sensor:
+  - platform: pipsolar
+    pipsolar_id: inverter0
+    # ---- QPIGS ----
+    grid_voltage:
+      name: "PI30 grid voltage"
+    grid_frequency:
+      name: "PI30 grid frequency"
+    ac_output_voltage:
+      name: "PI30 output voltage"
+    ac_output_frequency:
+      name: "PI30 output frequency"
+    ac_output_apparent_power:
+      name: "PI30 output apparent power"
+    ac_output_active_power:
+      name: "PI30 output active power"
+      id: pip_out_w
+    output_load_percent:
+      name: "PI30 load percent"
+    bus_voltage:
+      name: "PI30 bus voltage"
+    battery_voltage:
+      name: "PI30 battery voltage"
+      id: pip_batt_v
+    battery_charging_current:
+      name: "PI30 battery charging current"
+      id: pip_batt_chg
+    battery_capacity_percent:
+      name: "PI30 battery SoC"
+      id: pip_soc
+    inverter_heat_sink_temperature:
+      name: "PI30 heat sink temperature"
+      id: pip_temp
+    pv_input_current_for_battery:
+      name: "PI30 PV current"
+    pv_input_voltage:
+      name: "PI30 PV voltage"
+    battery_discharge_current:
+      name: "PI30 battery discharge current"
+      id: pip_batt_dis
+    pv_charging_power:
+      name: "PI30 PV power"
+    # ---- QPIRI ----
+    battery_recharge_voltage:
+      name: "PI30 battery recharge voltage"
+      id: pip_recharge_v
+    battery_under_voltage:
+      name: "PI30 battery under voltage"
+      id: pip_under_v
+    battery_bulk_voltage:
+      name: "PI30 battery bulk voltage"
+      id: pip_bulk_v
+    battery_float_voltage:
+      name: "PI30 battery float voltage"
+      id: pip_float_v
+    battery_redischarge_voltage:
+      name: "PI30 battery redischarge voltage"
+    current_max_ac_charging_current:
+      name: "PI30 max utility charging current"
+    current_max_charging_current:
+      name: "PI30 max total charging current"
+    output_source_priority:
+      name: "PI30 output source priority"
+    charger_source_priority:
+      name: "PI30 charger source priority"
+
+  # Corrente e potenza di batteria: derivate, come nella versione standalone
+  - platform: template
+    name: "PI30 battery current"
+    id: pip_batt_a
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 10s
+    lambda: |-
+      if (!id(pip_batt_chg).has_state() || !id(pip_batt_dis).has_state())
+        return {};
+      return id(pip_batt_chg).state - id(pip_batt_dis).state;
+
+  - platform: template
+    name: "PI30 battery power"
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: |-
+      if (!id(pip_batt_a).has_state() || !id(pip_batt_v).has_state())
+        return {};
+      return id(pip_batt_a).state * id(pip_batt_v).state;
+
+  - platform: wifi_signal
+    name: "WiFi Signal dB"
+    id: wifi_signal_db
+    update_interval: 10s
+    entity_category: diagnostic
+
+  - platform: copy
+    source_id: wifi_signal_db
+    id: wifi_signal_percentage
+    name: "WiFi Signal %"
+    unit_of_measurement: "%"
+    entity_category: diagnostic
+    filters:
+      - lambda: return std::min(std::max(2.0f * (x + 100.0f), 0.0f), 100.0f);
+
+  # Energia giornaliera calcolata in Home Assistant (PAGE 4)
+  - platform: homeassistant
+    id: display_battery_charge_power
+    entity_id: sensor.heltec_pi30_batteria_potenza_carica
+    internal: true
+
+  - platform: homeassistant
+    id: display_battery_charge_energy
+    entity_id: sensor.heltec_pi30_batteria_energia_caricata_giornaliera
+    internal: true
+
+  - platform: homeassistant
+    id: display_battery_discharge_power
+    entity_id: sensor.heltec_pi30_batteria_potenza_scarica
+    internal: true
+
+  - platform: homeassistant
+    id: display_battery_discharge_energy
+    entity_id: sensor.heltec_pi30_batteria_energia_scaricata_giornaliera
+    internal: true
+
+# =====================================================================
+# TEXT SENSOR / BINARY SENSOR / SWITCH
+# =====================================================================
+
+text_sensor:
+  - platform: pipsolar
+    pipsolar_id: inverter0
+    device_mode:
+      name: "PI30 device mode"
+      filters:
+        map:
+          - P -> Power on
+          - S -> Standby
+          - L -> Line mode
+          - B -> Battery mode
+          - F -> Fault
+          - D -> Shutdown
+
+  - platform: wifi_info
+    ip_address:
+      name: ESP IP Address
+      id: ip_address
+    ssid:
+      name: ESP Connected SSID
+      id: wifi_ssid
+    bssid:
+      name: ESP Connected BSSID
+    mac_address:
+      name: ESP Mac Wifi Address
+    dns_address:
+      name: ESP DNS Address
+
+binary_sensor:
+  - platform: pipsolar
+    pipsolar_id: inverter0
+    load_status:
+      name: "PI30 load on"
+    charging_status:
+      name: "PI30 charging"
+    scc_charging_status:
+      name: "PI30 SCC charging"
+    ac_charging_status:
+      name: "PI30 AC charging"
+    charging_to_floating_mode:
+      name: "PI30 charging to floating mode"
+    switch_on:
+      name: "PI30 switch on"
+      entity_category: diagnostic
+    configuration_status:
+      name: "PI30 configuration changed"
+      entity_category: diagnostic
+
+switch:
+  - platform: pipsolar
+    pipsolar_id: inverter0
+    output_source_priority_utility:
+      name: "PI30 output priority: Utility"
+    output_source_priority_solar:
+      name: "PI30 output priority: Solar"
+    output_source_priority_battery:
+      name: "PI30 output priority: SBU"
+    input_voltage_range:
+      name: "PI30 input voltage range (UPS)"
+    pv_ok_condition_for_parallel:
+      name: "PI30 PV OK condition for parallel"
+    pv_power_balance:
+      name: "PI30 PV power balance"
+
+# =====================================================================
+# SETPOINT SCRIVIBILI
+# Il componente espone gli `output`; li rendo comodi con dei `number`.
+# =====================================================================
+
+output:
+  - platform: pipsolar
+    pipsolar_id: inverter0
+    battery_recharge_voltage:
+      id: out_recharge_v
+    battery_under_voltage:
+      id: out_under_v
+    battery_float_voltage:
+      id: out_float_v
+    battery_redischarge_voltage:
+      id: out_redischarge_v
+    current_max_ac_charging_current:
+      id: out_max_ac_charge_a
+      possible_values: [2, 10, 20, 30, 40, 50, 60, 70, 80]
+    current_max_charging_current:
+      id: out_max_charge_a
+      possible_values: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110]
+    charger_source_priority:
+      id: out_charger_priority
+      possible_values: [0, 1, 2, 3]
+
+number:
+  - platform: template
+    name: "PI30 set battery recharge voltage"
+    unit_of_measurement: "V"
+    min_value: 22.0
+    max_value: 28.5
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 23.5
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_recharge_v
+          level: !lambda return x;
+
+  - platform: template
+    name: "PI30 set battery float voltage"
+    unit_of_measurement: "V"
+    min_value: 24.0
+    max_value: 29.0
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 27.5
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_float_v
+          level: !lambda return x;
+
+  - platform: template
+    name: "PI30 set battery under voltage"
+    unit_of_measurement: "V"
+    min_value: 21.0
+    max_value: 24.0
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 23.9
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_under_v
+          level: !lambda return x;
+
+  - platform: template
+    name: "PI30 set battery redischarge voltage"
+    unit_of_measurement: "V"
+    min_value: 0.0
+    max_value: 29.0
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 24.5
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_redischarge_v
+          level: !lambda return x;
+
+  - platform: template
+    name: "PI30 set max total charging current"
+    unit_of_measurement: "A"
+    min_value: 10
+    max_value: 110
+    step: 10
+    optimistic: true
+    restore_value: true
+    initial_value: 20
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_max_charge_a
+          level: !lambda return x;
+
+  - platform: template
+    name: "PI30 set max utility charging current"
+    unit_of_measurement: "A"
+    min_value: 2
+    max_value: 80
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 10
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_max_ac_charge_a
+          level: !lambda return x;
+
+  - platform: template
+    name: "PI30 set charger source priority"
+    min_value: 0
+    max_value: 3
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 2
+    entity_category: config
+    set_action:
+      - output.set_level:
+          id: out_charger_priority
+          level: !lambda return x;
+
+# =====================================================================
+# DISPLAY
+# =====================================================================
+
+interval:
+  - interval: 4s
+    then:
+      - display.page.show_next: my_display
+      - component.update: my_display
+
+time:
+  - platform: sntp
+    id: sntp_zone_time
+    timezone: Europe/Rome
+
+i2c:
+  - id: bus_a
+    sda: GPIO17
+    scl: GPIO18
+    scan: false
+
+image:
+  - file: solar_power.bmp
+    id: solar_icon
+    resize: 65x50
+    type: BINARY
+
+graph:
+  - id: battery_voltage_graph
+    duration: 1h
+    x_grid: 10min
+    y_grid: 1
+    width: 128
+    height: 64
+    min_value: 23
+    max_value: 29
+    border: true
+    traces:
+      - sensor: pip_batt_v
+        line_thickness: 3
+        line_type: SOLID
+        continuous: true
+
+  - id: battery_voltage_graph2
+    duration: 24h
+    x_grid: 4h
+    y_grid: 1
+    width: 128
+    height: 64
+    min_value: 23
+    max_value: 29
+    border: true
+    traces:
+      - sensor: pip_batt_v
+        line_thickness: 3
+        line_type: SOLID
+        continuous: true
+
+display:
+  - platform: ssd1306_i2c
+    model: SSD1306_128X64
+    reset_pin: GPIO21
+    i2c_id: bus_a
+    address: 0x3c
+    contrast: 70%
+    id: my_display
+    show_test_card: false
+    pages:
+      - id: page1
+        lambda: |-
+          auto now = id(sntp_zone_time).now();
+
+          if (!now.is_valid()) {
+            it.printf(it.get_width() / 2, it.get_height() / 2, id(arial),
+                      TextAlign::CENTER, "Ora non disponibile");
+            return;
+          }
+
+          const char *giorno = "---";
+          switch (now.day_of_week) {
+            case 1: giorno = "Domenica"; break;
+            case 2: giorno = "Lunedì"; break;
+            case 3: giorno = "Martedì"; break;
+            case 4: giorno = "Mercoledì"; break;
+            case 5: giorno = "Giovedì"; break;
+            case 6: giorno = "Venerdì"; break;
+            case 7: giorno = "Sabato"; break;
+          }
+
+          const char *mese = "---";
+          switch (now.month) {
+            case 1: mese = "Gen"; break;
+            case 2: mese = "Feb"; break;
+            case 3: mese = "Mar"; break;
+            case 4: mese = "Apr"; break;
+            case 5: mese = "Mag"; break;
+            case 6: mese = "Giu"; break;
+            case 7: mese = "Lug"; break;
+            case 8: mese = "Ago"; break;
+            case 9: mese = "Set"; break;
+            case 10: mese = "Ott"; break;
+            case 11: mese = "Nov"; break;
+            case 12: mese = "Dic"; break;
+          }
+
+          it.printf(0, 0, id(arial), TextAlign::TOP_LEFT, "Travis90x");
+          it.image(10, 16, id(solar_icon));
+
+          it.printf(it.get_width(), it.get_height() - 48, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%s", giorno);
+          it.strftime(it.get_width(), it.get_height() - 36, id(arial),
+                      TextAlign::BASELINE_RIGHT, "%d", now);
+          it.printf(it.get_width(), it.get_height() - 26, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%s", mese);
+          it.strftime(it.get_width(), it.get_height() - 12, id(arial),
+                      TextAlign::BASELINE_RIGHT, "%Y", now);
+          it.strftime(it.get_width(), it.get_height(), id(arial),
+                      TextAlign::BASELINE_RIGHT, "%H:%M", now);
+
+      - id: page2
+        lambda: |-
+          it.printf(0, 0, id(icon_font), TextAlign::TOP_LEFT, "󰖩");
+          it.printf(20, 0, id(arial), TextAlign::TOP_LEFT, "SSID:");
+          it.printf(it.get_width(), 0, id(arial), TextAlign::TOP_RIGHT,
+                    "%s", id(wifi_ssid).state.c_str());
+
+          it.printf(0, it.get_height() - 37, id(arial),
+                    TextAlign::BASELINE_LEFT, "IP");
+          it.printf(it.get_width(), it.get_height() - 37, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%s", id(ip_address).state.c_str());
+
+          it.printf(0, it.get_height() - 25, id(arial),
+                    TextAlign::BASELINE_LEFT, "WiFi Signal");
+          it.printf(it.get_width(), it.get_height() - 25, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.0f%%",
+                    id(wifi_signal_percentage).state);
+
+          it.printf(0, it.get_height() - 13, id(arial),
+                    TextAlign::BASELINE_LEFT, "WiFi");
+          it.printf(it.get_width(), it.get_height() - 13, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.0f dBm", id(wifi_signal_db).state);
+
+      - id: page3
+        lambda: |-
+          it.printf(0, 0, id(icon_font), TextAlign::TOP_LEFT, "󱊣");
+          it.printf(it.get_width() / 2, 0, id(arial), TextAlign::TOP_CENTER,
+                    "BATTERIA");
+
+          it.printf(0, it.get_height() - 37, id(arial),
+                    TextAlign::BASELINE_LEFT, "Tensione");
+          it.printf(it.get_width(), it.get_height() - 37, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.2f V", id(pip_batt_v).state);
+
+          it.printf(0, it.get_height() - 25, id(arial),
+                    TextAlign::BASELINE_LEFT, "SOC");
+          it.printf(it.get_width(), it.get_height() - 25, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.0f%%", id(pip_soc).state);
+
+          it.printf(0, it.get_height() - 13, id(arial),
+                    TextAlign::BASELINE_LEFT, "Temp.");
+          it.printf(it.get_width(), it.get_height() - 13, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.0f°C", id(pip_temp).state);
+
+          it.printf(0, it.get_height() - 1, id(arial),
+                    TextAlign::BASELINE_LEFT, "Power");
+          it.printf(it.get_width(), it.get_height() - 1, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.0f W", id(pip_out_w).state);
+
+      - id: page4
+        lambda: |-
+          it.printf(0, 0, id(icon_font), TextAlign::TOP_LEFT, "󱊥");
+          it.printf(it.get_width() / 2, 0, id(arial), TextAlign::TOP_CENTER,
+                    "BATTERIA");
+
+          it.printf(0, it.get_height() - 37, id(arial),
+                    TextAlign::BASELINE_LEFT, "Carica");
+          it.printf(it.get_width(), it.get_height() - 37, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.0f W",
+                    id(display_battery_charge_power).state);
+
+          it.printf(0, it.get_height() - 25, id(arial),
+                    TextAlign::BASELINE_LEFT, "Caricata");
+          it.printf(it.get_width(), it.get_height() - 25, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.2f kWh",
+                    id(display_battery_charge_energy).state);
+
+          it.printf(0, it.get_height() - 13, id(arial),
+                    TextAlign::BASELINE_LEFT, "Scarica");
+          it.printf(it.get_width(), it.get_height() - 13, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.0f W",
+                    id(display_battery_discharge_power).state);
+
+          it.printf(0, it.get_height() - 1, id(arial),
+                    TextAlign::BASELINE_LEFT, "Scaricata");
+          it.printf(it.get_width(), it.get_height() - 1, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.2f kWh",
+                    id(display_battery_discharge_energy).state);
+
+      - id: page5
+        lambda: |-
+          it.printf(0, 0, id(icon_font), TextAlign::TOP_LEFT, "󱊦");
+          it.printf(it.get_width() / 2, 0, id(arial), TextAlign::TOP_CENTER,
+                    "SETTAGGI");
+
+          it.printf(0, it.get_height() - 37, id(arial),
+                    TextAlign::BASELINE_LEFT, "Bulk");
+          it.printf(it.get_width(), it.get_height() - 37, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.1f V", id(pip_bulk_v).state);
+
+          it.printf(0, it.get_height() - 25, id(arial),
+                    TextAlign::BASELINE_LEFT, "Float");
+          it.printf(it.get_width(), it.get_height() - 25, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.1f V", id(pip_float_v).state);
+
+          it.printf(0, it.get_height() - 13, id(arial),
+                    TextAlign::BASELINE_LEFT, "Ricarica");
+          it.printf(it.get_width(), it.get_height() - 13, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.1f V", id(pip_recharge_v).state);
+
+          it.printf(0, it.get_height() - 1, id(arial),
+                    TextAlign::BASELINE_LEFT, "Stop");
+          it.printf(it.get_width(), it.get_height() - 1, id(arial),
+                    TextAlign::BASELINE_RIGHT, "%.1f V", id(pip_under_v).state);
+
+      - id: page6
+        lambda: it.graph(0, 0, id(battery_voltage_graph));
+
+      - id: page7
+        lambda: it.graph(0, 0, id(battery_voltage_graph2));
+
+font:
+  - file: "arial.ttf"
+    id: arial
+    size: 12
+    glyphs:
+      ['&', '@', '!', ',', '.', '"', '%', '(', ')', '+', '-', '_', ':', '°',
+       '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+       'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N',
+       'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ',
+       'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
+       'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+       'à', 'è', 'é', 'ì', 'ò', 'ù', '/', '#']
+
+  - file: "materialdesignicons-webfont.ttf"
+    id: icon_font
+    size: 17
+    glyphs: ['󰖩', '󰽕', '󰖙', '󰥛', '󰟑', '󱊣', '󱊥', '󱊦', '󰌪']

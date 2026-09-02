@@ -102,16 +102,16 @@ sections:
         entities:
           - entity: number.heltec_pi30_display_pi30_set_battery_float_voltage
             name: Float (PBFT)
-          - entity: number.heltec_pi30_display_pi30_set_battery_recharge_voltage
+          - entity: select.heltec_pi30_display_pi30_set_battery_recharge_voltage
             name: Ripresa carica da rete (PBCV)
-          - entity: number.heltec_pi30_display_pi30_set_battery_redischarge_voltage
+          - entity: select.heltec_pi30_display_pi30_set_battery_redischarge_voltage
             name: Ripresa scarica (PBDV)
           - entity: number.heltec_pi30_display_pi30_set_battery_under_voltage
             name: Cut-off batteria (PSDV)
           - type: divider
-          - entity: number.heltec_pi30_display_pi30_set_max_total_charging_current
+          - entity: select.heltec_pi30_display_pi30_set_max_total_charging_current
             name: Corrente max di carica totale
-          - entity: number.heltec_pi30_display_pi30_set_max_utility_charging_current
+          - entity: select.heltec_pi30_display_pi30_set_max_utility_charging_current
             name: Corrente max di carica da rete
   - type: grid
     cards:
@@ -244,10 +244,6 @@ sections:
             name: QPIGS
           - entity: sensor.heltec_pi30_display_pi30_last_qmod
             name: QMOD
-          - entity: sensor.heltec_pi30_display_pi30_last_qflag
-            name: QFLAG
-          - entity: sensor.heltec_pi30_display_pi30_last_qpiws
-            name: QPIWS
       - type: logbook
         title: Cambi di modo
         target:

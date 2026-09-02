@@ -63,6 +63,18 @@ uart:
     parity: NONE
     stop_bits: 1
     rx_buffer_size: 512
+    # Scommenta per vedere nel log ESPHome il traffico grezzo, comprese
+    # le risposte ai comandi manuali che il componente non pubblica
+    # (QPI, QID, QVFW, QDI, QMCHGCR, QMUCHGCR).
+    # dummy_receiver deve restare false: il componente deve continuare a
+    # leggere i byte.
+    # debug:
+    #   direction: BOTH
+    #   dummy_receiver: false
+    #   after:
+    #     delimiter: "\r"
+    #   sequence:
+    #     - lambda: UARTDebug::log_string(direction, bytes);
 
 pipsolar:
   uart_id: uart_0
@@ -584,26 +596,13 @@ number:
     initial_value: 10
     entity_category: config
     set_action:
-      - lambda: |-
-          float value = x;
-
-          // Consenti esclusivamente:
-          // 2, 10, 20, 30, 40, 50, 60, 70, 80
-          if (value == 2 ||
-              value == 10 ||
-              value == 20 ||
-              value == 30 ||
-              value == 40 ||
-              value == 50 ||
-              value == 60 ||
-              value == 70 ||
-              value == 80) {
-
-            id(out_max_ac_charge_a).set_level(value);
-
-          } else {
-            ESP_LOGW("PI30", "Valore corrente non valido: %.0f A", value);
-          }
+      # NON usare set_level(): e' FloatOutput::set_level(), che fa
+      # clamp(value, 0, 1) prima di write_state(). 40 A diventava 1.0 e
+      # il comando "MUCHGC001" veniva scartato in silenzio.
+      # La lista dei valori ammessi e' gia' in possible_values.
+      - output.pipsolar.set_level:
+          id: out_max_ac_charge_a
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
 
 
 # =====================================================================
@@ -619,8 +618,13 @@ number:
 #   - comandi di SCRITTURA (POP.., PCP.., PBCV.., F50, PGR..): l'esito
 #     si vede nel log come "command successful" / "command not successful"
 #   - comandi di LETTURA (QPI, QID, QVFW, QDI, QMCHGCR, QMUCHGCR): la
-#     risposta non e' recuperabile. Per QPIRI/QPIGS/QMOD/QFLAG/QPIWS usa
-#     i text sensor "PI30 last Q..." qui sopra, aggiornati dal polling.
+#     risposta NON arriva in Home Assistant. Per vederla, abilita il
+#     debug della UART (vedi il blocco `uart:` in cima) e guarda il log
+#     ESPHome: il componente non ruba i byte, li stampa e basta.
+#
+#   - QPIRI / QPIGS / QMOD / QFLAG / QPIWS non serve inviarli a mano: il
+#     componente li interroga da solo (update_interval di default 1 s) e
+#     il testo grezzo e' nei text sensor "PI30 last Q..." qui sopra.
 #
 # Il CRC viene calcolato dal componente: scrivi il comando senza CRC.
 # =====================================================================

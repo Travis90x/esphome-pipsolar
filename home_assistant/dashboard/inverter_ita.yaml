@@ -86,7 +86,7 @@ sections:
           - entity: sensor.heltec_pi30_display_pi30_battery_recharge_voltage
             name: Ripresa carica da rete (PBCV)
           - type: divider
-          - entity: select.heltec_pi30_display_pi30_set_battery_redischarge_voltage
+          - entity: number.heltec_pi30_display_pi30_set_battery_redischarge_voltage
             name: Ripresa scarica (PBDV)
           - entity: sensor.heltec_pi30_display_pi30_battery_redischarge_voltage
             name: Ripresa scarica (PBDV)

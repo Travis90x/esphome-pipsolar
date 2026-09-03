@@ -1,4 +1,4 @@
-=== PI30 QUERY COMMANDS (Lettura) ===
+=== PI30 QUERY COMMANDS (Read) ===
 
 QPI
 QID
@@ -24,9 +24,9 @@ QBATCD
 QLED
 
 
-=== PI30 SET COMMANDS (Configurazione) ===
+=== PI30 SET COMMANDS (Configuration) ===
 
---- CORRENTE DI CARICA TOTALE (MNCHGC) ---
+--- TOTAL CHARGING CURRENT (MNCHGC) ---
 MNCHGC0010 (10A)
 MNCHGC0020 (20A)
 MNCHGC0030 (30A)
@@ -36,7 +36,7 @@ MNCHGC0060 (60A)
 MNCHGC0070 (70A)
 MNCHGC0080 (80A)
 
---- CORRENTE DA UTILITY/RETE (MUCHGC) ---
+--- UTILITY/GRID CHARGING CURRENT (MUCHGC) ---
 MUCHGC002 (2A)
 MUCHGC010 (10A)
 MUCHGC020 (20A)
@@ -45,7 +45,7 @@ MUCHGC040 (40A)
 MUCHGC050 (50A)
 MUCHGC060 (60A)
 
---- VOLTAGGIO BATTERIA (48V) ---
+--- BATTERY VOLTAGE (48V) ---
 PBCV44.0 (Battery Recharge: 44.0V)
 PBCV45.0
 PBCV46.0
@@ -105,33 +105,33 @@ PBFT49.0
 PBFT50.0
 PBFT51.0
 
---- PRIORITA' OUTPUT (POP) ---
+--- OUTPUT PRIORITY (POP) ---
 POP00 (Utility first)
 POP01 (Solar first)
 POP02 (SBU)
 
---- PRIORITA' CARICA (PCP) ---
+--- CHARGING PRIORITY (PCP) ---
 PCP00 (Utility first)
 PCP01 (Solar first)
 PCP02 (Solar + Utility)
 PCP03 (Solar only)
 
---- TIPO BATTERIA ---
+--- BATTERY TYPE ---
 PBT00 (AGM)
 PBT01 (Flooded)
 PBT02 (LiFePO4)
 
---- CONFIGURAZIONE GRID ---
+--- GRID CONFIGURATION ---
 PGR00 (Grid: APL 90-280V)
 PGR01 (Grid: UPS 170-280V)
 
---- FREQUENZA ---
+--- FREQUENCY ---
 F50 (50Hz)
 F60 (60Hz)
 
---- ALTRO ---
+--- OTHERS ---
 PF (Restore factory defaults)
-DAT<YYMMDDHHMMSS> (Set date/time, es. DAT240903120000)
-PBATMAXDISC<nnn> (Max discharge current, es. PBATMAXDISC100)
+DAT<YYMMDDHHMMSS> (Set date/time, e.g. DAT240903120000)
+PBATMAXDISC<nnn> (Max discharge current, e.g. PBATMAXDISC100)
 RTEY (Reset energy counters)
 RTDL (Erase data log)

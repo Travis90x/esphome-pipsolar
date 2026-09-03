@@ -1,0 +1,254 @@
+type: sections
+visible:
+  - user: f0e6ae5b825d422898b6b950b6b2e43a
+  - user: d4d1f35aef604ed39ac1de70ed507db0
+max_columns: 4
+path: electrical
+icon: mdi:battery-charging-high
+cards: []
+sections:
+  - type: grid
+    cards:
+      - type: entities
+        title: Automations
+        show_header_toggle: false
+        state_color: true
+        entities:
+          - entity: automation.ups_accumulo
+          - entity: switch.ups
+          - entity: sensor.ups_power
+          - entity: automation.ups
+          - type: divider
+          - entity: script.pi30_batteria_da_scaricare
+          - entity: script.pi30_batteria_da_caricare
+      - color: state
+        type: entities
+        title: Output Priority (POP)
+        show_header_toggle: false
+        entities:
+          - entity: sensor.heltec_pi30_display_pi30_output_source_priority
+            name: Priority read from inverter
+          - type: divider
+          - entity: switch.heltec_pi30_display_pi30_output_priority_utility
+            name: 0 Utility first (USB)
+          - entity: switch.heltec_pi30_display_pi30_output_priority_solar
+            name: 1 Solar first (SUB)
+          - entity: switch.heltec_pi30_display_pi30_output_priority_sbu
+            name: 2 SBU
+      - type: entities
+        title: Charging Priority (PCP)
+        show_header_toggle: false
+        entities:
+          - entity: sensor.heltec_pi30_display_pi30_charger_source_priority
+            name: Priority read from inverter
+          - type: divider
+          - entity: button.heltec_pi30_display_pi30_charger_solar_first
+            name: 1 SOLAR FIRST
+          - entity: button.heltec_pi30_display_pi30_charger_solar_utility
+            name: 2 SOLAR + UTILITY
+          - entity: button.heltec_pi30_display_pi30_charger_solar_only
+            name: 3 SOLAR ONLY
+      - type: entities
+        title: Inverter Status
+        show_header_toggle: false
+        state_color: true
+        entities:
+          - entity: sensor.heltec_pi30_display_pi30_device_mode
+            name: Operating mode
+          - entity: binary_sensor.heltec_pi30_display_pi30_load_on
+            name: Load active
+          - entity: binary_sensor.heltec_pi30_display_pi30_charging
+            name: Charging
+          - entity: binary_sensor.heltec_pi30_display_pi30_ac_charging
+            name: Charging from grid
+          - entity: binary_sensor.heltec_pi30_display_pi30_scc_charging
+            name: Charging from solar
+          - entity: binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode
+            name: In float mode
+  - type: grid
+    cards:
+      - type: entities
+        title: Battery
+        show_header_toggle: false
+        entities:
+          - entity: number.heltec_pi30_display_pi30_set_battery_recharge_voltage
+            name: Battery Recharge Voltage from Grid (PBCV)
+          - entity: sensor.heltec_pi30_display_pi30_battery_recharge_voltage
+            name: Battery Recharge Voltage from Grid (PBCV)
+          - type: divider
+          - entity: number.heltec_pi30_display_pi30_set_battery_redischarge_voltage
+            name: Battery Redischarge Voltage (PBDV)
+          - entity: sensor.heltec_pi30_display_pi30_battery_redischarge_voltage
+            name: Battery Redischarge Voltage (PBDV)
+          - type: divider
+          - entity: number.heltec_pi30_display_pi30_set_battery_under_voltage
+            name: Battery Cut-off (PSDV)
+          - entity: sensor.heltec_pi30_display_pi30_battery_under_voltage
+            name: Battery Cut-off (PSDV)
+          - type: divider
+          - entity: number.heltec_pi30_display_pi30_set_battery_bulk_voltage
+            name: Bulk / C.V. (PCVV)
+          - entity: sensor.heltec_pi30_display_pi30_battery_bulk_voltage
+            name: Bulk / C.V. (PCVV)
+          - type: divider
+          - entity: number.heltec_pi30_display_pi30_set_battery_float_voltage
+            name: Float (PBFT)
+          - entity: sensor.heltec_pi30_display_pi30_battery_float_voltage
+            name: Float (PBFT)
+          - type: divider
+          - entity: select.heltec_pi30_display_pi30_set_max_total_charging_current
+            name: Max total charging current
+          - entity: sensor.heltec_pi30_display_pi30_max_total_charging_current
+            name: Max total charging current
+          - entity: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+            name: Max charging current from grid
+          - entity: sensor.heltec_pi30_display_pi30_max_utility_charging_current
+            name: Max charging current from grid
+      - type: entities
+        title: Command Console
+        show_header_toggle: false
+        entities:
+          - entity: text.heltec_pi30_pi30_manual_command
+            name: Command (without CRC)
+          - entity: button.heltec_pi30_pi30_send_manual_command
+            name: Send
+      - type: entities
+        title: Configuration
+        show_header_toggle: false
+        state_color: true
+        entities:
+          - entity: switch.heltec_pi30_display_pi30_input_voltage_range_ups
+            name: PGR (ON= UPS 170–280V / OFF= APL 90–280V)
+          - entity: switch.heltec_pi30_display_pi30_pv_power_balance
+            name: >-
+              Power balance (PSPB) // ON= +self-consumption -relay-stress // OFF=
+              battery protection
+          - entity: switch.heltec_pi30_display_pi30_pv_ok_condition_for_parallel
+            name: Inverter in parallel
+  - type: grid
+    cards:
+      - type: entities
+        title: Battery
+        show_header_toggle: false
+        entities:
+          - entity: sensor.heltec_pi30_battery_voltage
+            name: PI30 battery voltage
+          - entity: sensor.heltec_pi30_battery_soc
+            name: PI30 battery SoC
+          - entity: sensor.heltec_pi30_heat_sink_temperature
+            name: PI30 heat sink temperature
+          - entity: sensor.heltec_pi30_battery_power
+            name: PI30 battery power
+          - entity: sensor.heltec_pi30_output_active_power
+            name: PI30 output active power
+          - entity: sensor.heltec_pi30_battery_current
+            name: PI30 battery current
+          - type: divider
+          - entity: sensor.heltec_pi30_batteria_potenza_carica
+          - entity: sensor.heltec_pi30_batteria_energia_caricata
+          - entity: sensor.heltec_pi30_batteria_energia_caricata_giornaliera
+          - entity: sensor.heltec_pi30_batteria_potenza_scarica
+          - entity: sensor.heltec_pi30_batteria_energia_scaricata
+          - entity: sensor.heltec_pi30_batteria_energia_scaricata_giornaliera
+      - type: entities
+        title: Inverter
+        show_header_toggle: false
+        entities:
+          - entity: sensor.heltec_pi30_pi30_grid_voltage
+            name: PI30 grid voltage
+          - entity: sensor.heltec_pi30_pi30_grid_frequency
+            name: PI30 grid frequency
+          - entity: sensor.heltec_pi30_pi30_output_voltage
+            name: PI30 output voltage
+          - entity: sensor.heltec_pi30_pi30_output_frequency
+            name: PI30 output frequency
+          - entity: sensor.heltec_pi30_pi30_output_apparent_power
+            name: PI30 output apparent power
+          - entity: sensor.heltec_pi30_pi30_load_percent
+            name: PI30 load percent
+          - entity: sensor.heltec_pi30_pi30_bus_voltage
+            name: PI30 bus voltage
+          - entity: sensor.heltec_pi30_pi30_battery_charging_current
+            name: PI30 battery charging current
+          - entity: sensor.heltec_pi30_pi30_battery_discharge_current
+            name: PI30 battery discharge current
+          - entity: sensor.heltec_pi30_pi30_pv_voltage
+            name: PI30 PV voltage
+          - entity: sensor.heltec_pi30_pi30_pv_current
+            name: PI30 PV current
+          - entity: sensor.heltec_pi30_pi30_pv_power
+            name: PI30 PV power
+  - type: grid
+    cards:
+      - type: entities
+        title: Read Commands
+        show_header_toggle: false
+        entities:
+          - entity: button.heltec_pi30_display_pi30_aggiorna_adesso_qpiri_qpigs_qmod
+            name: Refresh now (QPIRI / QPIGS / QMOD)
+          - type: divider
+          - entity: button.heltec_pi30_display_pi30_qpi_protocollo
+            name: QPI - protocol
+          - entity: button.heltec_pi30_display_pi30_qid_numero_di_serie
+            name: QID - serial number
+          - entity: button.heltec_pi30_display_pi30_qvfw_firmware
+            name: QVFW - firmware
+          - entity: button.heltec_pi30_display_pi30_qdi_valori_di_default
+            name: QDI - default values
+          - entity: button.heltec_pi30_display_pi30_qmchgcr_correnti_di_carica_ammesse
+            name: QMCHGCR - allowed charging currents
+          - entity: >-
+              button.heltec_pi30_display_pi30_qmuchgcr_correnti_di_carica_da_rete_ammesse
+            name: QMUCHGCR - allowed grid charging currents
+      - color: state
+        type: entities
+        title: Raw Data
+        show_header_toggle: false
+        entities:
+          - entity: switch.heltec_pi30_display_pi30_cattura_trame_grezze
+            name: Capture raw data
+          - entity: sensor.heltec_pi30_display_pi30_last_tx
+            name: Sent
+          - entity: sensor.heltec_pi30_display_pi30_last_rx
+            name: Received
+      - type: entities
+        title: Polling Responses
+        show_header_toggle: false
+        entities:
+          - entity: sensor.heltec_pi30_display_pi30_last_qpiri
+            name: QPIRI
+          - entity: sensor.heltec_pi30_display_pi30_last_qpigs
+            name: QPIGS
+          - entity: sensor.heltec_pi30_display_pi30_last_qmod
+            name: QMOD
+  - type: grid
+    cards:
+      - color: state
+        type: entities
+        title: ESP32
+        show_header_toggle: false
+        entities:
+          - entity: binary_sensor.heltec_pi30_display_pi30_switch_on
+            name: Inverter on
+          - type: divider
+          - entity: sensor.heltec_esp_ip_address
+            name: IP Address
+          - entity: sensor.heltec_esp_connected_ssid
+            name: SSID
+          - entity: sensor.heltec_esp_connected_bssid
+            name: BSSID
+          - entity: sensor.heltec_wifi_signal_db
+            name: WiFi dBm
+          - entity: sensor.heltec_wifi_signal_2
+            name: WiFi Signal %
+  - type: grid
+    cards:
+      - type: logbook
+        title: Mode
+        target:
+          entity_id:
+            - sensor.heltec_pi30_display_pi30_device_mode
+        grid_options:
+          columns: 12
+          rows: 8
+        name_detail: auto

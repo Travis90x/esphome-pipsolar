@@ -338,10 +338,6 @@ globals:
     restore_value: true
     initial_value: "false"
 
-  - id: pi30_charger_priority
-    type: int
-    restore_value: true
-    initial_value: '2'
 
 switch:
   - platform: template
@@ -369,150 +365,6 @@ switch:
       name: "PI30 PV OK condition for parallel"
     pv_power_balance:
       name: "PI30 PV power balance"
-
-# ============================================================
-# PRIORITÀ CARICA
-#
-# 0 = Rete
-# 1 = Solare
-# 2 = Solare + Rete
-# 3 = Solo solare
-#
-# Quando si attiva un pulsante:
-# - viene inviato UN SOLO comando al PI30
-# - gli altri pulsanti vengono portati a OFF solo graficamente
-# - il loro turn_off_action NON viene eseguito
-#
-# Lo spegnimento manuale di un pulsante NON invia comandi
-# all'inverter.
-# ============================================================
-
-  # ==========================================================
-  # PRIORITÀ CARICA: RETE (0)
-  # ==========================================================
-
-  - platform: template
-    name: "PI30 carica: Rete"
-    id: pi30_charger_utility
-
-    lambda: |-
-      return id(pi30_charger_priority) == 0;
-
-    turn_on_action:
-      - globals.set:
-          id: pi30_charger_priority
-          value: '0'
-
-      - output.pipsolar.set_level:
-          id: out_charger_priority
-          value: 0.0
-
-      # Spegnimento grafico degli altri switch.
-      # NON viene inviato alcun comando al PI30.
-      - lambda: |-
-          id(pi30_charger_solar).publish_state(false);
-          id(pi30_charger_solar_utility).publish_state(false);
-          id(pi30_charger_only_solar).publish_state(false);
-
-    turn_off_action:
-      - lambda: |-
-          // Nessun comando all'inverter.
-
-
-  # ==========================================================
-  # PRIORITÀ CARICA: SOLARE (1)
-  # ==========================================================
-
-  - platform: template
-    name: "PI30 carica: Solare"
-    id: pi30_charger_solar
-
-    lambda: |-
-      return id(pi30_charger_priority) == 1;
-
-    turn_on_action:
-      - globals.set:
-          id: pi30_charger_priority
-          value: '1'
-
-      - output.pipsolar.set_level:
-          id: out_charger_priority
-          value: 1.0
-
-      # Spegnimento grafico degli altri switch.
-      # NON viene inviato alcun comando al PI30.
-      - lambda: |-
-          id(pi30_charger_utility).publish_state(false);
-          id(pi30_charger_solar_utility).publish_state(false);
-          id(pi30_charger_only_solar).publish_state(false);
-
-    turn_off_action:
-      - lambda: |-
-          // Nessun comando all'inverter.
-
-
-  # ==========================================================
-  # PRIORITÀ CARICA: SOLARE + RETE (2)
-  # ==========================================================
-
-  - platform: template
-    name: "PI30 carica: Solare + Rete"
-    id: pi30_charger_solar_utility
-
-    lambda: |-
-      return id(pi30_charger_priority) == 2;
-
-    turn_on_action:
-      - globals.set:
-          id: pi30_charger_priority
-          value: '2'
-
-      - output.pipsolar.set_level:
-          id: out_charger_priority
-          value: 2.0
-
-      # Spegnimento grafico degli altri switch.
-      # NON viene inviato alcun comando al PI30.
-      - lambda: |-
-          id(pi30_charger_utility).publish_state(false);
-          id(pi30_charger_solar).publish_state(false);
-          id(pi30_charger_only_solar).publish_state(false);
-
-    turn_off_action:
-      - lambda: |-
-          // Nessun comando all'inverter.
-
-
-  # ==========================================================
-  # PRIORITÀ CARICA: SOLO SOLARE (3)
-  # ==========================================================
-
-  - platform: template
-    name: "PI30 carica: Solo solare"
-    id: pi30_charger_only_solar
-
-    lambda: |-
-      return id(pi30_charger_priority) == 3;
-
-    turn_on_action:
-      - globals.set:
-          id: pi30_charger_priority
-          value: '3'
-
-      - output.pipsolar.set_level:
-          id: out_charger_priority
-          value: 3.0
-
-      # Spegnimento grafico degli altri switch.
-      # NON viene inviato alcun comando al PI30.
-      - lambda: |-
-          id(pi30_charger_utility).publish_state(false);
-          id(pi30_charger_solar).publish_state(false);
-          id(pi30_charger_solar_utility).publish_state(false);
-
-    turn_off_action:
-      - lambda: |-
-          // Nessun comando all'inverter.
 
 # =====================================================================
 # SETPOINT SCRIVIBILI
@@ -552,18 +404,17 @@ output:
          28.4, 28.5, 28.6, 28.7, 28.8, 28.9, 29.0, 29.1, 29.2]
     battery_redischarge_voltage:
       id: out_redischarge_v
-      # Verificato sul campo: a differenza di PBCV, qui l'inverter accetta
-      # SOLO passi da 0.5 (i decimali rispondono NAK), come da manuale.
-      # 0.0 disattiva la ripresa di scarica ("PBDV00.0").
+      # Verificato sul campo: solo passi da 0.5 (i decimali rispondono
+      # NAK), e lo 0.0 del manuale non e' accettato da questa unita'.
       possible_values:
-        [0.0, 24.0, 24.5, 25.0, 25.5, 26.0, 26.5, 27.0, 27.5, 28.0, 28.5,
+        [24.0, 24.5, 25.0, 25.5, 26.0, 26.5, 27.0, 27.5, 28.0, 28.5,
          29.0]
     current_max_ac_charging_current:
       id: out_max_ac_charge_a
       possible_values: [2, 10, 20, 30, 40, 50, 60, 70, 80]
-    current_max_charging_current:
-      id: out_max_charge_a
-      possible_values: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110]
+    # current_max_charging_current non e' dichiarato: il suo comando
+    # "MCHGC0%02.0f" non funziona su questo inverter. Vedi il select
+    # "PI30 set max total charging current", che accoda MNCHGC.
     charger_source_priority:
       id: out_charger_priority
       possible_values: [0, 1, 2, 3]
@@ -642,6 +493,23 @@ number:
           ESP_LOGI("PI30", "invio %s", buf);
           id(inverter0).queue_command(buf);
 
+  - platform: template
+    name: "PI30 set battery redischarge voltage"
+    unit_of_measurement: "V"
+    device_class: voltage
+    min_value: 24.0
+    max_value: 29.0
+    step: 0.5
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 24.5
+    entity_category: config
+    set_action:
+      - output.pipsolar.set_level:
+          id: out_redischarge_v
+          value: !lambda return roundf(x * 2.0f) / 2.0f;
+
 # =====================================================================
 # SETPOINT A VALORI DISCRETI
 #
@@ -676,31 +544,19 @@ select:
     restore_value: true
     entity_category: config
     initial_option: "20"
-    # Verificato con la cattura delle trame: MCHGC050 -> (ACK,
-    # MCHGC060 e MCHGC070 -> (NAK. Il listino QMCHGCR arriva a 110 e il
-    # pannello mostra di piu', ma via seriale questa unita' accetta al
-    # massimo 50 A. Non e' la trama (CRC di MCHGC060 = 1D B1, pulito).
-    options: ["10", "20", "30", "40", "50"]
+    # Verificato sul campo: la forma giusta per questo inverter e'
+    # MNCHGC<mnnn> del manuale Voltronic, cioe' "MNCHGC0080" per 80 A.
+    # Il componente ha invece "MCHGC0%02.0f" cablato nel sorgente, che
+    # oltre i 50 A veniva rifiutato: percio' il comando viene accodato
+    # a mano. Il CRC lo calcola comunque il componente.
+    options: ["10", "20", "30", "40", "50", "60", "70", "80"]
     set_action:
-      - output.pipsolar.set_level:
-          id: out_max_charge_a
-          value: !lambda return atof(x.c_str());
+      - lambda: |-
+          char buf[16];
+          snprintf(buf, sizeof(buf), "MNCHGC0%03d", atoi(x.c_str()));
+          ESP_LOGI("PI30", "invio %s", buf);
+          id(inverter0).queue_command(buf);
 
-
-  - platform: template
-    name: "PI30 set battery redischarge voltage"
-    id: sel_redischarge_v
-    optimistic: true
-    restore_value: true
-    entity_category: config
-    initial_option: "24.5"
-    # 0.0 = ripresa di scarica disattivata. Solo passi da 0.5: verificato.
-    options: ["0.0", "24.0", "24.5", "25.0", "25.5", "26.0", "26.5",
-              "27.0", "27.5", "28.0", "28.5", "29.0"]
-    set_action:
-      - output.pipsolar.set_level:
-          id: out_redischarge_v
-          value: !lambda return atof(x.c_str());
 
 # =====================================================================
 # CONSOLE COMANDI MANUALI
@@ -749,6 +605,37 @@ button:
           }
           ESP_LOGI("PI30", "invio comando manuale: %s", c.c_str());
           id(inverter0).queue_command(c);
+
+  # -------------------------------------------------------------------
+  # PRIORITA' CARICA (PCP)
+  #
+  # Pulsanti e non switch: uno switch dovrebbe conoscere il proprio
+  # stato, ma qui lo stato reale e' uno solo per tutti e tre e lo
+  # pubblica gia' "PI30 charger source priority", letto da QPIRI.
+  #
+  # PCP00 (solo rete) non c'e': questo inverter risponde NAK.
+  # -------------------------------------------------------------------
+
+  - platform: template
+    name: "PI30 charger SOLAR FIRST"
+    on_press:
+      - output.pipsolar.set_level:
+          id: out_charger_priority
+          value: 1.0
+
+  - platform: template
+    name: "PI30 charger SOLAR + UTILITY"
+    on_press:
+      - output.pipsolar.set_level:
+          id: out_charger_priority
+          value: 2.0
+
+  - platform: template
+    name: "PI30 charger SOLAR ONLY"
+    on_press:
+      - output.pipsolar.set_level:
+          id: out_charger_priority
+          value: 3.0
 
   # -------------------------------------------------------------------
   # LETTURE MANUALI

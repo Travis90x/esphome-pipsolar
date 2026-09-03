@@ -1,0 +1,186 @@
+=== QUERY COMMANDS (Lettura) ===
+
+QPI
+QID
+QSID
+QVFW
+QVFW3
+VERFW
+QPIRI
+QFLAG
+QPIGS
+QPIGS2
+QMOD
+QPIWS
+QDI
+QMCHGCR
+QMUCHGCR
+QOPPT
+QCHPT
+QT
+QBEQI
+QMN
+QGMN
+QBOOT
+QBATCD
+QLED
+
+
+=== SET COMMANDS (Configurazione) ===
+
+--- CORRENTE DI CARICA ---
+MNCHGC0010 (PI30: 10A)
+MNCHGC0020 (PI30: 20A)
+MNCHGC0030 (PI30: 30A)
+MNCHGC0040 (PI30: 40A)
+MNCHGC0050 (PI30: 50A)
+MNCHGC0060 (PI30: 60A)
+MNCHGC0070 (PI30: 70A)
+MNCHGC0080 (PI30: 80A)
+MNCHGC0090 (PI30: 90A)
+MNCHGC0100 (PI30: 100A)
+MNCHGC0110 (PI30: 110A)
+MNCHGC0120 (PI30: 120A)
+
+MCHGC010 (pip8048: 10A)
+MCHGC020 (pip8048: 20A)
+MCHGC030 (pip8048: 30A)
+MCHGC040 (pip8048: 40A)
+MCHGC050 (pip8048: 50A)
+MCHGC060 (pip8048: 60A)
+MCHGC070 (pip8048: 70A)
+MCHGC080 (pip8048: 80A)
+MCHGC090 (pip8048: 90A)
+MCHGC0100 (pip8048: 100A)
+MCHGC0110 (pip8048: 110A)
+MCHGC0120 (pip8048: 120A)
+
+MUCHGC002 (Carica da rete: 2A)
+MUCHGC010 (Carica da rete: 10A)
+MUCHGC020 (Carica da rete: 20A)
+MUCHGC030 (Carica da rete: 30A)
+MUCHGC040 (Carica da rete: 40A)
+MUCHGC050 (Carica da rete: 50A)
+MUCHGC060 (Carica da rete: 60A)
+MUCHGC070 (Carica da rete: 70A)
+MUCHGC080 (Carica da rete: 80A)
+MUCHGC090 (Carica da rete: 90A)
+MUCHGC0100 (Carica da rete: 100A)
+MUCHGC0110 (Carica da rete: 110A)
+MUCHGC0120 (Carica da rete: 120A)
+
+--- VOLTAGGIO BATTERIA (48V) ---
+PBCV44.0 (Battery Recharge: 44.0V)
+PBCV45.0
+PBCV46.0
+PBCV47.0
+PBCV48.0
+PBCV49.0
+PBCV50.0
+PBCV51.0
+
+PBDV48 (Battery Redischarge: 48V)
+PBDV49
+PBDV50
+PBDV51
+PBDV52
+PBDV53
+PBDV54
+PBDV55
+PBDV56
+PBDV57
+PBDV58
+
+PSDV40.0 (Battery Cut-off: 40.0V)
+PSDV40.1
+PSDV42
+PSDV43
+PSDV44
+PSDV45
+PSDV46
+PSDV47
+PSDV48.0
+
+PCVV48.0 (Battery Bulk/C.V.: 48.0V)
+PCVV48.5
+PCVV49.0
+PCVV49.5
+PCVV50.0
+PCVV50.5
+PCVV51.0
+PCVV51.5
+PCVV52.0
+PCVV52.5
+PCVV53.0
+PCVV53.5
+PCVV54.0
+PCVV54.5
+PCVV55.0
+PCVV55.5
+PCVV56.0
+PCVV56.5
+PCVV57.0
+PCVV57.5
+PCVV58.0
+PCVV58.4
+
+PBFT48.0 (Battery Float: 48.0V)
+PBFT49.0
+PBFT50.0
+PBFT51.0
+
+--- PRIORITA' ---
+POP00 (Output: Utility first)
+POP01 (Output: Solar first)
+POP02 (Output: SBU)
+
+PCP00 (Charger: Utility first)
+PCP01 (Charger: Solar first)
+PCP02 (Charger: Solar + Utility)
+PCP03 (Charger: Solar only)
+
+--- TIPO BATTERIA ---
+PBT00 (AGM)
+PBT01 (Flooded)
+PBT02 (LiFePO4)
+
+--- CONFIGURAZIONE ---
+PGR00 (Grid: APL 90-280V)
+PGR01 (Grid: UPS 170-280V)
+
+F50 (Frequency: 50Hz)
+F60 (Frequency: 60Hz)
+
+V220
+V230
+V240
+
+POPM00
+POPM01
+
+--- EQUALIZATION ---
+PBEQE0 (Disable)
+PBEQE1 (Enable)
+
+PBEQA0
+PBEQA1
+
+PBEQT<nnn> (hours: es. PBEQT001 = 1h)
+PBEQP<nnn> (days: es. PBEQP007 = 7 giorni)
+PBEQV<nn.nn> (voltage)
+PBEQOT<nnn> (timeout minutes)
+
+--- SISTEMA ---
+PF (Restore factory defaults)
+DAT<YYMMDDHHMMSS> (Set date/time, es. DAT240903120000)
+PBATCD<abc> (Battery charge/discharge control)
+PBATMAXDISC<nnn> (Max discharge current, es. PBATMAXDISC100)
+RTEY (Reset energy counters)
+RTDL (Erase data log)
+
+--- ALTRO ---
+PE<x> (Enable flag)
+PD<x> (Disable flag)
+PPCP<MNN> (Parallel charger priority)
+PCVT<nnn> (Max C.V. time in minutes)
+

@@ -36,25 +36,33 @@
             - condition: template
               value_template: "{{ soc is not none and soc >= 100 }}"
           sequence:
-            - service: script.pi30_sets_inverter_to_charging_mode
+            - service: script.turn_on
+              target:
+                entity_id: script.pi30_sets_inverter_to_charging_mode
 
         - conditions:
             - condition: template
               value_template: "{{ voltage is not none and voltage >= 54 }}"
           sequence:
-            - service: script.pi30_sets_inverter_to_charging_mode
+            - service: script.turn_on
+              target:
+                entity_id: script.pi30_sets_inverter_to_charging_mode
 
         - conditions:
             - condition: template
               value_template: "{{ soc is not none and soc >= 80 and voltage is not none and voltage >= 52 }}"
           sequence:
-            - service: script.pi30_sets_inverter_to_charging_mode
+            - service: script.turn_on
+              target:
+                entity_id: script.pi30_sets_inverter_to_charging_mode
 
         - conditions:
             - condition: template
               value_template: "{{ sensors_unknown and power_sensors_known and grid_power < 500 and battery_power < 200 }}"
           sequence:
-            - service: script.pi30_sets_inverter_to_charging_mode
+            - service: script.turn_on
+              target:
+                entity_id: script.pi30_sets_inverter_to_charging_mode
             - service: select.select_option
               target:
                 entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
@@ -67,19 +75,25 @@
                 - condition: template
                   value_template: "{{ grid_power is not none and battery_power is not none and grid_power < 300 and battery_power < 200 }}"
               sequence:
-                - service: script.pi30_increase_charging_current
+                - service: script.turn_on
+                  target:
+                    entity_id: script.pi30_increase_charging_current
 
             - conditions:
                 - condition: template
                   value_template: "{{ grid_power is not none and battery_power is not none and (grid_power >= 300 or battery_power >= 200) }}"
               sequence:
-                - service: script.pi30_decrease_charging_current
+                - service: script.turn_on
+                  target:
+                    entity_id: script.pi30_decrease_charging_current
 
             - conditions:
                 - condition: template
                   value_template: "{{ current_charging_current == 2 and grid_power is not none and battery_power is not none and (grid_power > 500 or battery_power > 200) }}"
               sequence:
-                - service: script.pi30_sets_inverter_to_discharging_mode
+                - service: script.turn_on
+                  target:
+                    entity_id: script.pi30_sets_inverter_to_discharging_mode
 
   mode: single
   max_exceeded: silent

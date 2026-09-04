@@ -7,7 +7,7 @@ Sensori usati:
 - `sensor.goodwe_battery_power` (potenza batteria goodwe)
 - `sensor.heltec_pi30_display_pi30_max_utility_charging_current` (lettura corrente carica da rete confermata dall'inverter)
 - `sensor.heltec_pi30_display_pi30_max_total_charging_current` (lettura corrente totale confermata dall'inverter)
-- `input_number.pi30_max_manual_current` (helper da creare manualmente: limite massimo che la modulazione automatica non deve superare)
+- `max_manual_current` (variabile fissa dentro l'automazione, non un helper: limite massimo che la modulazione automatica non deve superare - vedi sezione "MAX MANUAL CURRENT" sotto)
 
 Scritture:
 - `select.heltec_pi30_display_pi30_set_max_utility_charging_current`
@@ -61,7 +61,7 @@ ALLORA
 		MODIFICA select.heltec_pi30_display_pi30_set_max_utility_charging_current
 		AUMENTANDO LO STEP (es: se sta a 2 vai a 10, se 10 ->20, se 60 rimani a 60 ecc.)
 		(GLI STEP SONO: 2 10 20 30 40 50 60)
-		LO STEP NON PUÒ COMUNQUE SUPERARE input_number.pi30_max_manual_current (MAX MANUAL CURRENT)
+		LO STEP NON PUÒ COMUNQUE SUPERARE max_manual_current (MAX MANUAL CURRENT)
 	ALTRIMENTI (DIMINUISCI STEP) (se uno dei due non è rispettato, c'è qualcosa che preleva troppo: sensor.potenza_contatore < 300 E sensor.goodwe_battery_power)
 		LEGGI sensor.heltec_pi30_display_pi30_max_utility_charging_current
 		MODIFICA select.heltec_pi30_display_pi30_set_max_utility_charging_current
@@ -95,11 +95,9 @@ ALLORA
 
 ## MAX MANUAL CURRENT
 
-Helper da creare manualmente in Home Assistant (Impostazioni > Automazioni e scene > Helper > Numero):
-- entity_id: `input_number.pi30_max_manual_current`
-- min: 2, max: 60, step: 1 (o qualsiasi step: l'automazione arrotonda sempre al gradino valido più vicino verso il basso)
+Non è un helper: è una variabile fissa dentro l'automazione stessa, in `action > variables > max_manual_current` (di default 60). Per cambiarla, apri l'automazione in modalità YAML, modifica quel numero e salva.
 
-Se impostato ad esempio a 40:
+Se impostata ad esempio a 40:
 - la fase AUMENTA STEP non salirà mai oltre 40A;
 - se la corrente è già sopra 40A (perché il limite è stato abbassato mentre il sistema stava caricando a uno step più alto), l'automazione la riporta subito al gradino valido più alto non superiore a 40 (quindi 40).
 

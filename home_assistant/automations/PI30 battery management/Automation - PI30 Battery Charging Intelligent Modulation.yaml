@@ -1,9 +1,9 @@
 alias: "PI30 Battery MAN"
 description: >-
   Logica umana completa: vedi "Logica umana automazione.md" nella stessa cartella.
-  Richiede l'helper input_number.pi30_max_manual_current (crealo in
-  Impostazioni > Automazioni e scene > Helper > Numero, min 2, max 60, step 1)
-  per limitare manualmente lo step massimo raggiungibile dalla modulazione.
+  Per limitare manualmente lo step massimo raggiungibile dalla modulazione,
+  modifica il valore di MAX_MANUAL_CURRENT nella variabile max_manual_current
+  qui sotto (riga "action > variables") e salva l'automazione.
 
 trigger:
   - trigger: homeassistant
@@ -23,7 +23,8 @@ trigger:
 action:
   - variables:
       charging_steps: [2, 10, 20, 30, 40, 50, 60]
-      max_manual_current: "{{ states('input_number.pi30_max_manual_current') | int(default=60) }}"
+      # MAX_MANUAL_CURRENT: modifica questo numero per limitare manualmente lo step massimo (es: 40)
+      max_manual_current: 60
       soc: "{{ states('sensor.goodwe_battery_state_of_charge') | float(default=none) }}"
       voltage: "{{ states('sensor.goodwe_battery_voltage') | float(default=none) }}"
       grid_power: "{{ states('sensor.potenza_contatore') | float(default=none) }}"

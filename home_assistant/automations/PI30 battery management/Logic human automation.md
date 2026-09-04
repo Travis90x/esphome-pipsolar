@@ -7,7 +7,7 @@ Sensors used:
 - `sensor.goodwe_battery_power` (Goodwe battery power)
 - `sensor.heltec_pi30_display_pi30_max_utility_charging_current` (utility charging current confirmed by the inverter)
 - `sensor.heltec_pi30_display_pi30_max_total_charging_current` (total charging current confirmed by the inverter)
-- `input_number.pi30_max_manual_current` (helper to create manually: upper limit the automatic modulation must never exceed)
+- `max_manual_current` (fixed variable inside the automation, not a helper: upper limit the automatic modulation must never exceed - see "MAX MANUAL CURRENT" section below)
 
 Writes:
 - `select.heltec_pi30_display_pi30_set_max_utility_charging_current`
@@ -61,7 +61,7 @@ THEN
 		SET select.heltec_pi30_display_pi30_set_max_utility_charging_current
 		INCREASING THE STEP (e.g.: if at 2 go to 10, if 10 -> 20, if 60 stay at 60, etc.)
 		(STEPS ARE: 2 10 20 30 40 50 60)
-		THE STEP CAN NEVER EXCEED input_number.pi30_max_manual_current (MAX MANUAL CURRENT)
+		THE STEP CAN NEVER EXCEED max_manual_current (MAX MANUAL CURRENT)
 	OTHERWISE (STEP DOWN) (if either condition is not met, something is drawing too much: sensor.potenza_contatore < 300 AND sensor.goodwe_battery_power)
 		READ sensor.heltec_pi30_display_pi30_max_utility_charging_current
 		SET select.heltec_pi30_display_pi30_set_max_utility_charging_current
@@ -95,9 +95,7 @@ THEN
 
 ## MAX MANUAL CURRENT
 
-Helper to create manually in Home Assistant (Settings > Automations & Scenes > Helpers > Number):
-- entity_id: `input_number.pi30_max_manual_current`
-- min: 2, max: 60, step: 1 (any step works: the automation always rounds down to the nearest valid step)
+Not a helper: it's a fixed variable inside the automation itself, under `action > variables > max_manual_current` (default 60). To change it, open the automation in YAML mode, edit that number, and save.
 
 If set to, say, 40:
 - the STEP UP phase will never go above 40A;

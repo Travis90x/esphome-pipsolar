@@ -1,132 +1,353 @@
 alias: "PI30 Battery MAN"
-description: "Smart battery charging: enters CARICA on favorable Goodwe SOC/voltage, modulates utility charging current with hysteresis (500W entry / 300W modulation), enforces safety limits on total/utility current, and falls back to SCARICA when nothing else applies (paracadute)"
+description: >-
+  Logica umana completa: vedi "Logica umana automazione.md" nella stessa cartella.
+  Richiede l'helper input_number.pi30_max_manual_current (crealo in
+  Impostazioni > Automazioni e scene > Helper > Numero, min 2, max 60, step 1)
+  per limitare manualmente lo step massimo raggiungibile dalla modulazione.
 
 trigger:
-  - platform: homeassistant
+  - trigger: homeassistant
+    id: avvio
     event: start
-  - platform: time_pattern
-    minutes: "/10"
-  - platform: state
-    entity_id: sensor.goodwe_battery_state_of_charge
-  - platform: state
-    entity_id: sensor.goodwe_battery_voltage
-  - platform: state
-    entity_id: sensor.potenza_contatore
-  - platform: state
-    entity_id: sensor.goodwe_battery_power
-  - platform: state
-    entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
-  - platform: state
-    entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
+  - trigger: time_pattern
+    id: controllo_10_minuti
+    minutes: /10
+  - trigger: state
+    id: batteria_stabile
+    entity_id:
+      - sensor.goodwe_battery_state_of_charge
+      - sensor.goodwe_battery_voltage
+      - sensor.potenza_contatore
+      - sensor.goodwe_battery_power
 
 action:
   - variables:
       charging_steps: [2, 10, 20, 30, 40, 50, 60]
+      max_manual_current: "{{ states('input_number.pi30_max_manual_current') | int(default=60) }}"
       soc: "{{ states('sensor.goodwe_battery_state_of_charge') | float(default=none) }}"
       voltage: "{{ states('sensor.goodwe_battery_voltage') | float(default=none) }}"
       grid_power: "{{ states('sensor.potenza_contatore') | float(default=none) }}"
       battery_power: "{{ states('sensor.goodwe_battery_power') | float(default=none) }}"
-      current_charging_current: "{{ states('select.heltec_pi30_display_pi30_set_max_utility_charging_current') | int(default=0) }}"
-      current_total_current: "{{ states('select.heltec_pi30_display_pi30_set_max_total_charging_current') | int(default=0) }}"
+      current_utility: "{{ states('sensor.heltec_pi30_display_pi30_max_utility_charging_current') | int(default=0) }}"
+      current_total: "{{ states('sensor.heltec_pi30_display_pi30_max_total_charging_current') | int(default=0) }}"
+      soc_known: "{{ soc is not none }}"
+      volt_known: "{{ voltage is not none }}"
+      power_known: "{{ grid_power is not none and battery_power is not none }}"
       sensors_unknown: "{{ soc is none or voltage is none }}"
-      power_sensors_known: "{{ grid_power is not none and battery_power is not none }}"
-      is_favorable: >-
-        {{ (soc is not none and soc >= 100) or
-           (voltage is not none and voltage >= 54) or
-           (soc is not none and soc >= 80 and voltage is not none and voltage >= 52) }}
 
-  # 1) SOC >= 100 OPPURE voltage >= 54 OPPURE (SOC >= 80 E voltage >= 52) -> stato favorevole alla carica
+  # ============================================================
+  # A) sensor.goodwe_battery_state_of_charge > 99 (goodwe carica al 100%)
+  # ============================================================
   - if:
       - condition: template
-        value_template: "{{ is_favorable }}"
+        value_template: "{{ soc_known and soc > 99 }}"
     then:
-      # Assicura la modalità CARICA (idempotente: se è già selezionata non cambia nulla)
-      - service: button.press
+      - service: script.turn_on
         target:
-          entity_id: button.heltec_pi30_display_pi30_charger_solar_utility
+          entity_id: script.pi30_batteria_da_caricare
 
-      # 1a) AUMENTA: contatore < 300W E battery_power < 200W E non già al massimo -> sale di uno step
+      # --- MODULA POTENZA DI CARICA ---
       - if:
           - condition: template
-            value_template: >-
-              {{ grid_power is not none and battery_power is not none and
-                 grid_power < 300 and battery_power < 200 and
-                 current_charging_current in charging_steps and
-                 charging_steps.index(current_charging_current) < (charging_steps | length) - 1 }}
+            value_template: "{{ current_total < 60 }}"
+        then:
+          - service: select.select_option
+            target:
+              entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
+            data:
+              option: "60"
+        else: []
+      - if:
+          - condition: template
+            value_template: "{{ current_utility > max_manual_current }}"
         then:
           - service: select.select_option
             target:
               entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
             data:
-              option: "{{ charging_steps[charging_steps.index(current_charging_current) + 1] | string }}"
+              option: >-
+                {{ (charging_steps | select('le', max_manual_current) | list | max) | string
+                   if (charging_steps | select('le', max_manual_current) | list | length > 0) else '2' }}
           # PAUSA PER LETTURA SENSORI
           - delay: "00:00:10"
         else:
-          # 1b) DIMINUISCI: contatore >= 300W O battery_power >= 200W E non già al minimo -> scende di uno step
           - if:
               - condition: template
-                value_template: >-
-                  {{ grid_power is not none and battery_power is not none and
-                     (grid_power >= 300 or battery_power >= 200) and
-                     current_charging_current in charging_steps and
-                     charging_steps.index(current_charging_current) > 0 }}
+                value_template: "{{ grid_power is not none and battery_power is not none and grid_power < 300 and battery_power < 200 }}"
+            then:
+              # AUMENTA STEP (senza superare MAX MANUAL CURRENT)
+              - service: select.select_option
+                target:
+                  entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                data:
+                  option: >-
+                    {{ ((charging_steps | select('gt', current_utility) | select('le', max_manual_current) | list) | min)
+                       if (charging_steps | select('gt', current_utility) | select('le', max_manual_current) | list | length > 0)
+                       else (charging_steps | select('le', max_manual_current) | list | max) | string }}
+              # PAUSA PER LETTURA SENSORI
+              - delay: "00:00:10"
+            else:
+              # DIMINUISCI STEP
+              - service: select.select_option
+                target:
+                  entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                data:
+                  option: >-
+                    {{ ((charging_steps | select('lt', current_utility) | list | max)
+                        if (charging_steps | select('lt', current_utility) | list | length > 0)
+                        else (charging_steps | min)) | string }}
+              # PAUSA PER LETTURA SENSORI
+              - delay: "00:00:10"
+
+    else:
+      # ============================================================
+      # B) sensor.goodwe_battery_voltage >= 54 (goodwe sicuramente carica al 100%)
+      # ============================================================
+      - if:
+          - condition: template
+            value_template: "{{ volt_known and voltage >= 54 }}"
+        then:
+          - service: script.turn_on
+            target:
+              entity_id: script.pi30_batteria_da_caricare
+
+          # --- MODULA POTENZA DI CARICA ---
+          - if:
+              - condition: template
+                value_template: "{{ current_total < 60 }}"
+            then:
+              - service: select.select_option
+                target:
+                  entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
+                data:
+                  option: "60"
+            else: []
+          - if:
+              - condition: template
+                value_template: "{{ current_utility > max_manual_current }}"
             then:
               - service: select.select_option
                 target:
                   entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
                 data:
-                  option: "{{ charging_steps[charging_steps.index(current_charging_current) - 1] | string }}"
+                  option: >-
+                    {{ (charging_steps | select('le', max_manual_current) | list | max) | string
+                       if (charging_steps | select('le', max_manual_current) | list | length > 0) else '2' }}
               # PAUSA PER LETTURA SENSORI
               - delay: "00:00:10"
             else:
-              # 1c) Step già corretto per le condizioni attuali (o dati non ancora disponibili): nessuna azione necessaria
-              []
-    else:
-      # 2) Non favorevole a CARICA: paracadute se i sensori SOC/voltage sono unknown ma la rete è comunque tranquilla
-      - if:
-          - condition: template
-            value_template: "{{ sensors_unknown and power_sensors_known and grid_power < 500 and battery_power < 200 }}"
-        then:
-          - service: button.press
-            target:
-              entity_id: button.heltec_pi30_display_pi30_charger_solar_utility
-          - service: select.select_option
-            target:
-              entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
-            data:
-              option: "2"
+              - if:
+                  - condition: template
+                    value_template: "{{ grid_power is not none and battery_power is not none and grid_power < 300 and battery_power < 200 }}"
+                then:
+                  # AUMENTA STEP (senza superare MAX MANUAL CURRENT)
+                  - service: select.select_option
+                    target:
+                      entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                    data:
+                      option: >-
+                        {{ ((charging_steps | select('gt', current_utility) | select('le', max_manual_current) | list) | min)
+                           if (charging_steps | select('gt', current_utility) | select('le', max_manual_current) | list | length > 0)
+                           else (charging_steps | select('le', max_manual_current) | list | max) | string }}
+                  # PAUSA PER LETTURA SENSORI
+                  - delay: "00:00:10"
+                else:
+                  # DIMINUISCI STEP
+                  - service: select.select_option
+                    target:
+                      entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                    data:
+                      option: >-
+                        {{ ((charging_steps | select('lt', current_utility) | list | max)
+                            if (charging_steps | select('lt', current_utility) | list | length > 0)
+                            else (charging_steps | min)) | string }}
+                  # PAUSA PER LETTURA SENSORI
+                  - delay: "00:00:10"
+
         else:
-          # 3) PARACADUTE FINALE: nessuna condizione favorevole riconosciuta -> SCARICA (mai lasciare lo stato invariato)
-          - service: button.press
-            target:
-              entity_id: button.heltec_pi30_display_pi30_charger_solar_only
-          - delay: "00:00:02"
+          # ============================================================
+          # C) goodwe carica al 100% ma si sta scaricando: SOC > 99 E VOLT < 53
+          # ============================================================
+          - if:
+              - condition: template
+                value_template: "{{ soc_known and volt_known and soc > 99 and voltage < 53 }}"
+            then:
+              - service: script.turn_on
+                target:
+                  entity_id: script.pi30_batteria_da_caricare
 
-  # 4) Sicurezza: la corrente totale non deve mai essere inferiore alla corrente da rete (utility)
-  - if:
-      - condition: template
-        value_template: "{{ current_total_current < current_charging_current }}"
-    then:
-      - service: select.select_option
-        target:
-          entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
-        data:
-          option: "{{ current_charging_current | string }}"
-    else:
-      []
+              # --- MODULA POTENZA DI CARICA ---
+              - if:
+                  - condition: template
+                    value_template: "{{ current_total < 60 }}"
+                then:
+                  - service: select.select_option
+                    target:
+                      entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
+                    data:
+                      option: "60"
+                else: []
+              - if:
+                  - condition: template
+                    value_template: "{{ current_utility > max_manual_current }}"
+                then:
+                  - service: select.select_option
+                    target:
+                      entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                    data:
+                      option: >-
+                        {{ (charging_steps | select('le', max_manual_current) | list | max) | string
+                           if (charging_steps | select('le', max_manual_current) | list | length > 0) else '2' }}
+                  # PAUSA PER LETTURA SENSORI
+                  - delay: "00:00:10"
+                else:
+                  - if:
+                      - condition: template
+                        value_template: "{{ grid_power is not none and battery_power is not none and grid_power < 300 and battery_power < 200 }}"
+                    then:
+                      # AUMENTA STEP (senza superare MAX MANUAL CURRENT)
+                      - service: select.select_option
+                        target:
+                          entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                        data:
+                          option: >-
+                            {{ ((charging_steps | select('gt', current_utility) | select('le', max_manual_current) | list) | min)
+                               if (charging_steps | select('gt', current_utility) | select('le', max_manual_current) | list | length > 0)
+                               else (charging_steps | select('le', max_manual_current) | list | max) | string }}
+                      # PAUSA PER LETTURA SENSORI
+                      - delay: "00:00:10"
+                    else:
+                      # DIMINUISCI STEP
+                      - service: select.select_option
+                        target:
+                          entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                        data:
+                          option: >-
+                            {{ ((charging_steps | select('lt', current_utility) | list | max)
+                                if (charging_steps | select('lt', current_utility) | list | length > 0)
+                                else (charging_steps | min)) | string }}
+                      # PAUSA PER LETTURA SENSORI
+                      - delay: "00:00:10"
 
-  # 5) Minimo forzato di 60A sulla corrente totale per stabilità del sistema
-  - if:
-      - condition: template
-        value_template: "{{ current_total_current < 60 }}"
-    then:
-      - service: select.select_option
-        target:
-          entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
-        data:
-          option: "60"
-    else:
-      []
+            else:
+              # ============================================================
+              # D) SOC/VOLT non favorevoli: serve potenza_contatore e battery_power NOTI
+              # ============================================================
+              - if:
+                  - condition: template
+                    value_template: "{{ power_known }}"
+                then:
+                  # D vero: già al minimo (2A) ma la situazione resta accettabile
+                  # (VALORI PIU' ALTI di MODULAZIONE per avere isteresi: 500 / 200)
+                  - if:
+                      - condition: template
+                        value_template: "{{ current_utility == 2 and (grid_power < 500 or battery_power < 200) }}"
+                    then:
+                      - service: script.turn_on
+                        target:
+                          entity_id: script.pi30_batteria_da_caricare
+
+                      # --- MODULA POTENZA DI CARICA ---
+                      - if:
+                          - condition: template
+                            value_template: "{{ current_total < 60 }}"
+                        then:
+                          - service: select.select_option
+                            target:
+                              entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
+                            data:
+                              option: "60"
+                        else: []
+                      - if:
+                          - condition: template
+                            value_template: "{{ current_utility > max_manual_current }}"
+                        then:
+                          - service: select.select_option
+                            target:
+                              entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                            data:
+                              option: >-
+                                {{ (charging_steps | select('le', max_manual_current) | list | max) | string
+                                   if (charging_steps | select('le', max_manual_current) | list | length > 0) else '2' }}
+                          # PAUSA PER LETTURA SENSORI
+                          - delay: "00:00:10"
+                        else:
+                          - if:
+                              - condition: template
+                                value_template: "{{ grid_power is not none and battery_power is not none and grid_power < 300 and battery_power < 200 }}"
+                            then:
+                              # AUMENTA STEP (senza superare MAX MANUAL CURRENT)
+                              - service: select.select_option
+                                target:
+                                  entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                                data:
+                                  option: >-
+                                    {{ ((charging_steps | select('gt', current_utility) | select('le', max_manual_current) | list) | min)
+                                       if (charging_steps | select('gt', current_utility) | select('le', max_manual_current) | list | length > 0)
+                                       else (charging_steps | select('le', max_manual_current) | list | max) | string }}
+                              # PAUSA PER LETTURA SENSORI
+                              - delay: "00:00:10"
+                            else:
+                              # DIMINUISCI STEP
+                              - service: select.select_option
+                                target:
+                                  entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                                data:
+                                  option: >-
+                                    {{ ((charging_steps | select('lt', current_utility) | list | max)
+                                        if (charging_steps | select('lt', current_utility) | list | length > 0)
+                                        else (charging_steps | min)) | string }}
+                              # PAUSA PER LETTURA SENSORI
+                              - delay: "00:00:10"
+
+                    else:
+                      # ============================================================
+                      # Nessuna condizione favorevole (A/B/C/D tutte false)
+                      # ============================================================
+                      - if:
+                          - condition: template
+                            value_template: "{{ sensors_unknown and grid_power < 300 and battery_power < 200 }}"
+                        then:
+                          # Paracadute finale: SOC/VOLT ignoti ma rete e goodwe tranquille -> carica al minimo
+                          - service: script.turn_on
+                            target:
+                              entity_id: script.pi30_batteria_da_caricare
+                          - service: select.select_option
+                            target:
+                              entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                            data:
+                              option: "2"
+                        else:
+                          # PARACADUTE ULTIMO: nulla è favorevole -> SCARICA
+                          - service: script.turn_on
+                            target:
+                              entity_id: script.pi30_batteria_da_scaricare
+                          - delay: "00:00:02"
+
+                else:
+                  # ============================================================
+                  # Paracadute: potenza_contatore e/o goodwe_battery_power IGNOTI -> carica al minimo
+                  # ============================================================
+                  - service: script.turn_on
+                    target:
+                      entity_id: script.pi30_batteria_da_caricare
+                  - service: select.select_option
+                    target:
+                      entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                    data:
+                      option: "2"
+
+                  # --- MODULA POTENZA DI CARICA (grid/battery ignoti -> cadrà su DIMINUISCI, che a 2A non fa nulla) ---
+                  - if:
+                      - condition: template
+                        value_template: "{{ current_total < 60 }}"
+                    then:
+                      - service: select.select_option
+                        target:
+                          entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
+                        data:
+                          option: "60"
+                    else: []
 
 mode: single
 max_exceeded: silent

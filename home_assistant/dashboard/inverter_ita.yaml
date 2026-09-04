@@ -9,14 +9,16 @@ cards: []
 sections:
   - type: grid
     cards:
-      - type: entities
+      - color: state
+        type: entities
         title: Automazioni
         show_header_toggle: false
-        state_color: true
         entities:
+          - entity: automation.pi30_battery_charging_intelligent_modulation
           - entity: automation.ups_accumulo
           - entity: switch.ups
           - entity: sensor.ups_power
+          - entity: sensor.heltec_pi30_output_active_power
           - entity: automation.ups
           - type: divider
           - entity: script.pi30_batteria_da_scaricare
@@ -71,6 +73,15 @@ sections:
         title: Batteria
         show_header_toggle: false
         entities:
+          - entity: select.heltec_pi30_display_pi30_set_max_total_charging_current
+            name: Corrente max di carica totale
+          - entity: sensor.heltec_pi30_display_pi30_max_total_charging_current
+            name: Corrente max di carica totale
+          - entity: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+            name: Corrente max di carica da rete
+          - entity: sensor.heltec_pi30_display_pi30_max_utility_charging_current
+            name: Corrente max di carica da rete
+          - type: divider
           - entity: number.heltec_pi30_display_pi30_set_battery_recharge_voltage
             name: Ripresa carica da rete (PBCV)
           - entity: sensor.heltec_pi30_display_pi30_battery_recharge_voltage
@@ -95,15 +106,6 @@ sections:
             name: Float (PBFT)
           - entity: sensor.heltec_pi30_display_pi30_battery_float_voltage
             name: Float (PBFT)
-          - type: divider
-          - entity: select.heltec_pi30_display_pi30_set_max_total_charging_current
-            name: Corrente max di carica totale
-          - entity: sensor.heltec_pi30_display_pi30_max_total_charging_current
-            name: Corrente max di carica totale
-          - entity: select.heltec_pi30_display_pi30_set_max_utility_charging_current
-            name: Corrente max di carica da rete
-          - entity: sensor.heltec_pi30_display_pi30_max_utility_charging_current
-            name: Corrente max di carica da rete
       - type: entities
         title: Console comandi
         show_header_toggle: false

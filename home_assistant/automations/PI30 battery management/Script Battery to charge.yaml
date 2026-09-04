@@ -1,0 +1,38 @@
+alias: PI30 batteria da scaricare
+description: >-
+  Set PI30 to Solo solare, SBU, disable utility charging, and allow battery
+  discharge
+sequence:
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 2
+      milliseconds: 0
+  - if:
+      - condition: template
+        value_template: |-
+          {{ not (
+            states('sensor.heltec_pi30_display_pi30_output_source_priority') | float(0) == 2.0
+            and
+            states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(0) == 3.0
+          ) }}
+    then:
+      - action: button.press
+        target:
+          entity_id: button.heltec_pi30_display_pi30_charger_solar_only
+        data: {}
+      - delay:
+          hours: 0
+          minutes: 0
+          seconds: 1
+          milliseconds: 0
+      - action: switch.turn_on
+        target:
+          entity_id: switch.heltec_pi30_display_pi30_output_priority_sbu
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 2
+      milliseconds: 0
+mode: queued
+max: 10

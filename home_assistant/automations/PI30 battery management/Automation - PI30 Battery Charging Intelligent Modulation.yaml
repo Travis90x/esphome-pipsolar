@@ -91,6 +91,8 @@ action:
                   entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
                 data:
                   option: "{{ charging_steps[charging_steps.index(current_charging_current) + 1] | string }}"
+              # PAUSA PER LETTURA SENSORI
+              - delay: "00:00:10"
 
           # DIMINUISCI: grid_power >= 300 OR battery_power >= 200 -> step down
           - conditions:
@@ -106,6 +108,8 @@ action:
                   entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
                 data:
                   option: "{{ charging_steps[charging_steps.index(current_charging_current) - 1] | string }}"
+              # PAUSA PER LETTURA SENSORI
+              - delay: "00:00:10"
 
           # Emergency SCARICA: already at minimum (2A) but conditions still unfavorable
           - conditions:

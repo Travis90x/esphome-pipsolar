@@ -1,4 +1,4 @@
-alias: "PI30 Battery Charging - Intelligent Modulation"
+alias: "PI30 Battery MAN"
 description: "Smart battery charging: enters CARICA on favorable SOC/voltage, modulates utility charging current with hysteresis (500W entry / 300W modulation), enforces safety limits on total/utility current, and falls back to SCARICA when unfavorable"
 
 trigger:

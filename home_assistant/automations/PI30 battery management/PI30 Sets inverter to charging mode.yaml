@@ -1,0 +1,6 @@
+alias: "PI30 Sets inverter to charging mode"
+description: "PI30 Sets inverter to charging mode (CARICA)"
+sequence:
+  - service: button.press
+    target:
+      entity_id: button.heltec_pi30_display_pi30_charger_solar_utility

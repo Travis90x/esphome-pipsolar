@@ -1,0 +1,7 @@
+alias: "PI30 Sets inverter to discharging mode"
+description: "PI30 Sets inverter to discharging mode (SCARICA)"
+sequence:
+  - service: button.press
+    target:
+      entity_id: button.heltec_pi30_display_pi30_charger_solar_only
+  - delay: "00:00:02"

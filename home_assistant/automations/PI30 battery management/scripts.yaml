@@ -1,0 +1,66 @@
+pi30_batteria_da_caricare:
+  alias: "PI30 Battery - Start Charging"
+  description: "Sets inverter to charging mode (CARICA)"
+  sequence:
+    - service: button.press
+      target:
+        entity_id: button.heltec_pi30_display_pi30_charger_solar_utility
+
+pi30_batteria_da_scaricare:
+  alias: "PI30 Battery - Start Discharging"
+  description: "Sets inverter to discharging mode (SCARICA)"
+  sequence:
+    - service: button.press
+      target:
+        entity_id: button.heltec_pi30_display_pi30_charger_solar_only
+    - delay: "00:00:02"
+
+pi30_batteria_aumenta_corrente_carica:
+  alias: "PI30 Battery - Increase Charging Current"
+  description: "Increases utility charging current by one step"
+  sequence:
+    - variables:
+        charging_steps: [2, 10, 20, 30, 40, 50, 60]
+        current_option: "{{ states('select.heltec_pi30_display_pi30_set_max_utility_charging_current') }}"
+
+    - condition: template
+      value_template: "{{ current_option not in ['unknown', 'unavailable'] }}"
+
+    - variables:
+        current_index: "{{ charging_steps.index(current_option | int) }}"
+        next_index: "{{ [current_index + 1, (charging_steps | length) - 1] | min }}"
+        next_value: "{{ charging_steps[next_index] }}"
+
+    - condition: template
+      value_template: "{{ current_index < (charging_steps | length) - 1 }}"
+
+    - service: select.select_option
+      target:
+        entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+      data:
+        option: "{{ next_value | string }}"
+
+pi30_batteria_diminuisci_corrente_carica:
+  alias: "PI30 Battery - Decrease Charging Current"
+  description: "Decreases utility charging current by one step"
+  sequence:
+    - variables:
+        charging_steps: [2, 10, 20, 30, 40, 50, 60]
+        current_option: "{{ states('select.heltec_pi30_display_pi30_set_max_utility_charging_current') }}"
+
+    - condition: template
+      value_template: "{{ current_option not in ['unknown', 'unavailable'] }}"
+
+    - variables:
+        current_index: "{{ charging_steps.index(current_option | int) }}"
+        prev_index: "{{ [current_index - 1, 0] | max }}"
+        prev_value: "{{ charging_steps[prev_index] }}"
+
+    - condition: template
+      value_template: "{{ current_index > 0 }}"
+
+    - service: select.select_option
+      target:
+        entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+      data:
+        option: "{{ prev_value | string }}"

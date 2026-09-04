@@ -1,0 +1,183 @@
+# Battery Charging Automation with Hysteresis Control
+# Modulates charging current based on grid power consumption and battery state
+# Hysteresis: 500W entry threshold, 300W modulization threshold
+
+- id: battery_charging_intelligent_modulation
+  alias: "Battery Charging - Intelligent Modulation"
+  description: "Smart battery charging with current modulation based on grid power and battery state"
+
+  trigger:
+    - platform: homeassistant
+      event: start
+    - platform: time_pattern
+      minutes: "/10"
+    - platform: state
+      entity_id: sensor.heltec_pi30_battery_soc
+    - platform: state
+      entity_id: sensor.heltec_pi30_battery_voltage
+    - platform: state
+      entity_id: sensor.heltec_pi30_pi30_grid_frequency
+    - platform: state
+      entity_id: sensor.heltec_pi30_battery_power
+
+  variables:
+    charging_steps: [2, 10, 20, 30, 40, 50, 60]
+    soc: "{{ states('sensor.heltec_pi30_battery_soc') | float(default=none) }}"
+    voltage: "{{ states('sensor.heltec_pi30_battery_voltage') | float(default=none) }}"
+    grid_power: "{{ states('sensor.heltec_pi30_pi30_grid_frequency') | float(default=none) }}"
+    battery_power: "{{ states('sensor.heltec_pi30_battery_power') | float(default=none) }}"
+    current_charging_current: "{{ states('select.heltec_pi30_display_pi30_set_max_utility_charging_current') | int(default=0) }}"
+    sensors_unknown: "{{ soc is none or voltage is none }}"
+    power_sensors_known: "{{ grid_power is not none and battery_power is not none }}"
+
+  action:
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ soc is not none and soc >= 100 }}"
+          sequence:
+            - service: button.press
+              target:
+                entity_id: button.heltec_pi30_display_pi30_charger_solar_utility
+
+        - conditions:
+            - condition: template
+              value_template: "{{ voltage is not none and voltage >= 54 }}"
+          sequence:
+            - service: button.press
+              target:
+                entity_id: button.heltec_pi30_display_pi30_charger_solar_utility
+
+        - conditions:
+            - condition: template
+              value_template: "{{ soc is not none and soc >= 80 and voltage is not none and voltage >= 52 }}"
+          sequence:
+            - service: button.press
+              target:
+                entity_id: button.heltec_pi30_display_pi30_charger_solar_utility
+
+        - conditions:
+            - condition: template
+              value_template: "{{ sensors_unknown and power_sensors_known and grid_power < 500 and battery_power < 200 }}"
+          sequence:
+            - service: button.press
+              target:
+                entity_id: button.heltec_pi30_display_pi30_charger_solar_utility
+            - service: select.select_option
+              target:
+                entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+              data:
+                option: "2"
+
+      default:
+        - choose:
+            - conditions:
+                - condition: template
+                  value_template: "{{ grid_power is not none and battery_power is not none and grid_power < 300 and battery_power < 200 }}"
+              sequence:
+                - variables:
+                    charging_steps: [2, 10, 20, 30, 40, 50, 60]
+                    current_option: "{{ states('select.heltec_pi30_display_pi30_set_max_utility_charging_current') }}"
+                - condition: template
+                  value_template: "{{ current_option not in ['unknown', 'unavailable'] }}"
+                - variables:
+                    current_index: "{{ charging_steps.index(current_option | int) }}"
+                    next_index: "{{ [current_index + 1, (charging_steps | length) - 1] | min }}"
+                    next_value: "{{ charging_steps[next_index] }}"
+                - condition: template
+                  value_template: "{{ current_index < (charging_steps | length) - 1 }}"
+                - service: select.select_option
+                  target:
+                    entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                  data:
+                    option: "{{ next_value | string }}"
+
+            - conditions:
+                - condition: template
+                  value_template: "{{ grid_power is not none and battery_power is not none and (grid_power >= 300 or battery_power >= 200) }}"
+              sequence:
+                - variables:
+                    charging_steps: [2, 10, 20, 30, 40, 50, 60]
+                    current_option: "{{ states('select.heltec_pi30_display_pi30_set_max_utility_charging_current') }}"
+                - condition: template
+                  value_template: "{{ current_option not in ['unknown', 'unavailable'] }}"
+                - variables:
+                    current_index: "{{ charging_steps.index(current_option | int) }}"
+                    prev_index: "{{ [current_index - 1, 0] | max }}"
+                    prev_value: "{{ charging_steps[prev_index] }}"
+                - condition: template
+                  value_template: "{{ current_index > 0 }}"
+                - service: select.select_option
+                  target:
+                    entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                  data:
+                    option: "{{ prev_value | string }}"
+
+            - conditions:
+                - condition: template
+                  value_template: "{{ current_charging_current == 2 and grid_power is not none and battery_power is not none and (grid_power > 500 or battery_power > 200) }}"
+              sequence:
+                - service: button.press
+                  target:
+                    entity_id: button.heltec_pi30_display_pi30_charger_solar_only
+                - delay: "00:00:02"
+
+  mode: single
+  max_exceeded: silent
+
+- id: battery_charging_safety_total_current
+  alias: "Battery Charging - Safety Total Current"
+  description: "Ensures max_total_charging_current >= max_utility_charging_current"
+
+  trigger:
+    - platform: state
+      entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+    - platform: state
+      entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
+
+  condition:
+    - condition: template
+      value_template: "{{ states('select.heltec_pi30_display_pi30_set_max_utility_charging_current') not in ['unknown', 'unavailable'] }}"
+
+  action:
+    - variables:
+        utility_current: "{{ states('select.heltec_pi30_display_pi30_set_max_utility_charging_current') | int(default=0) }}"
+        total_current: "{{ states('select.heltec_pi30_display_pi30_set_max_total_charging_current') | int(default=0) }}"
+
+    - condition: template
+      value_template: "{{ total_current < utility_current }}"
+
+    - service: select.select_option
+      target:
+        entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
+      data:
+        option: "{{ states('select.heltec_pi30_display_pi30_set_max_utility_charging_current') }}"
+
+  mode: single
+  max_exceeded: silent
+
+- id: battery_charging_force_minimum_total
+  alias: "Battery Charging - Force Minimum Total Current"
+  description: "Ensures max_total_charging_current is at least 60A for system stability"
+
+  trigger:
+    - platform: state
+      entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
+    - platform: time_pattern
+      minutes: "/30"
+
+  condition:
+    - condition: template
+      value_template: "{{ states('select.heltec_pi30_display_pi30_set_max_total_charging_current') not in ['unknown', 'unavailable'] }}"
+    - condition: template
+      value_template: "{{ states('select.heltec_pi30_display_pi30_set_max_total_charging_current') | int(default=0) < 60 }}"
+
+  action:
+    - service: select.select_option
+      target:
+        entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
+      data:
+        option: "60"
+
+  mode: single
+  max_exceeded: silent

@@ -1,0 +1,32 @@
+# Safety automation: Ensure total charging current >= utility charging current
+
+id: battery_charging_safety_total_current
+alias: "Battery Charging - Safety Total Current"
+description: "Ensures max_total_charging_current >= max_utility_charging_current"
+
+trigger:
+  - platform: state
+    entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+  - platform: state
+    entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
+
+condition:
+  - condition: template
+    value_template: "{{ states('select.heltec_pi30_display_pi30_set_max_utility_charging_current') not in ['unknown', 'unavailable'] }}"
+
+action:
+  - variables:
+      utility_current: "{{ states('select.heltec_pi30_display_pi30_set_max_utility_charging_current') | int(default=0) }}"
+      total_current: "{{ states('select.heltec_pi30_display_pi30_set_max_total_charging_current') | int(default=0) }}"
+
+  - condition: template
+    value_template: "{{ total_current < utility_current }}"
+
+  - service: select.select_option
+    target:
+      entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
+    data:
+      option: "{{ states('select.heltec_pi30_display_pi30_set_max_utility_charging_current') }}"
+
+mode: single
+max_exceeded: silent

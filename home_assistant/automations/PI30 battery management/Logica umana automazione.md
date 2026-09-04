@@ -34,12 +34,16 @@ SE
 			sensor.goodwe_battery_voltage |float < 53
 		OR
 			SE sensor.potenza_contatore E sensor.goodwe_battery_power NOTI
-				(Potenza carica al minimo, ma comunque NON preleva tanto dalla rete o NON consuma tanto la goodwe)
+				(Potenza carica al minimo, e servono ENTRAMBE le condizioni favorevoli: NON preleva tanto dalla rete E NON consuma tanto la goodwe)
 				(VALORI PIU' ALTI di MODULAZIONE per avere isteresi)
+				(CORREZIONE: AND e non OR tra le due soglie - altrimenti basterebbe una sola condizione favorevole
+				per restare in carica, mentre piu' sotto la condizione di SCARICA usa OR sulle stesse due soglie:
+				le due condizioni risulterebbero vere insieme se un solo sensore e' sfavorevole, e CARICA
+				vincerebbe sempre perche' valutata per prima)
 				Potenza carica sensor.heltec_pi30_display_pi30_max_utility_charging_current = 2 A
 				AND
 					sensor.potenza_contatore < 500
-					OR
+					AND
 					sensor.goodwe_battery_power < 200
 			ALTRIMENTI (sensor.potenza_contatore E sensor.goodwe_battery_power IGNOTI)
 				CARICA con "paracadute" = potenza 2A

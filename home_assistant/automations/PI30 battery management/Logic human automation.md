@@ -34,12 +34,16 @@ IF
 			sensor.goodwe_battery_voltage |float < 53
 		OR
 			IF sensor.potenza_contatore AND sensor.goodwe_battery_power KNOWN
-				(Charging power at minimum, but still NOT drawing much from the grid or NOT drawing much from goodwe)
+				(Charging power at minimum, and BOTH favorable conditions are required: NOT drawing much from the grid AND NOT drawing much from goodwe)
 				(HIGHER VALUES than modulation, for hysteresis)
+				(FIX: AND, not OR, between the two thresholds - otherwise a single favorable condition would be
+				enough to keep charging, while the DISCHARGE condition further below uses OR on the same two
+				thresholds: both conditions could end up true at once when only one sensor is unfavorable, and
+				CHARGE would always win because it is evaluated first)
 				Charging power sensor.heltec_pi30_display_pi30_max_utility_charging_current = 2 A
 				AND
 					sensor.potenza_contatore < 500
-					OR
+					AND
 					sensor.goodwe_battery_power < 200
 			OTHERWISE (sensor.potenza_contatore AND sensor.goodwe_battery_power UNKNOWN)
 				CHARGE with "safety net" = 2A power

@@ -114,7 +114,7 @@ actions:
     else:
       - if:
           - condition: template
-            value_template: '{{ volt_known and voltage >= 54 }}'
+            value_template: '{{ volt_known and voltage >= 55 }}'
         then:
           - target:
               entity_id: script.pi30_batteria_da_caricare

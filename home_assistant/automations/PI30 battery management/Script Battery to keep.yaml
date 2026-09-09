@@ -12,7 +12,7 @@ sequence:
           {{ not (
             states('sensor.heltec_pi30_display_pi30_output_source_priority') | float(0) == 2.0
             and
-            states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(0) == 3.0
+            states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(0) == 2.0
           ) }}
     then:
       - action: button.press

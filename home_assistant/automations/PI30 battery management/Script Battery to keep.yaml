@@ -33,11 +33,16 @@ sequence:
           minutes: 0
           seconds: 1
           milliseconds: 0
-      - action: select.select_option
-        target:
-          entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
-        data:
-          option: '2'
+      - if:
+          - condition: numeric_state
+            entity_id: sensor.heltec_pi30_display_pi30_max_utility_charging_current
+            above: 2
+        then:
+          - action: select.select_option
+            target:
+              entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+            data:
+              option: '2'
   - delay:
       hours: 0
       minutes: 0

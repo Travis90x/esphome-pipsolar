@@ -8,12 +8,16 @@ Sensors used:
 - `sensor.heltec_pi30_display_pi30_max_utility_charging_current` (utility charging current confirmed by the inverter)
 - `sensor.heltec_pi30_display_pi30_max_total_charging_current` (total charging current confirmed by the inverter)
 - `max_manual_current` (fixed variable inside the automation, not a helper: upper limit the automatic modulation must never exceed - see "MAX MANUAL CURRENT" section below)
+- `sensor.heltec_pi30_battery_voltage` (PI30 battery voltage)
+- `number.heltec_pi30_display_pi30_set_battery_under_voltage` (PSDV, battery cut-off configured on the inverter)
+- `battery_keep_under_voltage` (computed variable: PSDV + 0.2V safety margin - see "KEEP INSTEAD OF DISCHARGE" section below)
 
 Writes:
 - `select.heltec_pi30_display_pi30_set_max_utility_charging_current`
 - `select.heltec_pi30_display_pi30_set_max_total_charging_current`
 - `script.pi30_batteria_da_caricare` (CHARGE)
 - `script.pi30_batteria_da_scaricare` (DISCHARGE)
+- `script.pi30_batteria_da_mantenere` (KEEP - used instead of DISCHARGE when the PI30 battery is already close to cut-off)
 
 Possible utility current steps: `2 10 20 30 40 50 60`
 
@@ -82,7 +86,14 @@ OTHERWISE
 		SET select.heltec_pi30_display_pi30_set_max_utility_charging_current = 2
 
 OTHERWISE
-	DISCHARGE = script.pi30_batteria_da_scaricare
+	IF
+		sensor.heltec_pi30_battery_voltage < battery_keep_under_voltage
+		(where battery_keep_under_voltage = number.heltec_pi30_display_pi30_set_battery_under_voltage + 0.2)
+	THEN
+		KEEP = script.pi30_batteria_da_mantenere
+		(the PI30 battery is already close to cut-off: do not discharge it further)
+	OTHERWISE
+		DISCHARGE = script.pi30_batteria_da_scaricare
 
 WHICH MEANS
 IF

@@ -51,6 +51,10 @@ actions:
       volt_known: '{{ voltage is not none }}'
       power_known: '{{ grid_power is not none and battery_power is not none }}'
       sensors_unknown: '{{ soc is none or voltage is none }}'
+      pi30_voltage: '{{ states(''sensor.heltec_pi30_battery_voltage'') | float(default=none) }}'
+      battery_keep_under_voltage: >-
+        {{ states('number.heltec_pi30_display_pi30_set_battery_under_voltage')
+        | float(default=0) + 0.2 }}
   - if:
       - condition: template
         value_template: '{{ soc_known and soc > 99 }}'
@@ -325,10 +329,21 @@ actions:
                               option: '2'
                             action: select.select_option
                         else:
-                          - target:
-                              entity_id: script.pi30_batteria_da_scaricare
-                            action: script.turn_on
-                          - delay: '00:00:02'
+                          - if:
+                              - condition: template
+                                value_template: >-
+                                  {{ pi30_voltage is not none and pi30_voltage <
+                                  battery_keep_under_voltage }}
+                            then:
+                              # Batteria PI30 già vicina al cut-off: mantenere invece di scaricare
+                              - target:
+                                  entity_id: script.pi30_batteria_da_mantenere
+                                action: script.turn_on
+                            else:
+                              - target:
+                                  entity_id: script.pi30_batteria_da_scaricare
+                                action: script.turn_on
+                              - delay: '00:00:02'
                 else:
                   - target:
                       entity_id: script.pi30_batteria_da_caricare

@@ -8,12 +8,16 @@ Sensori usati:
 - `sensor.heltec_pi30_display_pi30_max_utility_charging_current` (lettura corrente carica da rete confermata dall'inverter)
 - `sensor.heltec_pi30_display_pi30_max_total_charging_current` (lettura corrente totale confermata dall'inverter)
 - `max_manual_current` (variabile fissa dentro l'automazione, non un helper: limite massimo che la modulazione automatica non deve superare - vedi sezione "MAX MANUAL CURRENT" sotto)
+- `sensor.heltec_pi30_battery_voltage` (tensione batteria PI30)
+- `number.heltec_pi30_display_pi30_set_battery_under_voltage` (PSDV, cut-off batteria impostato sull'inverter)
+- `battery_keep_under_voltage` (variabile calcolata: PSDV + 0.2V di margine di sicurezza - vedi sezione "MANTIENI INVECE DI SCARICARE" sotto)
 
 Scritture:
 - `select.heltec_pi30_display_pi30_set_max_utility_charging_current`
 - `select.heltec_pi30_display_pi30_set_max_total_charging_current`
 - `script.pi30_batteria_da_caricare` (CARICA)
 - `script.pi30_batteria_da_scaricare` (SCARICA)
+- `script.pi30_batteria_da_mantenere` (MANTIENI - usato al posto di SCARICA quando la batteria PI30 è già vicina al cut-off)
 
 Step possibili corrente da rete: `2 10 20 30 40 50 60`
 
@@ -82,7 +86,14 @@ ALTRIMENTI
 		MODIFICA select.heltec_pi30_display_pi30_set_max_utility_charging_current = 2
 
 ALTRIMENTI
-	SCARICA = script.pi30_batteria_da_scaricare
+	SE
+		sensor.heltec_pi30_battery_voltage < battery_keep_under_voltage
+		(dove battery_keep_under_voltage = number.heltec_pi30_display_pi30_set_battery_under_voltage + 0.2)
+	ALLORA
+		MANTIENI = script.pi30_batteria_da_mantenere
+		(la batteria PI30 è già vicina al cut-off: non scaricarla ulteriormente)
+	ALTRIMENTI
+		SCARICA = script.pi30_batteria_da_scaricare
 
 VUOL DIRE CHE
 SE

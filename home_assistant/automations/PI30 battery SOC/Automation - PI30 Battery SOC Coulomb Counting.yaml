@@ -7,14 +7,25 @@ description: >-
   sposta in base a quanto la batteria sta assorbendo/erogando in quel
   momento, quindi la tensione da sola non basta.
   Il valore accumulato viene poi ricalibrato ai due estremi per
-  eliminare la deriva del coulomb counting:
-    - 100% quando la tensione di pacco raggiunge la tensione di float
+  eliminare la deriva del coulomb counting, confrontando le soglie NON
+  con la tensione grezza ma con una tensione "compensata" per la
+  caduta resistiva interna (voltage_ocv = voltage - current *
+  internal_resistance_ohm, stessa convenzione di segno del sensore
+  corrente: positiva in carica alza la tensione misurata sopra la vera
+  OCV, negativa in scarica la abbassa), altrimenti una batteria che sta
+  ancora caricando forte a tensione alta scatterebbe a 100% troppo
+  presto (e viceversa in scarica):
+    - 100% quando voltage_ocv raggiunge la tensione di float
       (sensor.heltec_pi30_display_pi30_battery_float_voltage): a quel
       punto la batteria e' per definizione piena.
-    - 0% quando la tensione di pacco scende sotto la tensione di
-      under-voltage (sensor.heltec_pi30_display_pi30_battery_under_voltage)
-      + 0.2V di margine, per avere un po' di scarto prima che sia il BMS
-      stesso a staccare la batteria.
+    - 0% quando voltage_ocv scende sotto la tensione di under-voltage
+      (sensor.heltec_pi30_display_pi30_battery_under_voltage) + 0.2V di
+      margine, per avere un po' di scarto prima che sia il BMS stesso a
+      staccare la batteria.
+  internal_resistance_ohm e' un valore SEGNAPOSTO (6 mOhm, stima
+  grezza per un pacco 8S di grandi celle prismatiche): va tarato con
+  un paio di letture reali (vedi README.md, sezione taratura
+  resistenza interna).
   Per cambiare la capacita' del pacco modifica capacity_ah qui sotto
   (action > variables). Se cambi la cadenza del trigger "cadenza",
   aggiorna anche dt_hours di conseguenza (dt_hours = minuti / 60).
@@ -29,6 +40,7 @@ conditions: []
 actions:
   - variables:
       capacity_ah: 155
+      internal_resistance_ohm: 0.006
       dt_hours: '{{ 2 / 60 }}'
       voltage: >-
         {{ states('sensor.heltec_pi30_battery_voltage') | float(default=none)
@@ -54,10 +66,12 @@ actions:
         value_template: '{{ voltage is none or current is none }}'
     then:
       - stop: Tensione o corrente non disponibili, nessun aggiornamento
+  - variables:
+      voltage_ocv: '{{ voltage - (current * internal_resistance_ohm) }}'
   - choose:
       - conditions:
           - condition: template
-            value_template: '{{ full_threshold is not none and voltage >= full_threshold }}'
+            value_template: '{{ full_threshold is not none and voltage_ocv >= full_threshold }}'
         sequence:
           - target:
               entity_id: input_number.pi30_battery_soc_calcolato
@@ -66,7 +80,7 @@ actions:
             action: input_number.set_value
       - conditions:
           - condition: template
-            value_template: '{{ empty_threshold is not none and voltage <= empty_threshold }}'
+            value_template: '{{ empty_threshold is not none and voltage_ocv <= empty_threshold }}'
         sequence:
           - target:
               entity_id: input_number.pi30_battery_soc_calcolato

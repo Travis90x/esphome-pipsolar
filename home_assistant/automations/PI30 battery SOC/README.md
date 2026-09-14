@@ -23,16 +23,20 @@ counting" usato dai BMS.
 
 Il problema del coulomb counting puro e' che accumula errore nel
 tempo (deriva). Per eliminarlo, la stima viene "agganciata" ai due
-estremi usando la tensione, dove la tensione E' affidabile:
+estremi usando la tensione — ma non quella grezza, quella compensata
+per la caduta resistiva interna (vedi sezione dedicata sotto),
+altrimenti scatterebbe troppo presto in carica e troppo tardi in
+scarica:
 
-- **100%**: quando la tensione di pacco raggiunge la tensione di
-  float del carica-batterie (`sensor.heltec_pi30_display_pi30_battery_float_voltage`
-  meno 0.1V di margine). A quel punto la batteria e' per definizione
-  piena, qualunque cosa dica il conteggio Ah.
-- **0%**: quando la tensione di pacco scende sotto la tensione di
-  under-voltage (`sensor.heltec_pi30_display_pi30_battery_under_voltage`)
-  piu' 0.2V di margine, cosi' arriviamo a 0% un po' prima che sia il
-  BMS a staccare la batteria per basso voltage.
+- **100%**: quando la tensione compensata (voltage_ocv) raggiunge la
+  tensione di float del carica-batterie
+  (`sensor.heltec_pi30_display_pi30_battery_float_voltage` meno 0.1V
+  di margine). A quel punto la batteria e' per definizione piena,
+  qualunque cosa dica il conteggio Ah.
+- **0%**: quando voltage_ocv scende sotto la tensione di under-voltage
+  (`sensor.heltec_pi30_display_pi30_battery_under_voltage`) piu' 0.2V
+  di margine, cosi' arriviamo a 0% un po' prima che sia il BMS a
+  staccare la batteria per basso voltage.
 
 Tra questi due estremi il SOC si muove solo per integrazione della
 corrente, ogni 2 minuti.
@@ -85,6 +89,38 @@ Impostazioni > Entita').
   sopra l'under-voltage per lo 0%): sono nelle variabili
   `full_threshold`/`empty_threshold`, modificabili se vuoi un
   aggancio piu' o meno "largo".
+
+### Taratura della resistenza interna (`internal_resistance_ohm`)
+
+Stessa tensione di pacco, correnti diverse, SOC vero molto diverso:
+27.5V con pochi Ampere e' quasi 100%, 27.2V a 39A in carica puo' essere
+un SOC decisamente piu' basso, perche' la corrente "gonfia" (in carica)
+o "sgonfia" (in scarica) la tensione misurata rispetto alla vera
+tensione a riposo (OCV). Sia l'automazione che lo script correggono
+questo effetto con:
+
+```
+voltage_ocv = voltage - (current * internal_resistance_ohm)
+```
+
+(stessa convenzione di segno del sensore corrente: positiva in carica,
+negativa in scarica — la formula funziona in entrambi i versi senza
+bisogno di due rami separati).
+
+`internal_resistance_ohm` e' impostato a `0.006` (6 mOhm) in entrambi
+i file: e' una stima di massima per un pacco 8S di grandi celle
+prismatiche, NON una misura reale del tuo pacco. Per tararlo davvero
+servono due letture di `sensor.heltec_pi30_battery_voltage` e
+`sensor.heltec_pi30_battery_current` prese a pochi minuti di distanza
+(cosi' il SOC vero non fa in tempo a cambiare) ma a correnti diverse
+(es. una a carica forte, una quasi a riposo o in scarica):
+
+```
+R ≈ (V1 - V2) / (I1 - I2)
+```
+
+Dammi due coppie (tensione, corrente) cosi' fatte e calcolo il valore
+giusto da mettere al posto di `0.006` in entrambi i file.
 
 ## Verso una tabella Volt/SOC vera (multi-punto, carica/scarica separati)
 

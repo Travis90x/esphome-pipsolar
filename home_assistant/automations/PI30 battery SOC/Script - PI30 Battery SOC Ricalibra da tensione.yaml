@@ -20,8 +20,9 @@ description: >-
   corrente: positiva in carica, negativa in scarica), altrimenti la
   stessa tensione dava stime molto diverse a seconda di quanti Ampere
   stava assorbendo/erogando la batteria in quel momento.
-  internal_resistance_ohm e' un valore SEGNAPOSTO (6 mOhm): va tarato
-  con un paio di letture reali, vedi README.md.
+  internal_resistance_ohm = 0.0095 (9.5 mOhm), tarato sul pacco reale
+  dal log del BMS JK (vedi README.md, sezione taratura resistenza
+  interna, per il metodo e per ricalcolarlo se cambia il pacco).
   E' comunque una stima grezza a "retta", non la vera curva a S del
   LiFePO4.
   Da Impostazioni > Automazioni e scene > Script, oppure aggiungi un
@@ -29,7 +30,7 @@ description: >-
   script.
 sequence:
   - variables:
-      internal_resistance_ohm: 0.006
+      internal_resistance_ohm: 0.0095
       voltage: >-
         {{ states('sensor.heltec_pi30_battery_voltage') | float(default=none)
         }}

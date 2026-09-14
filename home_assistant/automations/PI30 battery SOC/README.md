@@ -107,20 +107,44 @@ voltage_ocv = voltage - (current * internal_resistance_ohm)
 negativa in scarica — la formula funziona in entrambi i versi senza
 bisogno di due rami separati).
 
-`internal_resistance_ohm` e' impostato a `0.006` (6 mOhm) in entrambi
-i file: e' una stima di massima per un pacco 8S di grandi celle
-prismatiche, NON una misura reale del tuo pacco. Per tararlo davvero
-servono due letture di `sensor.heltec_pi30_battery_voltage` e
-`sensor.heltec_pi30_battery_current` prese a pochi minuti di distanza
-(cosi' il SOC vero non fa in tempo a cambiare) ma a correnti diverse
-(es. una a carica forte, una quasi a riposo o in scarica):
+**Tarato**: `internal_resistance_ohm = 0.0095` (9.5 mOhm) in entrambi
+i file, calcolato dal log reale del BMS JK-B2A8S20P (esportato
+dall'app JK, non ancora collegato a Home Assistant).
 
-```
-R ≈ (V1 - V2) / (I1 - I2)
-```
+Metodo: nel log ogni volta che scatta "Cell XX over charge
+protection" il caricabatterie viene interrotto e 2-3 secondi dopo
+arriva "protection is released" — in questa finestra cosi' breve il
+SOC vero (colonna "SOC Cap. Remain (AH)" del BMS) non fa in tempo a
+cambiare, ma la corrente crolla da ~35-39A (carica) a circa 0/-0.6A.
+Sono quindi coppie (V1,I1)/(V2,I2) a parita' di SOC, perfette per
+`R ≈ ΔV/ΔI`. Nel log ce ne sono 19 di questo tipo; mediando ΔV e ΔI
+pesati (somma ΔV / somma ΔI, piu' robusto della media dei singoli
+rapporti) viene R ≈ 9.5 mOhm, con i singoli campioni compresi tra
+~7 e ~14 mOhm (rumore dovuto alla risoluzione di 0.01V del log).
 
-Dammi due coppie (tensione, corrente) cosi' fatte e calcolo il valore
-giusto da mettere al posto di `0.006` in entrambi i file.
+Convalida incrociata con lo stesso log:
+- Quando la corrente e' vicina a 0 e il SOC del BMS e' vicino al
+  100%, la tensione di pacco si assesta intorno a 27.5-27.6V: conferma
+  che l'ancoraggio "float_voltage=27.5V → 100%" e' corretto.
+- L'unico evento di scarica profonda registrato (SOC BMS a 0.0Ah)
+  mostra 21.41V: molto piu' basso della soglia operativa di sicurezza
+  che usiamo per lo 0% (under_voltage+0.2V = 24.0V), a conferma che
+  quel margine di sicurezza e' abbondante rispetto al vero fondo scala
+  del pacco (non e' un rischio, e' intenzionalmente conservativo).
+
+Se il pacco cambia (nuove celle, cablaggio diverso) o vuoi ritarare R,
+il metodo resta lo stesso: dammi due letture di
+`sensor.heltec_pi30_battery_voltage` / `sensor.heltec_pi30_battery_current`
+prese a pochi minuti di distanza ma a correnti ben diverse (idealmente
+un salto di carica-forte → quasi-riposo come nel log), oppure un nuovo
+export del log del BMS con qualche evento simile.
+
+Nota: questo log ha eventi quasi solo vicino al 100% (piu' un singolo
+episodio di scarica profonda), quindi non copre a sufficienza la meta'
+curva per costruire anche una vera tabella multi-punto Volt/SOC — per
+quella servirebbe un log "periodico" del BMS (non solo ad eventi) su
+un ciclo carica/scarica completo, con campioni a riposo a varie
+percentuali di SOC intermedie.
 
 ## Verso una tabella Volt/SOC vera (multi-punto, carica/scarica separati)
 
@@ -152,6 +176,21 @@ lo storico/le statistiche). Due strade:
   (anche solo i punti principali, specificando se erano presi in
   carica, scarica o a riposo), incollamela qui e la integro
   nell'automazione al posto della retta a 2 punti.
+
+## Nota: il BMS JK fa gia' il suo coulomb counting da solo
+
+Il pacco ha un BMS JK-B2A8S20P che tiene gia' un proprio SOC via
+coulomb counting interno (colonne "SOC Cap. Remain (AH)" / "SOC Full
+Charge Cap. (AH)" nel log), probabilmente piu' accurato di quello che
+stiamo ricostruendo qui (calibrazione di fabbrica, compensazione
+temperatura, ecc.). Al momento e' collegato solo all'app JK sul
+telefono, non a Home Assistant. La maggior parte dei BMS JK espone i
+dati anche via Bluetooth LE (e alcuni via RS485/CAN verso un modulo
+esterno), e ci sono integrazioni HA/ESPHome gia' pronte per leggerli
+direttamente (es. componenti "jk-bms" via Bluetooth o RS485). Se in
+futuro colleghi il BMS a Home Assistant, il suo SOC diretto potrebbe
+sostituire tutta questa automazione invece di limitarsi ad affiancarla
+— vale la pena valutarlo separatamente.
 
 ## Integrazione con l'automazione di carica/scarica esistente
 

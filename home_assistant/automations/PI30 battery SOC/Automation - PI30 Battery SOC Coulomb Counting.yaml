@@ -22,10 +22,13 @@ description: >-
       (sensor.heltec_pi30_display_pi30_battery_under_voltage) + 0.2V di
       margine, per avere un po' di scarto prima che sia il BMS stesso a
       staccare la batteria.
-  internal_resistance_ohm e' un valore SEGNAPOSTO (6 mOhm, stima
-  grezza per un pacco 8S di grandi celle prismatiche): va tarato con
-  un paio di letture reali (vedi README.md, sezione taratura
-  resistenza interna).
+  internal_resistance_ohm = 0.0095 (9.5 mOhm), tarato sul pacco reale:
+  ricavato da 19 coppie (tensione, corrente) nel log del BMS JK
+  (eventi "Cell over charge protection" -> "released" a 2-3 secondi di
+  distanza, dove la corrente crolla da ~35-39A a quasi 0 a SOC
+  BMS invariato), R = media pesata di ΔV/ΔI. Vedi README.md, sezione
+  taratura resistenza interna, per il metodo e per ricalcolarlo se
+  cambia il pacco.
   Per cambiare la capacita' del pacco modifica capacity_ah qui sotto
   (action > variables). Se cambi la cadenza del trigger "cadenza",
   aggiorna anche dt_hours di conseguenza (dt_hours = minuti / 60).
@@ -40,7 +43,7 @@ conditions: []
 actions:
   - variables:
       capacity_ah: 155
-      internal_resistance_ohm: 0.006
+      internal_resistance_ohm: 0.0095
       dt_hours: '{{ 2 / 60 }}'
       voltage: >-
         {{ states('sensor.heltec_pi30_battery_voltage') | float(default=none)

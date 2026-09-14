@@ -1,43 +1,43 @@
 alias: PI30 Battery SOC Coulomb Counting
 description: >-
-  Stima il SOC reale del pacco LiFePO4 8S (155Ah) integrando nel tempo la
-  corrente di sensor.heltec_pi30_battery_current (positiva in carica,
-  negativa in scarica), invece di leggere il SOC dalla sola tensione:
-  la curva Volt/SOC del LiFePO4 e' troppo piatta a meta' carica e si
-  sposta in base a quanto la batteria sta assorbendo/erogando in quel
-  momento, quindi la tensione da sola non basta.
-  Il valore accumulato viene poi ricalibrato ai due estremi per
-  eliminare la deriva del coulomb counting, confrontando le soglie NON
-  con la tensione grezza ma con una tensione "compensata" per la
-  caduta resistiva interna (voltage_ocv = voltage - current *
-  internal_resistance_ohm, stessa convenzione di segno del sensore
-  corrente: positiva in carica alza la tensione misurata sopra la vera
-  OCV, negativa in scarica la abbassa), altrimenti una batteria che sta
-  ancora caricando forte a tensione alta scatterebbe a 100% troppo
-  presto (e viceversa in scarica):
-    - 100% quando voltage_ocv raggiunge la tensione di float
-      (sensor.heltec_pi30_display_pi30_battery_float_voltage): a quel
-      punto la batteria e' per definizione piena.
-    - 0% quando voltage_ocv scende sotto la tensione di under-voltage
-      (sensor.heltec_pi30_display_pi30_battery_under_voltage) + 0.2V di
-      margine, per avere un po' di scarto prima che sia il BMS stesso a
-      staccare la batteria.
-  internal_resistance_ohm = 0.0095 (9.5 mOhm), tarato sul pacco reale:
-  ricavato da 19 coppie (tensione, corrente) nel log del BMS JK
-  (eventi "Cell over charge protection" -> "released" a 2-3 secondi di
-  distanza, dove la corrente crolla da ~35-39A a quasi 0 a SOC
-  BMS invariato), R = media pesata di ΔV/ΔI. Vedi README.md, sezione
-  taratura resistenza interna, per il metodo e per ricalcolarlo se
-  cambia il pacco.
-  Per cambiare la capacita' del pacco modifica capacity_ah qui sotto
-  (action > variables). Se cambi la cadenza del trigger "cadenza",
-  aggiorna anche dt_hours di conseguenza (dt_hours = minuti / 60).
+  Estimates the real SOC of the 8S LiFePO4 pack (155Ah) by integrating
+  over time the current from sensor.heltec_pi30_battery_current
+  (positive while charging, negative while discharging), instead of
+  reading SOC from voltage alone: the LiFePO4 Volt/SOC curve is too
+  flat in the mid-range and shifts depending on how much the battery
+  is drawing/delivering at that moment, so voltage alone is not
+  enough.
+  The accumulated value is then re-anchored at the two extremes to
+  remove coulomb-counting drift, comparing the thresholds NOT against
+  raw voltage but against a voltage "compensated" for the internal
+  resistance drop (voltage_ocv = voltage - current *
+  internal_resistance_ohm, same sign convention as the current
+  sensor: positive while charging raises the measured voltage above
+  the true OCV, negative while discharging lowers it), otherwise a
+  battery still charging hard at high voltage would snap to 100% too
+  early (and the opposite on discharge):
+    - 100% when voltage_ocv reaches the float voltage
+      (sensor.heltec_pi30_display_pi30_battery_float_voltage): at that
+      point the battery is by definition full.
+    - 0% when voltage_ocv drops below the under-voltage threshold
+      (sensor.heltec_pi30_display_pi30_battery_under_voltage) plus a
+      0.2V margin, to leave some headroom before the BMS itself
+      disconnects the battery.
+  internal_resistance_ohm = 0.0095 (9.5 mOhm), calibrated on the real
+  pack: derived from 19 (voltage, current) pairs found in the JK BMS
+  exported log ("Cell over charge protection" -> "released" events
+  2-3 seconds apart, same SOC), R = weighted average of dV/dI. See
+  README.md, internal resistance calibration section, for the method
+  and how to recompute it if the pack changes.
+  To change the pack capacity edit capacity_ah below (action >
+  variables). If you change the cadence of the "cadence" trigger,
+  update dt_hours accordingly (dt_hours = minutes / 60).
 triggers:
   - trigger: time_pattern
-    id: cadenza
+    id: cadence
     minutes: /2
   - trigger: homeassistant
-    id: avvio
+    id: startup
     event: start
 conditions: []
 actions:
@@ -60,7 +60,7 @@ actions:
         states('sensor.heltec_pi30_display_pi30_battery_under_voltage') |
         float(default=none) }}
       soc_now: >-
-        {{ states('input_number.pi30_battery_soc_calcolato') |
+        {{ states('input_number.pi30_battery_soc_calculated') |
         float(default=50) }}
       full_threshold: '{{ (float_voltage - 0.1) if float_voltage is not none else none }}'
       empty_threshold: '{{ (under_voltage + 0.2) if under_voltage is not none else none }}'
@@ -68,7 +68,7 @@ actions:
       - condition: template
         value_template: '{{ voltage is none or current is none }}'
     then:
-      - stop: Tensione o corrente non disponibili, nessun aggiornamento
+      - stop: Voltage or current unavailable, no update
   - variables:
       voltage_ocv: '{{ voltage - (current * internal_resistance_ohm) }}'
   - choose:
@@ -77,7 +77,7 @@ actions:
             value_template: '{{ full_threshold is not none and voltage_ocv >= full_threshold }}'
         sequence:
           - target:
-              entity_id: input_number.pi30_battery_soc_calcolato
+              entity_id: input_number.pi30_battery_soc_calculated
             data:
               value: 100
             action: input_number.set_value
@@ -86,16 +86,16 @@ actions:
             value_template: '{{ empty_threshold is not none and voltage_ocv <= empty_threshold }}'
         sequence:
           - target:
-              entity_id: input_number.pi30_battery_soc_calcolato
+              entity_id: input_number.pi30_battery_soc_calculated
             data:
               value: 0
             action: input_number.set_value
       - conditions:
           - condition: trigger
-            id: cadenza
+            id: cadence
         sequence:
           - target:
-              entity_id: input_number.pi30_battery_soc_calcolato
+              entity_id: input_number.pi30_battery_soc_calculated
             data:
               value: >-
                 {{ min(max(soc_now + (current * dt_hours / capacity_ah *

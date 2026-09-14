@@ -1,0 +1,67 @@
+alias: PI30 Battery SOC Recalibrate from Voltage
+description: >-
+  WARNING: run it ONCE only, right after creating Helper 1 (or after a
+  reset/visible drift of the counter). Do NOT run it routinely: being
+  a straight line between two points, it is very sensitive near the
+  extremes (a few tenths of a volt move several percentage points),
+  and running it every time voltage ticks up turns the SOC back into
+  something based on instantaneous voltage alone, defeating the point
+  of having coulomb counting at all.
+  After the first run, let only the "PI30 Battery SOC Coulomb
+  Counting" automation do the work, integrating current every 2
+  minutes: that is the real SOC, this script only gives it a
+  reasonable starting point instead of 0%.
+  Resets input_number.pi30_battery_soc_calculated by linearly
+  interpolating, between the two real extremes already configured on
+  the inverter (under-voltage threshold + 0.2V = 0%, float voltage -
+  0.1V = 100%), not the raw voltage but the voltage compensated for
+  the internal resistance drop: voltage_ocv = voltage - current *
+  internal_resistance_ohm (same sign convention as the current
+  sensor: positive while charging, negative while discharging),
+  otherwise the same voltage gave very different estimates depending
+  on how many Amps the battery was drawing/delivering at that moment.
+  internal_resistance_ohm = 0.0095 (9.5 mOhm), calibrated on the real
+  pack from the JK BMS log (see README.md, internal resistance
+  calibration section, for the method and how to recompute it if the
+  pack changes).
+  It is still a rough straight-line estimate, not the real S-shaped
+  LiFePO4 curve.
+  Run from Settings > Automations & scenes > Scripts, or add a
+  button/scene in a dashboard that calls script.turn_on on this
+  script.
+sequence:
+  - variables:
+      internal_resistance_ohm: 0.0095
+      voltage: >-
+        {{ states('sensor.heltec_pi30_battery_voltage') | float(default=none)
+        }}
+      current: >-
+        {{ states('sensor.heltec_pi30_battery_current') | float(default=none)
+        }}
+      float_voltage: >-
+        {{
+        states('sensor.heltec_pi30_display_pi30_battery_float_voltage') |
+        float(default=none) }}
+      under_voltage: >-
+        {{
+        states('sensor.heltec_pi30_display_pi30_battery_under_voltage') |
+        float(default=none) }}
+      empty_v: '{{ (under_voltage + 0.2) if under_voltage is not none else none }}'
+      full_v: '{{ (float_voltage - 0.1) if float_voltage is not none else none }}'
+  - if:
+      - condition: template
+        value_template: >-
+          {{ voltage is none or current is none or empty_v is none or full_v
+          is none or full_v <= empty_v }}
+    then:
+      - stop: Missing data or inconsistent thresholds, no recalibration
+  - variables:
+      voltage_ocv: '{{ voltage - (current * internal_resistance_ohm) }}'
+  - target:
+      entity_id: input_number.pi30_battery_soc_calculated
+    data:
+      value: >-
+        {{ min(max(((voltage_ocv - empty_v) / (full_v - empty_v)) * 100, 0),
+        100) | round(1) }}
+    action: input_number.set_value
+mode: single

@@ -37,26 +37,27 @@ estremi usando la tensione, dove la tensione E' affidabile:
 Tra questi due estremi il SOC si muove solo per integrazione della
 corrente, ogni 2 minuti.
 
-## Componenti (3 file, da installare cosi')
+## Componenti (tutto da UI, niente `configuration.yaml`)
 
-1. **`Helpers - PI30 Battery SOC.yaml`**: NON e' un'automazione
-   importabile. Crea l'helper `input_number.pi30_battery_soc_calcolato`
-   da UI (Impostazioni > Dispositivi e servizi > Helper) seguendo i
-   valori indicati nel file, oppure incollane lo YAML in
-   `configuration.yaml` sotto `input_number:`.
+1. **`Helper 1 - Numero SOC calcolato.md`**: crea da UI l'helper
+   "Numero" `input_number.pi30_battery_soc_calcolato`. E' il
+   contenitore su cui scrive l'automazione, nessun template.
 2. **`Automation - PI30 Battery SOC Coulomb Counting.yaml`**: import
-   normale in Impostazioni > Automazioni > Modifica in YAML. Fa
-   l'integrazione e la ricalibrazione descritte sopra.
-3. **`Sensor - PI30 Battery SOC Calcolato.yaml`**: NON e' un'automazione.
-   Va incollato in `configuration.yaml` sotto la chiave `template:`
-   (o unito alla sezione `template:` che hai gia', se esiste). Espone
-   il valore come sensore vero e proprio, `device_class: battery`,
-   cosi' e' utilizzabile in dashboard/grafici come qualsiasi altro
+   normale in Impostazioni > Automazioni > Modifica in YAML (questo
+   si' e' un import YAML, ma resta dentro l'editor delle automazioni,
+   non tocca `configuration.yaml`). Fa l'integrazione e la
+   ricalibrazione descritte sopra.
+3. **`Helper 2 - Sensore template SOC calcolato.md`**: crea da UI
+   l'helper "Modello > Sensore basato su modello"
+   `sensor.pi30_battery_soc_calcolato`, che legge l'Helper 1 e lo
+   espone come sensore batteria vero e proprio (`device_class:
+   battery`), utilizzabile in dashboard/grafici come qualsiasi altro
    sensore SOC.
 
-Dopo aver installato tutto e tre avrai `sensor.pi30_battery_soc_calcolato`
-(nome esatto dipende dall'unique_id/entity_id assegnato da HA, verifica
-in Impostazioni > Entita').
+Crea gli helper nell'ordine 1 poi 2 (il 2 legge l'entity_id del 1).
+Dopo aver creato tutti e tre avrai `sensor.pi30_battery_soc_calcolato`
+(nome esatto dipende dall'entity_id assegnato da HA, verifica in
+Impostazioni > Entita').
 
 ## Taratura
 

@@ -1,0 +1,44 @@
+alias: PI30 Battery SOC Ricalibra da tensione
+description: >-
+  Reimposta input_number.pi30_battery_soc_calcolato interpolando
+  linearmente la tensione di pacco attuale tra i due estremi reali gia'
+  configurati sull'inverter: soglia di under-voltage + 0.2V = 0%,
+  tensione di float - 0.1V = 100% (stesse soglie usate
+  dall'automazione di coulomb counting per la ricalibrazione
+  automatica). E' una stima grezza a "retta", non la vera curva a S
+  del LiFePO4: usala solo per dare un valore di partenza sensato al
+  contatore (helper appena creato, o dopo un reset/deriva evidente),
+  non come sostituto del coulomb counting quotidiano.
+  Lanciala una tantum da Impostazioni > Automazioni e scene > Script,
+  oppure aggiungi un pulsante/scena in dashboard che chiama
+  script.turn_on su questo script.
+sequence:
+  - variables:
+      voltage: >-
+        {{ states('sensor.heltec_pi30_battery_voltage') | float(default=none)
+        }}
+      float_voltage: >-
+        {{
+        states('sensor.heltec_pi30_display_pi30_battery_float_voltage') |
+        float(default=none) }}
+      under_voltage: >-
+        {{
+        states('sensor.heltec_pi30_display_pi30_battery_under_voltage') |
+        float(default=none) }}
+      empty_v: '{{ (under_voltage + 0.2) if under_voltage is not none else none }}'
+      full_v: '{{ (float_voltage - 0.1) if float_voltage is not none else none }}'
+  - if:
+      - condition: template
+        value_template: >-
+          {{ voltage is none or empty_v is none or full_v is none or full_v
+          <= empty_v }}
+    then:
+      - stop: Dati mancanti o soglie incoerenti, nessuna ricalibrazione
+  - target:
+      entity_id: input_number.pi30_battery_soc_calcolato
+    data:
+      value: >-
+        {{ min(max(((voltage - empty_v) / (full_v - empty_v)) * 100, 0), 100)
+        | round(1) }}
+    action: input_number.set_value
+mode: single

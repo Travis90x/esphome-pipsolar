@@ -59,6 +59,19 @@ Dopo aver creato tutti e tre avrai `sensor.pi30_battery_soc_calcolato`
 (nome esatto dipende dall'entity_id assegnato da HA, verifica in
 Impostazioni > Entita').
 
+4. **`Script - PI30 Battery SOC Ricalibra da tensione.yaml`** (opzionale
+   ma consigliato al primo avvio): import in Impostazioni >
+   Automazioni e scene > Script > Modifica in YAML. Da lanciare una
+   tantum subito dopo aver creato l'Helper 1, per non partire da 0%:
+   interpola linearmente la tensione attuale tra i due estremi reali
+   (under-voltage+0.2V = 0%, float-0.1V = 100%) e imposta subito
+   l'Helper 1 a quella stima, invece di aspettare che il coulomb
+   counting risalga da zero o che il pacco tocchi uno dei due estremi.
+   E' una retta, non la vera curva del LiFePO4: va bene come punto di
+   partenza, non come sostituto del coulomb counting. Rilanciabile in
+   qualsiasi momento se sospetti che il contatore abbia derivato
+   parecchio.
+
 ## Taratura
 
 - **Capacita' pacco**: 155Ah, impostata nella variabile `capacity_ah`
@@ -72,6 +85,37 @@ Impostazioni > Entita').
   sopra l'under-voltage per lo 0%): sono nelle variabili
   `full_threshold`/`empty_threshold`, modificabili se vuoi un
   aggancio piu' o meno "largo".
+
+## Verso una tabella Volt/SOC vera (multi-punto, carica/scarica separati)
+
+Lo script di ricalibrazione sopra usa solo una retta a 2 punti (gli
+estremi configurati sull'inverter), non la vera curva a S del LiFePO4:
+va bene come stima di partenza, ma a meta' carica puo' sbagliare di
+parecchio rispetto alla realta'. Per costruire una tabella vera,
+multi-punto, con curve separate per carica e scarica, servono coppie
+reali (tensione, corrente, e idealmente un SOC di riferimento) prese
+dallo storico: dove la corrente e' vicina a 0 (batteria a riposo) la
+tensione letta e' gia' un buon punto della curva "vera"; nei tratti
+sotto carico si puo' stimare la resistenza interna del pacco
+confrontando come la tensione si sposta al variare della corrente a
+parita' di SOC (coulomb counting) nello stesso intervallo di tempo.
+
+Per farlo servono dati che da questa sessione non posso recuperare da
+solo (il connettore Home Assistant qui espone solo controlli live, non
+lo storico/le statistiche). Due strade:
+
+- **Esporta tu lo storico**: da Home Assistant, Impostazioni >
+  Cronologia (o Strumenti per sviluppatori > Statistiche), esporta
+  `sensor.heltec_pi30_battery_voltage` e
+  `sensor.heltec_pi30_battery_current` per un periodo che copra sia
+  una carica completa che una scarica, e passami un po' di
+  coppie/tuple (tensione, corrente, e se lo sai anche il SOC
+  approssimativo in quel momento).
+- **La tabella che pensavi di avermi gia' dato**: era in un'altra
+  sessione di questa chat, a cui questa non ha accesso — se la ritrovi
+  (anche solo i punti principali, specificando se erano presi in
+  carica, scarica o a riposo), incollamela qui e la integro
+  nell'automazione al posto della retta a 2 punti.
 
 ## Integrazione con l'automazione di carica/scarica esistente
 

@@ -137,6 +137,8 @@ sections:
             name: PI30 battery voltage
           - entity: sensor.heltec_pi30_battery_soc
             name: PI30 battery SoC
+          - entity: sensor.pi30_battery_soc_calculated
+            name: PI30 battery SoC calcolato (volt+ampere)
           - entity: sensor.heltec_pi30_heat_sink_temperature
             name: PI30 heat sink temperature
           - entity: sensor.heltec_pi30_battery_power

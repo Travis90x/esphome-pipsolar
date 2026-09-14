@@ -1,17 +1,26 @@
 alias: PI30 Battery SOC Ricalibra da tensione
 description: >-
+  ATTENZIONE: lanciarlo UNA VOLTA SOLA, subito dopo aver creato
+  l'Helper 1 (o dopo un reset/deriva evidente del contatore). NON
+  rilanciarlo di routine: essendo una retta tra due punti, vicino agli
+  estremi e' molto sensibile (pochi decimi di volt spostano parecchi
+  punti percentuali), e rilanciarlo ogni volta che la tensione sale
+  un po' riporta il SOC a essere di fatto basato sulla sola tensione
+  istantanea, vanificando il senso di avere il coulomb counting.
+  Dopo il primo lancio, lascia lavorare solo l'automazione "PI30
+  Battery SOC Coulomb Counting", che integra la corrente ogni 2
+  minuti: e' quella il SOC vero, questo script serve solo a darle un
+  punto di partenza decente invece di 0%.
   Reimposta input_number.pi30_battery_soc_calcolato interpolando
   linearmente la tensione di pacco attuale tra i due estremi reali gia'
   configurati sull'inverter: soglia di under-voltage + 0.2V = 0%,
   tensione di float - 0.1V = 100% (stesse soglie usate
   dall'automazione di coulomb counting per la ricalibrazione
   automatica). E' una stima grezza a "retta", non la vera curva a S
-  del LiFePO4: usala solo per dare un valore di partenza sensato al
-  contatore (helper appena creato, o dopo un reset/deriva evidente),
-  non come sostituto del coulomb counting quotidiano.
-  Lanciala una tantum da Impostazioni > Automazioni e scene > Script,
-  oppure aggiungi un pulsante/scena in dashboard che chiama
-  script.turn_on su questo script.
+  del LiFePO4.
+  Da Impostazioni > Automazioni e scene > Script, oppure aggiungi un
+  pulsante/scena in dashboard che chiama script.turn_on su questo
+  script.
 sequence:
   - variables:
       voltage: >-

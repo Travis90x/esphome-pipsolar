@@ -1,7 +1,9 @@
 alias: PI30 Battery MAN
 description: >-
-  Logica umana completa: vedi "Logica umana automazione.md" nella stessa
-  cartella. Per limitare manualmente lo step massimo raggiungibile dalla
+  Logica umana completa: vedi il README.md principale del repository,
+  sezione "Modulazione dinamica della carica da rete" (README_IT.md per
+  la versione italiana). Per limitare manualmente lo step massimo
+  raggiungibile dalla
   modulazione, modifica il valore di MAX_MANUAL_CURRENT nella variabile
   max_manual_current qui sotto (riga "action > variables") e salva
   l'automazione.

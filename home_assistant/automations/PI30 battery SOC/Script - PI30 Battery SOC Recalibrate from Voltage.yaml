@@ -21,9 +21,9 @@ description: >-
   otherwise the same voltage gave very different estimates depending
   on how many Amps the battery was drawing/delivering at that moment.
   internal_resistance_ohm = 0.0095 (9.5 mOhm), calibrated on the real
-  pack from the JK BMS log (see README.md, internal resistance
-  calibration section, for the method and how to recompute it if the
-  pack changes).
+  pack from the JK BMS log (see the repository's main README.md, "Home
+  Assistant automations" section, "Real SOC via coulomb counting", for
+  the method and how to recompute it if the pack changes).
   It is still a rough straight-line estimate, not the real S-shaped
   LiFePO4 curve.
   Run from Settings > Automations & scenes > Scripts, or add a

@@ -4,6 +4,8 @@
 ![GitHub stars](https://img.shields.io/github/stars/Travis90x/esphome-pipsolar)
 ![GitHub forks](https://img.shields.io/github/forks/Travis90x/esphome-pipsolar)
 
+🇮🇹 **[Versione italiana disponibile qui / Italian version available here](README_IT.md)**
+
 ESPHome configurations to monitor and control a Voltronic/PIP solar inverter over RS232.
 
 Fork of [syssi/esphome-pipsolar](https://github.com/syssi/esphome-pipsolar).
@@ -51,6 +53,7 @@ examples/
 diagnostics/         identify an unknown inverter / protocol
 components/          the pi18, pip2424mse1 and pip8048 external components
 docs/                manufacturer protocol documents
+home_assistant/      dashboards and automations built on top of the heltec-pi30 example
 tests/               fake inverters and protocol sweeps used by CI
 ```
 
@@ -93,6 +96,13 @@ Both need three files next to the YAML that are **not** in this repository:
 `arial.ttf`, `materialdesignicons-webfont.ttf` and `solar_power.bmp`. They are
 excluded from CI for that reason; both were validated and compiled by hand
 against ESPHome 2026.6.5 (ESP32-S3, arduino).
+
+[`Personal-heltec-pi30-display-pipsolar.yaml`](examples/esp32/heltec-pi30/Personal-heltec-pi30-display-pipsolar.yaml)
+is a third, personal variant of the `pipsolar` one (device name `heltec-inverter`,
+friendly name `Heltec PI30 Display`) — it's the config actually producing the
+entity naming (`sensor.heltec_pi30_battery_voltage`,
+`sensor.heltec_pi30_display_pi30_*`, …) that the Home Assistant automations
+below are built against.
 
 ## Requirements
 
@@ -229,6 +239,305 @@ arithmetic for you:
 ```
 
 Take a look at the [official documentation of the pipsolar component](https://esphome.io/components/pipsolar.html) for additional details.
+
+## Home Assistant automations (PI30 + LiFePO4 8S pack)
+
+This section documents the Home Assistant side built on top of the `pipsolar`
+device from the section above — dashboards and two automations that live in
+[`home_assistant/`](home_assistant/). It replaces the per-folder READMEs that
+used to live under `home_assistant/automations/`: nobody browses into nested
+folders, so everything relevant is inlined here instead. The YAML files
+themselves (imported via Home Assistant's "Edit in YAML" screens) stay in
+their folders and are linked from each subsection below.
+
+### The PI30 device in Home Assistant
+
+Both automations below assume the entity naming produced by
+[`Personal-heltec-pi30-display-pipsolar.yaml`](examples/esp32/heltec-pi30/Personal-heltec-pi30-display-pipsolar.yaml)
+(device name `heltec-inverter`, friendly name `Heltec PI30 Display`, see "The
+Heltec PI30 display examples" above): `sensor.heltec_pi30_battery_voltage`,
+`sensor.heltec_pi30_battery_current` (positive while charging, negative while
+discharging), and the `sensor.heltec_pi30_display_pi30_*` family — the QPIRI
+setpoints read back from the inverter (float/under/recharge/redischarge/bulk
+voltage, max charging currents, etc.) together with their writable
+`number.heltec_pi30_display_pi30_set_*` / `select.heltec_pi30_display_pi30_set_*`
+counterparts.
+
+[`home_assistant/dashboard/inverter_ita.yaml`](home_assistant/dashboard/inverter_ita.yaml)
+and [`inverter_eng.yaml`](home_assistant/dashboard/inverter_eng.yaml) are
+ready-made Lovelace dashboard sections (Italian / English) covering output
+source priority, device mode, charging current setpoints, battery voltages,
+the SOC sensors described below, and diagnostics (raw TX/RX frame capture).
+Paste them into a dashboard's YAML mode.
+
+### Dynamic utility-charging modulation
+
+Files: [`home_assistant/automations/PI30 battery management/`](<home_assistant/automations/PI30 battery management/>)
+- `Automation - PI30 Battery Charging Intelligent Modulation.yaml`
+- `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery to keep.yaml`
+
+Goal: decide, every 10 minutes (plus on startup and on relevant sensor
+changes), whether the PI30 should be charging its LiFePO4 pack from the grid,
+discharging it, or just holding it — and if charging, how many Amps to pull
+from the grid — based on a Goodwe inverter/battery on the same installation
+(used as the "is there spare solar power right now" signal) and the PI30's
+own battery voltage as a safety backstop.
+
+Sensors read:
+
+| Entity | Meaning |
+| :--- | :--- |
+| `sensor.goodwe_battery_state_of_charge` | Goodwe SOC |
+| `sensor.goodwe_battery_voltage` | Goodwe voltage |
+| `sensor.potenza_contatore` | grid meter power |
+| `sensor.goodwe_battery_power` | Goodwe battery power |
+| `sensor.heltec_pi30_display_pi30_max_utility_charging_current` | utility charging current confirmed by the PI30 |
+| `sensor.heltec_pi30_display_pi30_max_total_charging_current` | total charging current confirmed by the PI30 |
+| `sensor.heltec_pi30_battery_voltage` | PI30 battery voltage |
+| `number.heltec_pi30_display_pi30_set_battery_under_voltage` | PSDV, battery cut-off configured on the inverter |
+
+`max_manual_current` (default `60`) and `battery_keep_under_voltage` (=
+PSDV + 0.2V) are plain variables inside the automation, **not helpers** — to
+change them, open the automation in YAML mode and edit the numbers directly.
+
+Writes: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
+`select.heltec_pi30_display_pi30_set_max_total_charging_current`,
+`script.pi30_batteria_da_caricare` (CHARGE), `script.pi30_batteria_da_scaricare`
+(DISCHARGE), `script.pi30_batteria_da_mantenere` (KEEP — used instead of
+DISCHARGE when the PI30 battery is already close to cut-off).
+
+Utility current steps: `2 10 20 30 40 50 60`.
+
+<details>
+<summary>Full decision logic (click to expand)</summary>
+
+```
+Favorable signal OR nothing known
+IF
+	Goodwe SOC or VOLT known (at least one of the two) and favorable (goodwe battery full AND charging power at minimum + goodwe NOT drawing much + NOT drawing much from the grid) =
+	    IF SOC is unknown, VOLT must be favorable and vice versa.
+		sensor.goodwe_battery_state_of_charge = 100 (>99, there are no decimals and Home Assistant does not accept =100, only above/below) (goodwe fully charged)
+		OR
+		sensor.goodwe_battery_voltage |float >= 54 (goodwe definitely fully charged)
+		OR
+		(goodwe fully charged but discharging)
+			sensor.goodwe_battery_state_of_charge > 99
+			AND
+			sensor.goodwe_battery_voltage |float < 53
+		OR
+			IF sensor.potenza_contatore AND sensor.goodwe_battery_power KNOWN
+				(Charging power at minimum, and BOTH favorable conditions are required: NOT drawing much from the grid AND NOT drawing much from goodwe)
+				(HIGHER VALUES than modulation, for hysteresis)
+				(FIX: AND, not OR, between the two thresholds - otherwise a single favorable condition would be
+				enough to keep charging, while the DISCHARGE condition further below uses OR on the same two
+				thresholds: both conditions could end up true at once when only one sensor is unfavorable, and
+				CHARGE would always win because it is evaluated first)
+				Charging power sensor.heltec_pi30_display_pi30_max_utility_charging_current = 2 A
+				AND
+					sensor.potenza_contatore < 500
+					AND
+					sensor.goodwe_battery_power < 200
+			OTHERWISE (sensor.potenza_contatore AND sensor.goodwe_battery_power UNKNOWN)
+				CHARGE with "safety net" = 2A power
+				SET select.heltec_pi30_display_pi30_set_max_utility_charging_current = 2
+
+THEN
+	CHARGE = script.pi30_batteria_da_caricare
+	AND
+	MODULATE CHARGING POWER:
+	READ sensor.heltec_pi30_display_pi30_max_total_charging_current
+	IF sensor.heltec_pi30_display_pi30_max_total_charging_current < 60
+		SET select.heltec_pi30_display_pi30_set_max_total_charging_current
+		TO 60
+	IF sensor.potenza_contatore < 300 AND sensor.goodwe_battery_power < 200
+
+	(pi30_max_utility_charging_current can be < max_total_charging_current, which is the utility+solar charging current limit - solar is not used for now)
+	THEN (STEP UP)
+		READ sensor.heltec_pi30_display_pi30_max_utility_charging_current
+		SET select.heltec_pi30_display_pi30_set_max_utility_charging_current
+		INCREASING THE STEP (e.g.: if at 2 go to 10, if 10 -> 20, if 60 stay at 60, etc.)
+		(STEPS ARE: 2 10 20 30 40 50 60)
+		THE STEP CAN NEVER EXCEED max_manual_current (MAX MANUAL CURRENT)
+	OTHERWISE (STEP DOWN) (if either condition is not met, something is drawing too much: sensor.potenza_contatore < 300 AND sensor.goodwe_battery_power)
+		READ sensor.heltec_pi30_display_pi30_max_utility_charging_current
+		SET select.heltec_pi30_display_pi30_set_max_utility_charging_current
+		DECREASING THE STEP (e.g.: if at 2 stay at 2, if 10 go to 2, if 60 go to 50, etc.)
+		(STEPS ARE: 2 10 20 30 40 50 60)
+
+OTHERWISE
+	IF
+		Goodwe SOC or VOLT unknown
+		AND
+		sensor.potenza_contatore < 300 AND sensor.goodwe_battery_power < 200
+	THEN
+		CHARGE with "safety net" = 2A power
+		SET select.heltec_pi30_display_pi30_set_max_utility_charging_current = 2
+
+OTHERWISE
+	IF
+		sensor.heltec_pi30_battery_voltage < battery_keep_under_voltage
+		(where battery_keep_under_voltage = number.heltec_pi30_display_pi30_set_battery_under_voltage + 0.2)
+	THEN
+		KEEP = script.pi30_batteria_da_mantenere
+		(the PI30 battery is already close to cut-off: do not discharge it further)
+	OTHERWISE
+		DISCHARGE = script.pi30_batteria_da_scaricare
+
+WHICH MEANS
+IF
+	sensor.heltec_pi30_display_pi30_max_utility_charging_current = 2A
+	AND
+	sensor.potenza_contatore > 500 OR sensor.goodwe_battery_power > 200
+
+THEN
+	DESPITE "charging power at minimum" AND "goodwe not drawing much" AND "not drawing much from the grid"
+	that is not enough, so DISCHARGE
+```
+
+**MAX MANUAL CURRENT.** Not a helper: a fixed variable inside the automation
+itself, under `action > variables > max_manual_current` (default 60). To
+change it, open the automation in YAML mode, edit that number, and save. If
+set to, say, 40: the STEP UP phase will never go above 40A; if the current is
+already above 40A (because the limit was lowered while the system was
+charging at a higher step), the automation immediately brings it back down to
+the highest valid step not exceeding 40 (i.e. 40).
+
+**Trigger:**
+
+```yaml
+trigger:
+  - trigger: homeassistant
+    id: avvio
+    event: start
+  - trigger: time_pattern
+    id: controllo_10_minuti
+    minutes: /10
+  - trigger: state
+    id: batteria_stabile
+    entity_id:
+      - sensor.goodwe_battery_state_of_charge
+      - sensor.goodwe_battery_voltage
+      - sensor.potenza_contatore
+      - sensor.goodwe_battery_power
+```
+
+</details>
+
+### Real SOC via coulomb counting (voltage + current)
+
+Files: [`home_assistant/automations/PI30 battery SOC/`](<home_assistant/automations/PI30 battery SOC/>)
+- `Automation - PI30 Battery SOC Coulomb Counting.yaml`
+- `Script - PI30 Battery SOC Recalibrate from Voltage.yaml`
+
+The 8S LiFePO4 pack has a Volt/SOC curve that's very flat between roughly 20%
+and 80%: a few hundredths of a volt correspond to tens of percentage points
+of SOC. On top of that, the curve shifts depending on how much current the
+battery is drawing or delivering at that moment (internal resistance drop).
+A SOC sensor based only on instantaneous voltage (like
+`sensor.heltec_pi30_battery_soc`, read from the PI30 protocol) is therefore
+inaccurate exactly in the middle of the curve, where it matters most.
+
+**How it works.** Instead of reading SOC from voltage, it integrates over
+time the current from `sensor.heltec_pi30_battery_current` against the
+pack's nominal capacity (155Ah) — the classic "coulomb counting" used by
+BMSs. Pure coulomb counting drifts over time, so the estimate is re-anchored
+at the two extremes using a voltage compensated for the internal resistance
+drop rather than the raw one (`voltage_ocv = voltage - current *
+internal_resistance_ohm`, same sign convention as the current sensor):
+
+- **100%** when `voltage_ocv` reaches the float voltage
+  (`sensor.heltec_pi30_display_pi30_battery_float_voltage` minus 0.1V
+  margin) — the battery is by definition full at that point.
+- **0%** when `voltage_ocv` drops below the under-voltage threshold
+  (`sensor.heltec_pi30_display_pi30_battery_under_voltage`) plus a 0.2V
+  margin, reaching 0% a bit before the BMS itself would disconnect the
+  battery.
+
+Between the two extremes, SOC only moves by integrating current, every 2
+minutes.
+
+**Setup — 2 helpers, all from the UI, no `configuration.yaml`:**
+
+1. **Number helper** (Settings → Devices & services → Helpers → Create
+   helper → Number): Name `PI30 battery SOC calculated`, icon
+   `mdi:battery-unknown`, min `0`, max `100`, step `0.1`, unit `%`. This
+   creates `input_number.pi30_battery_soc_calculated`, the raw value
+   container the automation writes to. On first save, set it to something
+   close to `sensor.heltec_pi30_battery_soc`'s current reading — the
+   automation re-anchors it the first time it touches an extreme anyway.
+2. **Template sensor helper** (Settings → Devices & services → Helpers →
+   Create helper → Template → Sensor): Name `PI30 battery SoC calculated`,
+   unit `%`, device class `Battery`, state class `Measurement`, and as
+   **State**:
+   ```
+   {{ states('input_number.pi30_battery_soc_calculated') | float(default=0) | round(0) }}
+   ```
+   This creates `sensor.pi30_battery_soc_calculated`, the proper battery
+   sensor usable in dashboards/graphs like any other SOC sensor. Create it
+   after the Number helper (it reads that entity_id).
+
+Then import `Automation - PI30 Battery SOC Coulomb Counting.yaml` (Settings
+→ Automations → Edit in YAML) to do the integration and re-anchoring above.
+
+Optionally, right after creating the Number helper, run
+`Script - PI30 Battery SOC Recalibrate from Voltage.yaml` **once** (Settings
+→ Automations & scenes → Scripts → Edit in YAML, then run it) so the counter
+doesn't start at 0%: it linearly interpolates the compensated voltage
+between the two real extremes and seeds the Number helper with that
+estimate. It's a straight line, not the real LiFePO4 curve — fine as a
+starting point, not a substitute for daily coulomb counting. **Don't run it
+routinely**: doing so on every voltage tick-up turns the sensor back into
+something based on instantaneous voltage alone, defeating the point of
+coulomb counting (see the warning in the script's own description).
+
+**Tuning:**
+- **Pack capacity**: `155` (Ah), the `capacity_ah` variable in the
+  automation.
+- **Integration cadence**: 2 minutes (`cadence` trigger). If changed, also
+  update `dt_hours` (`= trigger_minutes / 60`).
+- **Re-anchoring margins**: 0.1V below float for 100%, 0.2V above
+  under-voltage for 0% — the `full_threshold` / `empty_threshold`
+  variables.
+
+**Internal resistance calibration (`internal_resistance_ohm`).** Same pack
+voltage, different currents, very different real SOC: 27.5V at a few Amps is
+nearly 100%, 27.2V at 39A while charging can be a much lower SOC, because
+current inflates (while charging) or deflates (while discharging) the
+measured voltage relative to the true resting voltage (OCV).
+
+Current value: **`internal_resistance_ohm = 0.0095` (9.5 mOhm)**, calibrated
+on the real pack from a log exported from a JK-B2A8S20P BMS. **The BMS is
+not connected via RS485** (or any other way) to Home Assistant or the ESP32:
+the data was obtained by exporting the log history from the JK phone app and
+analyzing it offline. Method: every time a "Cell XX over charge protection"
+event fires in the log, the charger is cut off, and 2-3 seconds later a
+"protection is released" event follows — in that short window the BMS's own
+SOC ("SOC Cap. Remain (AH)") doesn't have time to change, but current drops
+from ~35-39A to roughly 0/-0.6A. These are (V1,I1)/(V2,I2) pairs at the same
+SOC, perfect for `R ≈ ΔV/ΔI`. There were 19 such pairs; a weighted average
+(sum ΔV / sum ΔI) gives R ≈ 9.5 mOhm, individual samples ranging ~7-14 mOhm.
+Cross-validated against the same log: near-100%-SOC resting voltage clusters
+at 27.5-27.6V (confirms the float-voltage anchor), and the single recorded
+deep-discharge event (BMS SOC = 0) sits at 21.41V, comfortably below the
+24.0V conservative safety anchor used for 0%. **This value is considered
+final for now** — not a placeholder, no open work on this point. To
+recompute it later (different pack, noticeable drift): two
+voltage/current readings at different currents close together in time, or a
+new BMS log export with similar events.
+
+**Possible future development, not in progress.** The JK-B2A8S20P BMS
+already runs its own internal coulomb counting (factory calibration,
+temperature compensation, per-cell balancing) — likely more accurate than
+what's rebuilt here. Wiring it to the ESP32 over RS485 (or Bluetooth) to
+read its SOC directly could replace this automation in whole or in part,
+but this is only a future idea: neither planned nor started. The current
+voltage+current solution is considered good enough and stable as-is.
+
+This sensor is meant to sit alongside, not immediately replace,
+`sensor.heltec_pi30_battery_soc` and the dynamic-charging automation above
+(which today mainly uses the Goodwe SOC/voltage). Once verified for a few
+days against real battery behavior, it can be used instead of (or alongside)
+the other SOC sensors in that automation's conditions.
 
 ## Voltronic Axpert MAX (PI30) protocol guide
 

@@ -26,9 +26,10 @@ description: >-
   internal_resistance_ohm = 0.0095 (9.5 mOhm), calibrated on the real
   pack: derived from 19 (voltage, current) pairs found in the JK BMS
   exported log ("Cell over charge protection" -> "released" events
-  2-3 seconds apart, same SOC), R = weighted average of dV/dI. See
-  README.md, internal resistance calibration section, for the method
-  and how to recompute it if the pack changes.
+  2-3 seconds apart, same SOC), R = weighted average of dV/dI. See the
+  repository's main README.md ("Home Assistant automations" section,
+  "Real SOC via coulomb counting") for the method and how to recompute
+  it if the pack changes.
   To change the pack capacity edit capacity_ah below (action >
   variables). If you change the cadence of the "cadence" trigger,
   update dt_hours accordingly (dt_hours = minutes / 60).

@@ -1,0 +1,766 @@
+# esphome-pipsolar
+
+![GitHub actions](https://github.com/Travis90x/esphome-pipsolar/actions/workflows/ci.yaml/badge.svg)
+![GitHub stars](https://img.shields.io/github/stars/Travis90x/esphome-pipsolar)
+![GitHub forks](https://img.shields.io/github/forks/Travis90x/esphome-pipsolar)
+
+🇬🇧 **[English version available here / Versione inglese disponibile qui](README.md)**
+
+Configurazioni ESPHome per monitorare e controllare un inverter solare Voltronic/PIP via RS232.
+
+Fork di [syssi/esphome-pipsolar](https://github.com/syssi/esphome-pipsolar).
+Grazie a [@andreashergert1984](https://github.com/andreashergert1984) per il lavoro originale.
+
+## Dispositivi supportati
+
+### pipsolar (PI30, protocollo Q-command)
+
+`pipsolar` è un **componente core di ESPHome** — è incluso in ESPHome stesso,
+quindi le configurazioni PI30 non richiedono nessun componente esterno.
+
+* Voltronic Axpert / Axpert MAX e unità compatibili
+* Qualsiasi inverter il cui comando `QPI` risponde `(PI30`
+* Verificato qui su un'unità 24V / 3.2kVA (`(PI30`, firmware `VERFW:00007.00`)
+
+### pip8048 (protocollo Q-command) — componente esterno
+
+* Inverter fotovoltaico compatibile PIP4048
+* Axpert King II 6.2KW TWIN (segnalato da [@voronin10](https://github.com/syssi/esphome-pipsolar/issues/196))
+* Powmr 4.2KW (segnalato da [@Martyn911](https://github.com/syssi/esphome-pipsolar/issues/231))
+
+### pip2424mse1 (protocollo Q-command, esteso) — componente esterno
+
+* PIP2424MSE1 e inverter compatibili
+
+### pi18 (protocollo PI18, framing `^P`/`^D`) — componente esterno
+
+* MPP Solar LV5048 Hybrid V2
+* SunGoldPower 6048
+* Voltronic InfiniSolar V 4 (3.6 kW / 5.6 kW / 6 kW)
+* AXIOMA 5 kW
+* Unità MppSolar compatibili che rispondono a `^P005GS`
+
+## Struttura del repository
+
+```
+examples/
+  esp32/
+    pi18/            pip2424mse1/      pip8048/
+    pipsolar/        configurazioni PI30 (componente core)
+    heltec-pi30/     PI30 + display OLED SSD1306, Heltec WiFi Kit 32 V3
+  esp8266/
+    pi18/            pip2424mse1/      pip8048/       pipsolar/
+diagnostics/         identificare un inverter/protocollo sconosciuto
+components/          i componenti esterni pi18, pip2424mse1 e pip8048
+docs/                documenti di protocollo del produttore
+home_assistant/      dashboard e automazioni costruite sopra l'esempio heltec-pi30
+tests/               inverter finti e sweep di protocollo usati dalla CI
+```
+
+Ogni cartella di esempio contiene tre file: `…-example.yaml` (la
+configurazione), `…-example-debug.yaml` (aggiunge il tracciamento UART) e
+`…-example-faker.yaml` (usato dalla CI per compilare senza hardware).
+
+### Da quale esempio parto?
+
+| Inverter / obiettivo | File |
+| :-------------- | :--- |
+| PI30, ESP32, solo entità | [`examples/esp32/pipsolar/esp32-pi30-pipsolar.yaml`](examples/esp32/pipsolar/esp32-pi30-pipsolar.yaml) |
+| PI30, ESP32, demo upstream | [`examples/esp32/pipsolar/esp32-pipsolar-example.yaml`](examples/esp32/pipsolar/esp32-pipsolar-example.yaml) |
+| PI30, ESP8266 | [`examples/esp8266/pipsolar/esp8266-pipsolar-example.yaml`](examples/esp8266/pipsolar/esp8266-pipsolar-example.yaml) |
+| PI30 **con display OLED** | [`examples/esp32/heltec-pi30/`](examples/esp32/heltec-pi30/) |
+| PIP8048 / Axpert King | [`examples/esp32/pip8048/esp32-pip8048-example.yaml`](examples/esp32/pip8048/esp32-pip8048-example.yaml) |
+| PIP2424MSE1 | [`examples/esp32/pip2424mse1/esp32-pip2424mse1-example.yaml`](examples/esp32/pip2424mse1/esp32-pip2424mse1-example.yaml) |
+| PI18 / LV5048 | [`examples/esp32/pi18/esp32-pi18-example.yaml`](examples/esp32/pi18/esp32-pi18-example.yaml) |
+| Non conosco il mio protocollo | [`diagnostics/`](diagnostics/) |
+
+### Gli esempi Heltec PI30 con display
+
+[`examples/esp32/heltec-pi30/`](examples/esp32/heltec-pi30/) contiene due
+**configurazioni di esempio complete per un Heltec WiFi Kit 32 V3**, con il
+display OLED SSD1306 integrato già cablato: sette pagine rotanti (data/ora,
+WiFi, batteria, carica e scarica, setpoint riletti dall'inverter, e due
+grafici di tensione batteria).
+
+| File | Gestione protocollo | Righe |
+| :--- | :---------------- | ----: |
+| [`heltec-pi30-display-pipsolar.yaml`](examples/esp32/heltec-pi30/heltec-pi30-display-pipsolar.yaml) | componente core `pipsolar` | 648 |
+| [`heltec-pi30-display.yaml`](examples/esp32/heltec-pi30/heltec-pi30-display.yaml) | standalone, pilotato da script | 1794 |
+
+**Parti da quello `pipsolar`.** Delega framing, CRC e polling al componente
+mantenuto da ESPHome. Il file standalone vale la pena tenerlo solo se ti
+servono i suoi due extra: una console che invia comandi PI30 arbitrari, e un
+selettore del baud rate a runtime. Espone anche la tensione di bulk
+(`PCVV`), che il componente core non espone.
+
+Entrambi richiedono tre file accanto allo YAML che **non** sono in questo
+repository: `arial.ttf`, `materialdesignicons-webfont.ttf` e
+`solar_power.bmp`. Per questo sono esclusi dalla CI; entrambi sono stati
+validati e compilati a mano contro ESPHome 2026.6.5 (ESP32-S3, arduino).
+
+[`Personal-heltec-pi30-display-pipsolar.yaml`](examples/esp32/heltec-pi30/Personal-heltec-pi30-display-pipsolar.yaml)
+è una terza variante, personale, di quello `pipsolar` (nome dispositivo
+`heltec-inverter`, friendly name `Heltec PI30 Display`) — è la
+configurazione che produce davvero la nomenclatura delle entità
+(`sensor.heltec_pi30_battery_voltage`, `sensor.heltec_pi30_display_pi30_*`,
+…) su cui sono costruite le automazioni Home Assistant descritte più sotto.
+
+## Requisiti
+
+* [ESPHome 2024.6.0 o superiore](https://github.com/esphome/esphome/releases)
+* Metà di un cavo ethernet con connettore RJ45
+* Modulo RS232-to-TTL (es. `MAX3232CSE`)
+* Scheda ESP32 o ESP8266 generica
+
+## Schemi
+
+<a href="images/001.jpg" target="_blank"><img src="images/001.jpg" height="172"></a>
+<a href="images/002.jpg" target="_blank"><img src="images/002.jpg" height="172"></a>
+<a href="images/004.jpg" target="_blank"><img src="images/004.jpg" height="172"></a>
+<a href="images/005.jpg" target="_blank"><img src="images/005.jpg" height="172"></a>
+
+```
+               RS232                     UART-TTL
+┌──────────┐              ┌──────────┐                ┌─────────┐
+│          │              │          │<----- RX ----->│         │
+│          │<---- TX ---->│  RS232   │<----- TX ----->│ ESP32/  │
+│   PIP    │<---- RX ---->│  to TTL  │<----- GND ---->│ ESP8266 │
+│          │<---- GND --->│  module  │<-- 3.3V VCC -->│         │<--- VCC
+│          │              │          │                │         │<--- GND
+└──────────┘              └──────────┘                └─────────┘
+```
+
+### Connettore RJ45
+
+| Pin     | Funzione     | Pin MAX3232       | Colore T-568B |
+| :-----: | :----------- | :---------------- | :------------|
+|    1    | TX           | P13 (RIN1)        | Bianco-Arancio |
+|    2    | RX           | P14 (DOUT1)       | Arancio       |
+|    3    |              |                   |              |
+|    4    | VCC 12V      | -                 | Blu         |
+|    5    |              |                   |              |
+|    6    |              |                   |              |
+|    7    |              |                   |              |
+|    8    | GND          | P15 (GND)         | Marrone        |
+
+Attenzione ai diversi colori del pinout RJ45 ([T-568A vs. T-568B](images/rj45-colors-t568a-vs-t568.png)).
+
+L'inverter fornisce +12V sul pin 4 o 7 a seconda del modello. Puoi usare un
+economico convertitore DC-DC per alimentare l'ESP a 3.3V.
+
+[La fonte del pinout è qui](docs/HS_MS_MSX%20RS232%20Protocol.pdf).
+
+### MAX3232
+
+| Pin          | Etichetta    | ESPHome     | Esempio ESP8266  | Esempio ESP32 |
+| :----------- | :----------- | :---------- | :--------------- | :------------ |
+| P11 (DIN1)   | TXD          | `tx_pin`    | `GPIO4`          | `GPIO16`      |
+| P12 (ROUT1)  | RXD          | `rx_pin`    | `GPIO5`          | `GPIO17`      |
+| P16 (VCC)    | VCC          |             |                  |               |
+| P15 (GND)    | GND          |             |                  |               |
+
+## Installazione
+
+### A. Home Assistant (add-on ESPHome) — senza `pip3 install esphome`
+
+Se usi Home Assistant **non** devi installare ESPHome tu stesso. L'add-on
+**ESPHome Builder** compila e flasha per te, quindi non serve installare
+nulla sull'host di Home Assistant.
+
+1. **Impostazioni → Add-on → Store degli add-on → ESPHome Builder →
+   Installa**, poi Avvia e apri la Web UI.
+2. **+ Nuovo dispositivo → Salta** e dagli un nome. Questo crea
+   `/config/esphome/<nome>.yaml` e aggiunge la chiave di crittografia API e
+   la password OTA al tuo `secrets.yaml`.
+3. Apri il nuovo dispositivo con **Modifica** e incolla l'esempio scelto
+   dalla tabella sopra. Adatta `tx_pin` / `rx_pin` alla tua scheda.
+4. Mantieni o aggiungi queste righe così l'add-on può parlare col
+   dispositivo:
+
+   ```yaml
+   api:
+     encryption:
+       key: !secret api_encryption_key   # creata al passo 2
+   ```
+
+5. **Installa → Collega a questo computer** per il primo flash, poi
+   **Via WiFi** per ogni aggiornamento successivo.
+
+#### PI30: nient'altro da installare
+
+`pipsolar` fa parte di ESPHome, quindi una configurazione PI30 funziona
+così com'è. Il blocco `external_components:` serve solo per **pip8048**,
+**pip2424mse1** e **pi18**, che vivono in questo repository:
+
+```yaml
+external_components:
+  - source: github://Travis90x/esphome-pipsolar@main
+    refresh: 0s
+```
+
+L'add-on li scarica in fase di compilazione — di nuovo, nulla da installare
+a mano.
+
+> **Secrets.** L'add-on mantiene un unico `/config/esphome/secrets.yaml`
+> condiviso, quindi `!secret wifi_ssid` e simili si risolvono
+> automaticamente.
+
+### B. Standalone (CLI ESPHome) — con `pip3 install esphome`
+
+Usa questa strada se compili da un PC invece che da Home Assistant.
+
+```bash
+# Installa esphome
+pip3 install esphome
+
+# Clona questo repository
+git clone https://github.com/Travis90x/esphome-pipsolar.git
+cd esphome-pipsolar
+
+# Scegli l'esempio che vuoi compilare
+CONFIG=examples/esp32/pipsolar/esp32-pi30-pipsolar.yaml
+
+# ESPHome cerca secrets.yaml ACCANTO al file di configurazione
+cat > "$(dirname $CONFIG)/secrets.yaml" <<EOF
+wifi_ssid: MY_WIFI_SSID
+wifi_password: MY_WIFI_PASSWORD
+
+mqtt_host: MY_MQTT_HOST
+mqtt_username: MY_MQTT_USERNAME
+mqtt_password: MY_MQTT_PASSWORD
+EOF
+
+# Valida, compila, carica e segui i log
+esphome run "$CONFIG"
+```
+
+Per compilare un esempio contro i componenti nella tua **copia di lavoro**
+invece di quelli pubblicati, sovrascrivi la sorgente — gli script helper
+fanno l'aritmetica dei percorsi per te:
+
+```bash
+./test-esp32.sh run examples/esp32/pip8048/esp32-pip8048-example.yaml
+./test-esp8266.sh config examples/esp8266/pi18/esp8266-pi18-example.yaml
+```
+
+Dai un'occhiata alla [documentazione ufficiale del componente pipsolar](https://esphome.io/components/pipsolar.html) per dettagli aggiuntivi.
+
+## Automazioni Home Assistant (PI30 + pacco LiFePO4 8S)
+
+Questa sezione documenta il lato Home Assistant costruito sopra il
+dispositivo `pipsolar` della sezione precedente — dashboard e due
+automazioni che vivono in [`home_assistant/`](home_assistant/). Sostituisce
+i README per cartella che stavano sotto `home_assistant/automations/`:
+nessuno naviga dentro cartelle annidate, quindi tutto il necessario è
+riportato qui. I file YAML veri e propri (importati tramite le schermate
+"Modifica in YAML" di Home Assistant) restano nelle loro cartelle e sono
+linkati da ciascuna sottosezione qui sotto.
+
+### Il dispositivo PI30 in Home Assistant
+
+Entrambe le automazioni sotto assumono la nomenclatura delle entità
+prodotta da
+[`Personal-heltec-pi30-display-pipsolar.yaml`](examples/esp32/heltec-pi30/Personal-heltec-pi30-display-pipsolar.yaml)
+(nome dispositivo `heltec-inverter`, friendly name `Heltec PI30 Display`,
+vedi "Gli esempi Heltec PI30 con display" sopra):
+`sensor.heltec_pi30_battery_voltage`, `sensor.heltec_pi30_battery_current`
+(positiva in carica, negativa in scarica), e la famiglia
+`sensor.heltec_pi30_display_pi30_*` — i setpoint QPIRI riletti dall'inverter
+(tensione di float/under/recharge/redischarge/bulk, correnti massime di
+carica, ecc.) insieme alle loro controparti scrivibili
+`number.heltec_pi30_display_pi30_set_*` / `select.heltec_pi30_display_pi30_set_*`.
+
+[`home_assistant/dashboard/inverter_ita.yaml`](home_assistant/dashboard/inverter_ita.yaml)
+e [`inverter_eng.yaml`](home_assistant/dashboard/inverter_eng.yaml) sono
+sezioni di dashboard Lovelace già pronte (italiano / inglese) che coprono
+priorità della sorgente di uscita, modalità del dispositivo, setpoint di
+corrente di carica, tensioni di batteria, i sensori SOC descritti sotto, e
+diagnostica (cattura grezza dei frame TX/RX). Incollale nella modalità YAML
+di una dashboard.
+
+### Modulazione dinamica della carica da rete
+
+File: [`home_assistant/automations/PI30 battery management/`](<home_assistant/automations/PI30 battery management/>)
+- `Automation - PI30 Battery Charging Intelligent Modulation.yaml`
+- `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery to keep.yaml`
+
+Obiettivo: decidere, ogni 10 minuti (più all'avvio e ai cambi rilevanti dei
+sensori), se il PI30 debba caricare il suo pacco LiFePO4 dalla rete,
+scaricarlo, o semplicemente mantenerlo — e se in carica, quanti Ampere
+prelevare dalla rete — in base a un inverter/batteria Goodwe presente sullo
+stesso impianto (usato come segnale "c'è potenza solare di scorta in questo
+momento") e alla tensione del pacco PI30 come rete di sicurezza.
+
+Sensori letti:
+
+| Entità | Significato |
+| :--- | :--- |
+| `sensor.goodwe_battery_state_of_charge` | SOC Goodwe |
+| `sensor.goodwe_battery_voltage` | Tensione Goodwe |
+| `sensor.potenza_contatore` | potenza al contatore/rete |
+| `sensor.goodwe_battery_power` | Potenza batteria Goodwe |
+| `sensor.heltec_pi30_display_pi30_max_utility_charging_current` | corrente di carica da rete confermata dal PI30 |
+| `sensor.heltec_pi30_display_pi30_max_total_charging_current` | corrente totale confermata dal PI30 |
+| `sensor.heltec_pi30_battery_voltage` | Tensione batteria PI30 |
+| `number.heltec_pi30_display_pi30_set_battery_under_voltage` | PSDV, cut-off batteria impostato sull'inverter |
+
+`max_manual_current` (default `60`) e `battery_keep_under_voltage` (=
+PSDV + 0.2V) sono semplici variabili dentro l'automazione, **non helper** —
+per cambiarle, apri l'automazione in modalità YAML e modifica direttamente
+i numeri.
+
+Scritture: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
+`select.heltec_pi30_display_pi30_set_max_total_charging_current`,
+`script.pi30_batteria_da_caricare` (CARICA), `script.pi30_batteria_da_scaricare`
+(SCARICA), `script.pi30_batteria_da_mantenere` (MANTIENI — usato al posto di
+SCARICA quando la batteria PI30 è già vicina al cut-off).
+
+Step di corrente da rete: `2 10 20 30 40 50 60`.
+
+<details>
+<summary>Logica decisionale completa (clicca per espandere)</summary>
+
+```
+Segnale favorevole OR nulla noto
+SE
+	SOC or VOLT goodwe noti (almeno 1 dei due) e favorevole (batteria goodwe carica E potenza di carica al minimo + NON consuma tanto la goodwe + NON preleva tanto dalla rete) =
+	    SE SOC è ignoto, VOLT dev essere favorevole e viceversa.
+		sensor.goodwe_battery_state_of_charge = 100 (>99, non ci sono decimali e Home assistant non accetta =100, ma solo above e below) (goodwe carica al 100%)
+		OR
+		sensor.goodwe_battery_voltage |float >= 54 (goodwe sicuramente carica al 100%)
+		OR
+		(goodwe carica al 100% ma si sta scaricando)
+			sensor.goodwe_battery_state_of_charge > 99
+			AND
+			sensor.goodwe_battery_voltage |float < 53
+		OR
+			SE sensor.potenza_contatore E sensor.goodwe_battery_power NOTI
+				(Potenza carica al minimo, e servono ENTRAMBE le condizioni favorevoli: NON preleva tanto dalla rete E NON consuma tanto la goodwe)
+				(VALORI PIU' ALTI di MODULAZIONE per avere isteresi)
+				(CORREZIONE: AND e non OR tra le due soglie - altrimenti basterebbe una sola condizione favorevole
+				per restare in carica, mentre piu' sotto la condizione di SCARICA usa OR sulle stesse due soglie:
+				le due condizioni risulterebbero vere insieme se un solo sensore e' sfavorevole, e CARICA
+				vincerebbe sempre perche' valutata per prima)
+				Potenza carica sensor.heltec_pi30_display_pi30_max_utility_charging_current = 2 A
+				AND
+					sensor.potenza_contatore < 500
+					AND
+					sensor.goodwe_battery_power < 200
+			ALTRIMENTI (sensor.potenza_contatore E sensor.goodwe_battery_power IGNOTI)
+				CARICA con "paracadute" = potenza 2A
+				MODIFICA select.heltec_pi30_display_pi30_set_max_utility_charging_current = 2
+
+ALLORA
+	CARICA = script.pi30_batteria_da_caricare
+	E
+	MODULA POTENZA DI CARICA:
+	LEGGI sensor.heltec_pi30_display_pi30_max_total_charging_current
+	SE sensor.heltec_pi30_display_pi30_max_total_charging_current < 60
+		MODIFICA select.heltec_pi30_display_pi30_set_max_total_charging_current
+		IMPOSTANDO A 60
+	SE sensor.potenza_contatore < 300 E sensor.goodwe_battery_power < 200
+
+	(pi30_max_utility_charging_current può essere < max_total_charging_current che è il limite di utility+solar charging_current - il Solar per ora non lo uso)
+	ALLORA (AUMENTA STEP)
+		LEGGI sensor.heltec_pi30_display_pi30_max_utility_charging_current
+		MODIFICA select.heltec_pi30_display_pi30_set_max_utility_charging_current
+		AUMENTANDO LO STEP (es: se sta a 2 vai a 10, se 10 ->20, se 60 rimani a 60 ecc.)
+		(GLI STEP SONO: 2 10 20 30 40 50 60)
+		LO STEP NON PUÒ COMUNQUE SUPERARE max_manual_current (MAX MANUAL CURRENT)
+	ALTRIMENTI (DIMINUISCI STEP) (se uno dei due non è rispettato, c'è qualcosa che preleva troppo: sensor.potenza_contatore < 300 E sensor.goodwe_battery_power)
+		LEGGI sensor.heltec_pi30_display_pi30_max_utility_charging_current
+		MODIFICA select.heltec_pi30_display_pi30_set_max_utility_charging_current
+		DIMINUISCI LO STEP (es: se sta a 2 rimani a 2, se 10 vai a 2, se 60 vai a 50 ecc.)
+		(GLI STEP SONO: 2 10 20 30 40 50 60)
+
+ALTRIMENTI
+	SE
+		SOC or VOLT goodwe ignoti
+		E
+		sensor.potenza_contatore < 300 E sensor.goodwe_battery_power < 200
+	ALLORA
+		CARICA con "paracadute" = potenza 2A
+		MODIFICA select.heltec_pi30_display_pi30_set_max_utility_charging_current = 2
+
+ALTRIMENTI
+	SE
+		sensor.heltec_pi30_battery_voltage < battery_keep_under_voltage
+		(dove battery_keep_under_voltage = number.heltec_pi30_display_pi30_set_battery_under_voltage + 0.2)
+	ALLORA
+		MANTIENI = script.pi30_batteria_da_mantenere
+		(la batteria PI30 è già vicina al cut-off: non scaricarla ulteriormente)
+	ALTRIMENTI
+		SCARICA = script.pi30_batteria_da_scaricare
+
+VUOL DIRE CHE
+SE
+	sensor.heltec_pi30_display_pi30_max_utility_charging_current = 2A
+	E
+	sensor.potenza_contatore > 500 OR sensor.goodwe_battery_power > 200
+
+ALLORA
+	NONOSTANTE "Potenza carica al minimo" E "NON consuma tanto la goodwe" E "NON preleva tanto dalla rete"
+	questo non basta, quindi SCARICA
+```
+
+**MAX MANUAL CURRENT.** Non è un helper: è una variabile fissa dentro
+l'automazione stessa, in `action > variables > max_manual_current` (di
+default 60). Per cambiarla, apri l'automazione in modalità YAML, modifica
+quel numero e salva. Se impostata ad esempio a 40: la fase AUMENTA STEP non
+salirà mai oltre 40A; se la corrente è già sopra 40A (perché il limite è
+stato abbassato mentre il sistema stava caricando a uno step più alto),
+l'automazione la riporta subito al gradino valido più alto non superiore a
+40 (quindi 40).
+
+**Trigger:**
+
+```yaml
+trigger:
+  - trigger: homeassistant
+    id: avvio
+    event: start
+  - trigger: time_pattern
+    id: controllo_10_minuti
+    minutes: /10
+  - trigger: state
+    id: batteria_stabile
+    entity_id:
+      - sensor.goodwe_battery_state_of_charge
+      - sensor.goodwe_battery_voltage
+      - sensor.potenza_contatore
+      - sensor.goodwe_battery_power
+```
+
+</details>
+
+### SOC reale via coulomb counting (tensione + corrente)
+
+File: [`home_assistant/automations/PI30 battery SOC/`](<home_assistant/automations/PI30 battery SOC/>)
+- `Automation - PI30 Battery SOC Coulomb Counting.yaml`
+- `Script - PI30 Battery SOC Recalibrate from Voltage.yaml`
+
+Il pacco LiFePO4 8S ha una curva Volt/SOC molto piatta tra il 20% e l'80%
+circa: pochi centesimi di volt corrispondono a decine di punti percentuali
+di SOC. In più quella curva si sposta in base a quanta corrente sta
+assorbendo o erogando la batteria in quel momento (caduta resistiva
+interna). Un sensore SOC basato solo sulla tensione istantanea (come
+`sensor.heltec_pi30_battery_soc`, letto dal protocollo PI30) è quindi
+impreciso proprio nel mezzo della curva, dove serve di più.
+
+**Come funziona.** Invece di leggere il SOC dalla tensione, si integra nel
+tempo la corrente di `sensor.heltec_pi30_battery_current` rispetto alla
+capacità nominale del pacco (155Ah) — il classico "coulomb counting" usato
+dai BMS. Il coulomb counting puro deriva nel tempo, quindi la stima viene
+riagganciata ai due estremi usando una tensione compensata per la caduta
+resistiva interna anziché quella grezza (`voltage_ocv = voltage - current *
+internal_resistance_ohm`, stessa convenzione di segno del sensore
+corrente):
+
+- **100%** quando `voltage_ocv` raggiunge la tensione di float
+  (`sensor.heltec_pi30_display_pi30_battery_float_voltage` meno 0.1V di
+  margine) — a quel punto la batteria è per definizione piena.
+- **0%** quando `voltage_ocv` scende sotto la tensione di under-voltage
+  (`sensor.heltec_pi30_display_pi30_battery_under_voltage`) più 0.2V di
+  margine, arrivando a 0% un po' prima che sia il BMS stesso a staccare la
+  batteria.
+
+Tra i due estremi il SOC si muove solo per integrazione della corrente,
+ogni 2 minuti.
+
+**Setup — 2 helper, tutto da UI, niente `configuration.yaml`:**
+
+1. **Helper "Numero"** (Impostazioni → Dispositivi e servizi → Helper →
+   Crea helper → Numero): Nome `PI30 battery SOC calculated`, icona
+   `mdi:battery-unknown`, min `0`, max `100`, passo `0.1`, unità `%`. Crea
+   `input_number.pi30_battery_soc_calculated`, il contenitore del valore
+   grezzo su cui scrive l'automazione. Al primo salvataggio impostalo a un
+   valore vicino a quello letto da `sensor.heltec_pi30_battery_soc` —
+   l'automazione lo riaggancerà comunque la prima volta che tocca un
+   estremo.
+2. **Helper "Sensore basato su modello"** (Impostazioni → Dispositivi e
+   servizi → Helper → Crea helper → Template → Sensor): Nome
+   `PI30 battery SoC calculated`, unità `%`, classe dispositivo `Battery`,
+   classe di stato `Measurement`, e come **Stato**:
+   ```
+   {{ states('input_number.pi30_battery_soc_calculated') | float(default=0) | round(0) }}
+   ```
+   Crea `sensor.pi30_battery_soc_calculated`, il sensore batteria vero e
+   proprio utilizzabile in dashboard/grafici come qualsiasi altro sensore
+   SOC. Crealo dopo l'helper Numero (legge il suo entity_id).
+
+Poi importa `Automation - PI30 Battery SOC Coulomb Counting.yaml`
+(Impostazioni → Automazioni → Modifica in YAML) per fare l'integrazione e
+la ricalibrazione descritte sopra.
+
+Facoltativamente, subito dopo aver creato l'helper Numero, lancia **una
+volta sola** `Script - PI30 Battery SOC Recalibrate from Voltage.yaml`
+(Impostazioni → Automazioni e scene → Script → Modifica in YAML, poi
+eseguilo) così il contatore non parte da 0%: interpola linearmente la
+tensione compensata tra i due estremi reali e imposta subito l'helper
+Numero a quella stima. È una retta, non la vera curva del LiFePO4: va bene
+come punto di partenza, non come sostituto del coulomb counting quotidiano.
+**Non rilanciarlo di routine**: farlo ogni volta che la tensione sale un
+po' riporta il sensore a essere basato sulla sola tensione istantanea,
+vanificando il senso del coulomb counting (vedi l'avviso nella descrizione
+dello script stesso).
+
+**Taratura:**
+- **Capacità pacco**: `155` (Ah), variabile `capacity_ah` dell'automazione.
+- **Cadenza di integrazione**: 2 minuti (trigger `cadence`). Se cambiata,
+  aggiorna anche `dt_hours` (`= minuti_trigger / 60`).
+- **Margini di ricalibrazione**: 0.1V sotto il float per il 100%, 0.2V
+  sopra l'under-voltage per lo 0% — variabili `full_threshold` /
+  `empty_threshold`.
+
+**Taratura della resistenza interna (`internal_resistance_ohm`).** Stessa
+tensione di pacco, correnti diverse, SOC vero molto diverso: 27.5V con
+pochi Ampere è quasi 100%, 27.2V a 39A in carica può essere un SOC
+decisamente più basso, perché la corrente gonfia (in carica) o sgonfia (in
+scarica) la tensione misurata rispetto alla vera tensione a riposo (OCV).
+
+Valore attuale: **`internal_resistance_ohm = 0.0095` (9.5 mOhm)**, tarato
+sul pacco reale a partire da uno storico esportato da un BMS JK-B2A8S20P.
+**Il BMS non è collegato via RS485** (né in altro modo) a Home Assistant o
+all'ESP32: il dato è stato ottenuto esportando lo storico dei log dall'app
+JK sul telefono e analizzandolo offline. Metodo: nel log ogni volta che
+scatta "Cell XX over charge protection" il caricabatterie viene interrotto
+e 2-3 secondi dopo arriva "protection is released" — in quella finestra
+così breve il SOC del BMS ("SOC Cap. Remain (AH)") non fa in tempo a
+cambiare, ma la corrente crolla da ~35-39A a circa 0/-0.6A. Sono quindi
+coppie (V1,I1)/(V2,I2) a parità di SOC, perfette per `R ≈ ΔV/ΔI`. Ce
+n'erano 19 di questo tipo; una media pesata (somma ΔV / somma ΔI) dà
+R ≈ 9.5 mOhm, con i singoli campioni compresi tra ~7 e ~14 mOhm. Convalidato
+con lo stesso log: la tensione a riposo vicino al 100% di SOC si assesta
+tra 27.5-27.6V (conferma l'ancoraggio a float_voltage), e l'unico evento di
+scarica profonda registrato (SOC BMS = 0) mostra 21.41V, ben al di sotto dei
+24.0V dell'ancoraggio di sicurezza conservativo usato per lo 0%.
+**Questo valore è considerato definitivo per ora** — non un placeholder,
+nessun lavoro aperto su questo punto. Per ricalcolarlo in futuro (pacco
+diverso, deriva evidente): due letture di tensione/corrente a correnti
+diverse ravvicinate nel tempo, oppure un nuovo export del log del BMS con
+eventi simili.
+
+**Possibile sviluppo futuro, non in corso.** Il BMS JK-B2A8S20P fa già un
+proprio coulomb counting interno (calibrazione di fabbrica, compensazione
+temperatura, bilanciamento cella-per-cella) — probabilmente più accurato di
+quello ricostruito qui. Collegarlo all'ESP32 via RS485 (o Bluetooth) per
+leggere il suo SOC direttamente potrebbe sostituire questa automazione in
+tutto o in parte, ma è solo un'idea per il futuro: non pianificata né
+iniziata. La soluzione attuale (tensione + corrente, con la resistenza
+interna tarata come sopra) è considerata sufficientemente buona e stabile
+così com'è.
+
+Questo sensore è pensato per affiancare, non sostituire subito,
+`sensor.heltec_pi30_battery_soc` e l'automazione di carica dinamica sopra
+(che oggi usa soprattutto SOC/tensione Goodwe). Una volta verificato per
+qualche giorno contro il comportamento reale della batteria, può essere
+usato al posto di (o insieme a) gli altri sensori SOC nelle condizioni di
+quell'automazione.
+
+## Guida al protocollo Voltronic Axpert MAX (PI30)
+
+Il documento del produttore è replicato qui:
+[`docs/MAX Communication Protocol for HV7.2k-LV5k V00 20200717.pdf`](docs/MAX%20Communication%20Protocol%20for%20HV7.2k-LV5k%20V00%2020200717.pdf)
+(Voltronic Power, *Axpert MAX Communication Protocol for HV7.2kW & LV5kW*,
+V00, 2020-07-17 — 27 pagine). Riprodotto per riferimento; il copyright resta
+di Voltronic Power.
+
+### Formato seriale e framing
+
+RS232, **2400 baud, 8 bit dati, nessuna parità, 1 bit di stop**.
+
+Ogni frame — richiesta e risposta allo stesso modo — è:
+
+```
+<payload> <CRC alto> <CRC basso> <CR>
+```
+
+* Il CRC è **CRC-16/XMODEM** (polinomio `0x1021`, valore iniziale `0x0000`)
+  calcolato solo sul payload.
+* Se un byte di CRC risulta `0x28` (`(`), `0x0D` o `0x0A`, viene
+  **incrementato di uno**. Questo mantiene inequivocabili i caratteri di
+  framing.
+* Le risposte iniziano con `(`. `(ACK` significa accettato, `(NAK`
+  rifiutato — anche un `NAK` prova comunque che cablaggio e baud rate sono
+  corretti.
+
+> **I byte di CRC fanno parte del frame, non del payload.** Sono spesso
+> ASCII stampabile, quindi un parser che rimuove solo il `<CR>` finale
+> corrompe silenziosamente l'ultimo campo. Catture reali dall'inverter di
+> test di questo repository: `(NAK` è seguito da `73 73` (`ss`), `(ACK` da
+> `39 20` (`9` e uno **spazio**, che separa anche un campo fantasma).
+
+### Comandi di interrogazione
+
+| Comando | Scopo |
+| :------ | :------ |
+| `QPI` | ID protocollo dispositivo (un'unità PI30 risponde `(PI30`) |
+| `QID` / `QSID` | Numero di serie (`QSID` per seriali più lunghi di 14) |
+| `QVFW` / `QVFW3` | Versione firmware CPU principale / pannello remoto |
+| `VERFW:` | Versione Bluetooth |
+| `QPIRI` | Informazioni di targa e setpoint del dispositivo (25 campi) |
+| `QFLAG` | Stato dei flag del dispositivo |
+| `QPIGS` / `QPIGS2` | Parametri di stato generale (21 campi) |
+| `QPGSn` | Informazioni parallelo per l'unità *n* |
+| `QMOD` | Modalità del dispositivo |
+| `QPIWS` | Stato degli avvisi (32 bit) |
+| `QDI` | Valori di default |
+| `QMCHGCR` / `QMUCHGCR` | Correnti massime di carica / carica da rete selezionabili |
+| `QOPPT` / `QCHPT` | Ordine di priorità sorgente di uscita / sorgente di carica nel tempo |
+| `QT` | Ora del dispositivo |
+| `QBEQI` | Stato equalizzazione batteria |
+| `QMN` / `QGMN` | Nome modello / nome modello generale |
+| `QBOOT` | Se il DSP ha il bootstrap |
+| `QBATCD` | Stato di carica e scarica |
+| `QLED` | Parametri di stato dei LED |
+
+### Comandi di impostazione
+
+| Comando | Scopo |
+| :------ | :------ |
+| `PE<x>` / `PD<x>` | Abilita / disabilita un flag del dispositivo |
+| `PF` | Ripristina i parametri di controllo ai valori di fabbrica |
+| `MNCHGC<mnnn>` / `MUCHGC<mnn>` | Corrente massima di carica / carica da rete |
+| `F<nn>` | Frequenza nominale di uscita (`F50`, `F60`) |
+| `V<nnn>` | Tensione nominale di uscita |
+| `POP<NN>` | Priorità sorgente di uscita |
+| `PCP<NN>` | Priorità sorgente di carica |
+| `PGR<NN>` | Range di funzionamento rete (`PGR00` appliance, `PGR01` UPS) |
+| `PBT<NN>` | Tipo di batteria |
+| `POPM<nn>` | Modalità di uscita |
+| `PPCP<MNN>` | Priorità carica dispositivo in parallelo |
+| `PBCV<nn.n>` | Tensione di **re-charge** batteria |
+| `PBDV<nn.n>` | Tensione di **re-discharge** batteria |
+| `PSDV<nn.n>` | Tensione di cut-off (under) batteria |
+| `PCVV<nn.n>` | Tensione di carica C.V. (bulk) batteria |
+| `PBFT<nn.n>` | Tensione di carica float batteria |
+| `PCVT<nnn>` | Tempo massimo di carica in fase C.V. |
+| `PBEQE<n>` / `PBEQA<n>` | Abilita / attiva equalizzazione batteria |
+| `PBEQT<nnn>` / `PBEQP<nnn>` / `PBEQV<nn.nn>` / `PBEQOT<nnn>` | Tempo / periodo / tensione / timeout di equalizzazione |
+| `DAT<YYMMDDHHMMSS>` | Imposta data e ora |
+| `PBATCD<abc>` | Controllo carica/scarica batteria |
+| `PBATMAXDISC<nnn>` | Corrente massima di scarica |
+| `RTEY` | Reset dell'energia PV/carico memorizzata |
+| `RTDL` | Cancella il data log |
+
+> **Le quattro tensioni di batteria si confondono facilmente**, e
+> sbagliarle cambia il comportamento dell'inverter. `PBCV` è *quando
+> ricominciare a caricare dalla rete* — **non** è la tensione di bulk. Il
+> bulk è `PCVV`, il float è `PBFT`, il cut-off è `PSDV`. I comandi
+> `PBFTV`, `PBLWV` o `SCOV` non esistono in questo protocollo.
+
+### Campi della risposta `QPIGS`
+
+Verificati campo per campo contro ~24 000 risposte reali di un'unità PI30.
+
+| # | Campo | # | Campo |
+| -: | :---- | -: | :---- |
+| 0 | Tensione di rete | 11 | Temperatura dissipatore inverter |
+| 1 | Frequenza di rete | 12 | Corrente PV in ingresso per la batteria |
+| 2 | Tensione di uscita AC | 13 | Tensione PV in ingresso |
+| 3 | Frequenza di uscita AC | 14 | Tensione batteria da SCC |
+| 4 | Potenza apparente di uscita AC (VA) | 15 | Corrente di scarica batteria |
+| 5 | Potenza attiva di uscita AC (W) | 16 | **Stato dispositivo `b7…b0`** |
+| 6 | Percentuale carico in uscita | 17 | Offset tensione batteria per ventole ON |
+| 7 | Tensione di bus | 18 | Versione EEPROM |
+| 8 | Tensione batteria | 19 | Potenza di carica PV |
+| 9 | Corrente di carica batteria | 20 | **Stato dispositivo `b10b11b12`** |
+| 10 | Capacità batteria (SoC) | | |
+
+I campi 16 e 20 sono **stringhe di bit, non numeri** — `00010101` letto
+come decimale diventa `10101` e perde gli zeri iniziali.
+
+| Campo 16 | Significato | Campo 20 | Significato |
+| :------- | :------ | :------- | :------ |
+| `b7` | Versione priorità SBU aggiunta | `b10` | Carica verso modalità floating |
+| `b6` | Configurazione cambiata | `b11` | Acceso |
+| `b5` | Firmware SCC aggiornato | `b12` | Antipolvere installato |
+| `b4` | Carico acceso | | |
+| `b3` | Tensione batteria stabile in carica | | |
+| `b2` | Carica attiva | | |
+| `b1` | Carica SCC attiva | | |
+| `b0` | Carica AC attiva | | |
+
+### Campi della risposta `QPIRI`
+
+| # | Campo | # | Campo |
+| -: | :---- | -: | :---- |
+| 0 | Tensione nominale di rete | 13 | Corrente massima di carica AC (`MUCHGC`) |
+| 1 | Corrente nominale di rete | 14 | Corrente massima di carica (`MCHGC`) |
+| 2 | Tensione nominale di uscita AC | 15 | Range di tensione in ingresso |
+| 3 | Frequenza nominale di uscita AC | 16 | Priorità sorgente di uscita (`POP`) |
+| 4 | Corrente nominale di uscita AC | 17 | Priorità sorgente di carica (`PCP`) |
+| 5 | Potenza apparente nominale di uscita AC | 18 | Numero massimo in parallelo |
+| 6 | Potenza attiva nominale di uscita AC | 19 | Tipo macchina |
+| 7 | Tensione nominale batteria | 20 | Topologia |
+| 8 | Tensione di re-charge batteria (`PBCV`) | 21 | Modalità di uscita |
+| 9 | Tensione under batteria (`PSDV`) | 22 | Tensione di re-discharge batteria (`PBDV`) |
+| 10 | Tensione bulk batteria (`PCVV`) | 23 | Condizione PV OK per parallelo |
+| 11 | Tensione float batteria (`PBFT`) | 24 | Bilanciamento potenza PV |
+| 12 | Tipo di batteria | | |
+
+## Identificare un inverter sconosciuto
+
+[`diagnostics/`](diagnostics/) contiene due configurazioni di sweep
+standalone per un Heltec WiFi Kit 32 V3. Sono mantenute come ricevute e
+**non** sono validate dalla CI: puntano a una scheda specifica e si
+aspettano un secret `api_key_heltec_v3`.
+
+| File | Cosa fa |
+| :--- | :----------- |
+| [`ESP32_ESP8266_diagnostic_inverter_type.yaml`](diagnostics/ESP32_ESP8266_diagnostic_inverter_type.yaml) | Un pulsante per ogni comando PI30 (`QPI`, `QID`, `QVFW`, `QPIRI`, `QDI`, `QFLAG`, `QMOD`, `QPIGS`, `QPIWS`), risposte scaricate in HEX e ASCII, baud rate selezionabile a runtime |
+| [`ESP32_ESP8266_test_protocol_solar_inverter_RS232.yaml`](diagnostics/ESP32_ESP8266_test_protocol_solar_inverter_RS232.yaml) | Sweep di PI30 / PI30MAX / PI30REVO / PI41 / PI18 / PI17 / PI16 / Qx / Modbus RTU su 2400, 4800, 9600 e 19200 baud |
+
+[`tests/esp8266-test-protocols.yaml`](tests/esp8266-test-protocols.yaml) fa
+lo stesso sweep di protocollo per un ESP8266 ma solo a 2400 baud, e gira
+nella CI. Usa lo sweep in `diagnostics/` quando devi anche scovare il baud
+rate; usa quello in `tests/` quando lo conosci già (2400).
+
+Cerca qualsiasi riga `RX` nel log. Anche `(NAK` è un successo: significa
+che l'inverter ti sente. Se nulla risponde a nessun baud rate, prova a
+scambiare TX e RX.
+
+## Problemi noti
+
+1. Se configuri molti dei sensori possibili ecc. potresti esaurire la
+   memoria (su esp32). Se configuri quasi tutti i sensori ecc. incorri in
+   un problema di dimensione dello stack. In questo caso devi aumentare la
+   dimensione dello stack: https://github.com/esphome/issues/issues/855
+
+## Debug
+
+Se questo componente non funziona subito per il tuo dispositivo, aggiorna
+la configurazione per abilitare l'output di debug del componente UART e
+aumenta il livello di log per vedere il traffico seriale in uscita e in
+ingresso:
+
+```yaml
+logger:
+  level: DEBUG
+  # Non scrivere i messaggi di log su UART0 (GPIO1/GPIO3) se l'inverter è collegato a GPIO1/GPIO3
+  baud_rate: 0
+
+uart:
+  id: uart_0
+  baud_rate: 2400
+  tx_pin: ${tx_pin}
+  rx_pin: ${rx_pin}
+  debug:
+    direction: BOTH
+    dummy_receiver: false
+    after:
+      delimiter: "\r"
+    sequence:
+      - lambda: UARTDebug::log_string(direction, bytes);
+```
+
+Ogni esempio include già un `…-example-debug.yaml` pronto che fa
+esattamente questo.
+
+## Riferimenti
+
+* https://github.com/syssi/esphome-pipsolar
+* https://github.com/esphome/esphome/pull/1664
+* https://github.com/esphome/esphome-docs/pull/1084/files
+* https://github.com/andreashergert1984/esphome/tree/feature_pipsolar_anh
+* https://github.com/jblance/mpp-solar/tree/master/docs/protocols

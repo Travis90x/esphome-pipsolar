@@ -48,8 +48,8 @@ corrente, ogni 2 minuti.
    non tocca `configuration.yaml`). Fa l'integrazione e la
    ricalibrazione descritte sopra.
 3. **`Helper 2 - Sensore template SOC calcolato.md`**: crea da UI
-   l'helper "Modello > Sensore basato su modello"
-   `sensor.pi30_battery_soc_calcolato`, che legge l'Helper 1 e lo
+   l'helper "Template > Sensor" `sensor.pi30_battery_soc_calcolato`,
+   che legge l'Helper 1 e lo
    espone come sensore batteria vero e proprio (`device_class:
    battery`), utilizzabile in dashboard/grafici come qualsiasi altro
    sensore SOC.

@@ -1,4 +1,4 @@
-# Helper 2: Modello → Sensore basato su modello (il "vero" sensore)
+# Helper 2: Template → Sensor (il "vero" sensore)
 
 Questo e' l'helper con il campo "Stato {{ ... }}": trasforma il numero
 grezzo dell'Helper 1 in un sensore batteria vero e proprio (icona
@@ -7,8 +7,13 @@ altro sensore SoC). Richiede l'Helper 1 gia' creato.
 
 Creazione (tutto da UI, niente `configuration.yaml`):
 
-**Impostazioni → Dispositivi e servizi → Helper → + Crea helper →
-Modello → Sensore basato su modello**
+**Impostazioni → Dispositivi e servizi → Helper → Crea helper →
+Template → Sensor**
+
+(il nome esatto della voce di menu puo' variare leggermente a seconda
+della versione/lingua di Home Assistant: cerca la categoria
+"Template"/"Modello" e al suo interno il tipo "Sensor"/"Sensore
+basato su modello" — e' lo stesso helper.)
 
 | Campo | Valore |
 |---|---|

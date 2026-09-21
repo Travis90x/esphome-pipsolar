@@ -458,14 +458,21 @@ corrente):
 
 - **100%** quando `voltage_ocv` raggiunge la tensione di float
   (`sensor.heltec_pi30_display_pi30_battery_float_voltage` meno 0.1V di
-  margine) — a quel punto la batteria è per definizione piena.
+  margine) **oppure** l'inverter segnala la modalità floating
+  (`binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode`),
+  **e** la corrente di carica è scesa sotto `tail_current_a` (5A, circa
+  C/30 per questo pacco). Servono entrambe le condizioni: un pacco che
+  sta ancora ingoiando decine di Ampere non è pieno, qualunque cosa dica
+  la tensione — con la sola tensione si scatta a 100% troppo presto.
 - **0%** quando `voltage_ocv` scende sotto la tensione di under-voltage
   (`sensor.heltec_pi30_display_pi30_battery_under_voltage`) più 0.2V di
   margine, arrivando a 0% un po' prima che sia il BMS stesso a staccare la
   batteria.
 
 Tra i due estremi il SOC si muove solo per integrazione della corrente,
-ogni 2 minuti.
+ogni 2 minuti — limitato all'intervallo 1..99, così il solo coulomb
+counting non può mai dichiarare un pacco pieno o vuoto da solo. Solo i
+due agganci qui sopra scrivono esattamente 100 e esattamente 0.
 
 **Setup — 2 helper, tutto da UI, niente `configuration.yaml`:**
 

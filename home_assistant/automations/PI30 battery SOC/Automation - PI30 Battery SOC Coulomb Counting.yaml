@@ -18,10 +18,16 @@ description: >-
   early (and the opposite on discharge):
     - 100% when voltage_ocv reaches the float voltage
       (sensor.heltec_pi30_display_pi30_battery_float_voltage) OR the
-      inverter reports floating mode, AND the charge current has
-      tapered below tail_current_a. Both halves are required: a pack
-      still swallowing tens of Amps is not full, whatever the voltage
-      says, so voltage alone would snap to 100% far too early.
+      inverter reports floating mode, AND the pack is not being pushed
+      (current <= tail_current_a, 0 by default: idle or discharging).
+      Both halves are required, and the second one is the meaningful
+      test: if the pack holds the float voltage while nothing is
+      charging it, that voltage comes from its own state of charge, so
+      it really is full. A pack still swallowing current may just be
+      held up there by the charger, whatever the voltage says —
+      including the low-current case, since charging at 2A because
+      there is no surplus is not the same thing as a charge that
+      tapered off because the battery would take no more.
     - 0% when voltage_ocv drops below the under-voltage threshold
       (sensor.heltec_pi30_display_pi30_battery_under_voltage) plus a
       0.2V margin, to leave some headroom before the BMS itself
@@ -37,10 +43,14 @@ description: >-
   repository's main README.md ("Home Assistant automations" section,
   "Real SOC via coulomb counting") for the method and how to recompute
   it if the pack changes.
-  tail_current_a = 5 (A) is the end-of-charge tail: below that the
-  charger is no longer really pushing energy in (roughly C/30 for this
-  155Ah pack). Raise it if the inverter parks at a higher float
-  current, lower it for a stricter "really full" test.
+  tail_current_a = 0 (A): the pack must not be absorbing anything for
+  the 100% anchor to fire. Watch the sensor over a full charge cycle:
+  if it never reaches 100% because the inverter parks at a small
+  positive current once in float (its own trickle, and the PI30
+  reports whole Amps), raise this to that value (1 or 2). Do not raise
+  it above the minimum charging step the charging automation uses,
+  or a deliberate low-current charge would be mistaken for a tapered
+  one and the anchor would fire early.
   To change the pack capacity edit capacity_ah below (action >
   variables). If you change the cadence of the "cadence" trigger,
   update dt_hours accordingly (dt_hours = minutes / 60).
@@ -56,7 +66,7 @@ actions:
   - variables:
       capacity_ah: 155
       internal_resistance_ohm: 0.0095
-      tail_current_a: 5
+      tail_current_a: 0
       dt_hours: '{{ 2 / 60 }}'
       voltage: >-
         {{ states('sensor.heltec_pi30_battery_voltage') | float(default=none)

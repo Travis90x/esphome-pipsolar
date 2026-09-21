@@ -460,10 +460,17 @@ corrente):
   (`sensor.heltec_pi30_display_pi30_battery_float_voltage` meno 0.1V di
   margine) **oppure** l'inverter segnala la modalità floating
   (`binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode`),
-  **e** la corrente di carica è scesa sotto `tail_current_a` (5A, circa
-  C/30 per questo pacco). Servono entrambe le condizioni: un pacco che
-  sta ancora ingoiando decine di Ampere non è pieno, qualunque cosa dica
-  la tensione — con la sola tensione si scatta a 100% troppo presto.
+  **e** il pacco non è sotto spinta (`current <= tail_current_a`, `0` di
+  default: fermo o in scarica). La seconda metà è il test che conta: se
+  il pacco tiene la tensione di float mentre nessuno lo sta caricando,
+  quella tensione viene dal suo stato di carica, quindi è davvero pieno
+  — senza bisogno di alcun modello. Un pacco che sta ancora assorbendo
+  corrente potrebbe essere semplicemente tenuto lassù dal
+  carica-batterie. Attenzione: nemmeno una corrente di carica *bassa* è
+  prova che il pacco sia pieno — caricare a 2A perché non c'è surplus
+  fotovoltaico non è la stessa cosa di una carica che è calata perché la
+  batteria non accetta più nulla. Per questo la soglia di default è 0 e
+  non un valore di "corrente di coda".
 - **0%** quando `voltage_ocv` scende sotto la tensione di under-voltage
   (`sensor.heltec_pi30_display_pi30_battery_under_voltage`) più 0.2V di
   margine, arrivando a 0% un po' prima che sia il BMS stesso a staccare la

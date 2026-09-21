@@ -449,10 +449,16 @@ internal_resistance_ohm`, same sign convention as the current sensor):
   (`sensor.heltec_pi30_display_pi30_battery_float_voltage` minus 0.1V
   margin) **or** the inverter reports floating mode
   (`binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode`),
-  **and** the charge current has tapered below `tail_current_a` (5A,
-  ~C/30 for this pack). Both halves matter: a pack still swallowing
-  tens of Amps is not full whatever the voltage says, so voltage alone
-  snaps to 100% far too early.
+  **and** the pack is not being pushed (`current <= tail_current_a`,
+  `0` by default: idle or discharging). The second half is the
+  meaningful test: if the pack holds the float voltage while nothing
+  is charging it, that voltage comes from its own state of charge, so
+  it really is full — no model needed. A pack still absorbing current
+  may just be held up there by the charger. Note that a *low* charge
+  current is not evidence of a full pack either: charging at 2A
+  because there is no solar surplus is not the same thing as a charge
+  that tapered off because the battery would take no more, which is
+  why the default threshold is 0 rather than a "tail current" value.
 - **0%** when `voltage_ocv` drops below the under-voltage threshold
   (`sensor.heltec_pi30_display_pi30_battery_under_voltage`) plus a 0.2V
   margin, reaching 0% a bit before the BMS itself would disconnect the

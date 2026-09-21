@@ -17,12 +17,19 @@ description: >-
   battery still charging hard at high voltage would snap to 100% too
   early (and the opposite on discharge):
     - 100% when voltage_ocv reaches the float voltage
-      (sensor.heltec_pi30_display_pi30_battery_float_voltage): at that
-      point the battery is by definition full.
+      (sensor.heltec_pi30_display_pi30_battery_float_voltage) OR the
+      inverter reports floating mode, AND the charge current has
+      tapered below tail_current_a. Both halves are required: a pack
+      still swallowing tens of Amps is not full, whatever the voltage
+      says, so voltage alone would snap to 100% far too early.
     - 0% when voltage_ocv drops below the under-voltage threshold
       (sensor.heltec_pi30_display_pi30_battery_under_voltage) plus a
       0.2V margin, to leave some headroom before the BMS itself
       disconnects the battery.
+  Only those two anchors may write exactly 100 and exactly 0: plain
+  coulomb counting is clamped to the 1..99 range, so the counter can
+  never claim a full or empty pack on its own (that is what used to
+  pin the sensor at 100% while the pack was still charging at 39A).
   internal_resistance_ohm = 0.0095 (9.5 mOhm), calibrated on the real
   pack: derived from 19 (voltage, current) pairs found in the JK BMS
   exported log ("Cell over charge protection" -> "released" events
@@ -30,6 +37,10 @@ description: >-
   repository's main README.md ("Home Assistant automations" section,
   "Real SOC via coulomb counting") for the method and how to recompute
   it if the pack changes.
+  tail_current_a = 5 (A) is the end-of-charge tail: below that the
+  charger is no longer really pushing energy in (roughly C/30 for this
+  155Ah pack). Raise it if the inverter parks at a higher float
+  current, lower it for a stricter "really full" test.
   To change the pack capacity edit capacity_ah below (action >
   variables). If you change the cadence of the "cadence" trigger,
   update dt_hours accordingly (dt_hours = minutes / 60).
@@ -45,6 +56,7 @@ actions:
   - variables:
       capacity_ah: 155
       internal_resistance_ohm: 0.0095
+      tail_current_a: 5
       dt_hours: '{{ 2 / 60 }}'
       voltage: >-
         {{ states('sensor.heltec_pi30_battery_voltage') | float(default=none)
@@ -65,6 +77,10 @@ actions:
         float(default=50) }}
       full_threshold: '{{ (float_voltage - 0.1) if float_voltage is not none else none }}'
       empty_threshold: '{{ (under_voltage + 0.2) if under_voltage is not none else none }}'
+      floating_mode: >-
+        {{
+        is_state('binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode',
+        'on') }}
   - if:
       - condition: template
         value_template: '{{ voltage is none or current is none }}'
@@ -75,7 +91,9 @@ actions:
   - choose:
       - conditions:
           - condition: template
-            value_template: '{{ full_threshold is not none and voltage_ocv >= full_threshold }}'
+            value_template: >-
+              {{ current <= tail_current_a and ((full_threshold is not none
+              and voltage_ocv >= full_threshold) or floating_mode) }}
         sequence:
           - target:
               entity_id: input_number.pi30_battery_soc_calculated
@@ -100,7 +118,7 @@ actions:
             data:
               value: >-
                 {{ min(max(soc_now + (current * dt_hours / capacity_ah *
-                100), 0), 100) | round(1) }}
+                100), 1), 99) | round(1) }}
             action: input_number.set_value
     default: []
 mode: single

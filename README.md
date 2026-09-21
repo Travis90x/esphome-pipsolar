@@ -447,14 +447,21 @@ internal_resistance_ohm`, same sign convention as the current sensor):
 
 - **100%** when `voltage_ocv` reaches the float voltage
   (`sensor.heltec_pi30_display_pi30_battery_float_voltage` minus 0.1V
-  margin) — the battery is by definition full at that point.
+  margin) **or** the inverter reports floating mode
+  (`binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode`),
+  **and** the charge current has tapered below `tail_current_a` (5A,
+  ~C/30 for this pack). Both halves matter: a pack still swallowing
+  tens of Amps is not full whatever the voltage says, so voltage alone
+  snaps to 100% far too early.
 - **0%** when `voltage_ocv` drops below the under-voltage threshold
   (`sensor.heltec_pi30_display_pi30_battery_under_voltage`) plus a 0.2V
   margin, reaching 0% a bit before the BMS itself would disconnect the
   battery.
 
 Between the two extremes, SOC only moves by integrating current, every 2
-minutes.
+minutes — clamped to the 1..99 range, so plain coulomb counting can never
+claim a full or empty pack on its own. Only the two anchors above write
+exactly 100 and exactly 0.
 
 **Setup — 2 helpers, all from the UI, no `configuration.yaml`:**
 

@@ -17,17 +17,26 @@ description: >-
   battery still charging hard at high voltage would snap to 100% too
   early (and the opposite on discharge):
     - 100% when voltage_ocv reaches the float voltage
-      (sensor.heltec_pi30_display_pi30_battery_float_voltage) OR the
-      inverter reports floating mode, AND the pack is not being pushed
-      (current <= tail_current_a, 0 by default: idle or discharging).
-      Both halves are required, and the second one is the meaningful
-      test: if the pack holds the float voltage while nothing is
-      charging it, that voltage comes from its own state of charge, so
-      it really is full. A pack still swallowing current may just be
-      held up there by the charger, whatever the voltage says —
-      including the low-current case, since charging at 2A because
-      there is no surplus is not the same thing as a charge that
-      tapered off because the battery would take no more.
+      (sensor.heltec_pi30_display_pi30_battery_float_voltage) AND the
+      pack is not being pushed (current <= tail_current_a, 0 by
+      default: idle or discharging). Both halves are required, and the
+      second one is the meaningful test: if the pack holds the float
+      voltage while nothing is charging it, that voltage comes from
+      its own state of charge, so it really is full. A pack still
+      swallowing current may just be held up there by the charger,
+      whatever the voltage says — including the low-current case,
+      since charging at 2A because there is no surplus is not the same
+      thing as a charge that tapered off because the battery would
+      take no more.
+      The inverter's own "charging to floating mode" flag
+      (binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode)
+      is deliberately NOT used here: it is a charger-stage flag, not a
+      battery-state one, and the PI30 keeps it raised after the sun
+      goes down, all night long while the pack is discharging, until
+      the charger goes back to bulk. Combined with the "not being
+      pushed" test (which a discharging pack always passes) it
+      rewrote 100% every 2 minutes for the whole night, pinning the
+      sensor there regardless of the real state of charge.
     - 0% when voltage_ocv drops below the under-voltage threshold
       (sensor.heltec_pi30_display_pi30_battery_under_voltage) plus a
       0.2V margin, to leave some headroom before the BMS itself
@@ -87,10 +96,6 @@ actions:
         float(default=50) }}
       full_threshold: '{{ (float_voltage - 0.1) if float_voltage is not none else none }}'
       empty_threshold: '{{ (under_voltage + 0.2) if under_voltage is not none else none }}'
-      floating_mode: >-
-        {{
-        is_state('binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode',
-        'on') }}
   - if:
       - condition: template
         value_template: '{{ voltage is none or current is none }}'
@@ -102,8 +107,8 @@ actions:
       - conditions:
           - condition: template
             value_template: >-
-              {{ current <= tail_current_a and ((full_threshold is not none
-              and voltage_ocv >= full_threshold) or floating_mode) }}
+              {{ current <= tail_current_a and full_threshold is not none
+              and voltage_ocv >= full_threshold }}
         sequence:
           - target:
               entity_id: input_number.pi30_battery_soc_calculated

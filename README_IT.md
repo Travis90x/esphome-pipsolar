@@ -458,19 +458,28 @@ corrente):
 
 - **100%** quando `voltage_ocv` raggiunge la tensione di float
   (`sensor.heltec_pi30_display_pi30_battery_float_voltage` meno 0.1V di
-  margine) **oppure** l'inverter segnala la modalità floating
-  (`binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode`),
-  **e** il pacco non è sotto spinta (`current <= tail_current_a`, `0` di
-  default: fermo o in scarica). La seconda metà è il test che conta: se
-  il pacco tiene la tensione di float mentre nessuno lo sta caricando,
-  quella tensione viene dal suo stato di carica, quindi è davvero pieno
-  — senza bisogno di alcun modello. Un pacco che sta ancora assorbendo
-  corrente potrebbe essere semplicemente tenuto lassù dal
-  carica-batterie. Attenzione: nemmeno una corrente di carica *bassa* è
-  prova che il pacco sia pieno — caricare a 2A perché non c'è surplus
-  fotovoltaico non è la stessa cosa di una carica che è calata perché la
-  batteria non accetta più nulla. Per questo la soglia di default è 0 e
-  non un valore di "corrente di coda".
+  margine) **e** il pacco non è sotto spinta (`current <=
+  tail_current_a`, `0` di default: fermo o in scarica). La seconda metà
+  è il test che conta: se il pacco tiene la tensione di float mentre
+  nessuno lo sta caricando, quella tensione viene dal suo stato di
+  carica, quindi è davvero pieno — senza bisogno di alcun modello. Un
+  pacco che sta ancora assorbendo corrente potrebbe essere
+  semplicemente tenuto lassù dal carica-batterie. Attenzione: nemmeno
+  una corrente di carica *bassa* è prova che il pacco sia pieno —
+  caricare a 2A perché non c'è surplus fotovoltaico non è la stessa
+  cosa di una carica che è calata perché la batteria non accetta più
+  nulla. Per questo la soglia di default è 0 e non un valore di
+  "corrente di coda".
+  Il flag *charging to floating mode* dell'inverter
+  (`binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode`)
+  è volutamente **escluso** da questo aggancio: descrive lo stadio del
+  carica-batterie, non lo stato della batteria, e il PI30 lo tiene
+  acceso dopo il tramonto, per tutta la notte mentre il pacco si
+  scarica, finché il caricatore non torna in bulk. Usato in alternativa
+  al test di tensione riscriveva 100% ogni 2 minuti per tutta la notte
+  (un pacco in scarica supera sempre il test "non sotto spinta"),
+  inchiodando il sensore al 100% qualunque fosse il vero stato di
+  carica.
 - **0%** quando `voltage_ocv` scende sotto la tensione di under-voltage
   (`sensor.heltec_pi30_display_pi30_battery_under_voltage`) più 0.2V di
   margine, arrivando a 0% un po' prima che sia il BMS stesso a staccare la

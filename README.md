@@ -621,16 +621,41 @@ clearly disagrees:
   full, and while charging the voltage says nothing.
 - **Clearly disagrees** means outside the band of SOCs compatible with the
   reading ±0.1V (the PI30 reports 0.1V steps). Inside the band the count wins;
-  outside, the count closes 1/20 of the gap per minute.
+  outside, the count closes the gap with a 5-minute time constant (about 1/5
+  per minute).
 - On the flat top (85-99%) the band is about 20 points wide and the voltage
   rarely overrides the count; from about 80% down it does. Example: 26.3V at
-  -9A is 26.40V compensated, band 60-74%, and a counter stuck at 98% comes
-  down to about 73% within an hour.
+  -9A is 26.40V compensated, band 60-74%, and a counter stuck at 96% comes
+  down to about 74% in about 15 minutes.
 - The 70-99% part of the table is measured (SOC reconstructed from the energy
   counters between two full charges, fitted as V = 25.32 + 0.0152·SOC +
   0.0113·I, residual 0.06V). Below 70%, never reached in the data, it follows
   the usual LiFePO4 curve down to the 0% anchor voltage. The correction never
   writes exactly 100 or 0: that stays with the two anchors.
+
+The same model written as a voltage × current table (discharge side; while
+charging the voltage is not used), so it can be compared with a hand-made
+one. Each Amp drawn lowers the reading by about 11 mV; the flat hump near
+26.6-26.7V is the LiFePO4 plateau, where the voltage says little and the
+count decides:
+
+| Voltage | -30 A | -20 A | -10 A | -8 A | -2 A | 0 A |
+|---|---|---|---|---|---|---|
+| 24.0 | 2% | 1% | 1% | 1% | 0% | 0% |
+| 24.5 | 5% | 5% | 4% | 4% | 3% | 3% |
+| 25.0 | 9% | 9% | 8% | 7% | 7% | 7% |
+| 25.5 | 27% | 21% | 17% | 16% | 14% | 13% |
+| 26.0 | 63% | 54% | 45% | 43% | 38% | 37% |
+| 26.2 | 75% | 70% | 61% | 59% | 54% | 52% |
+| 26.3 | 81% | 75% | 69% | 68% | 62% | 60% |
+| 26.4 | 98% | 80% | 74% | 73% | 70% | 68% |
+| 26.5 | 99% | 96% | 79% | 78% | 75% | 74% |
+| 26.6 | 99% | 99% | 93% | 88% | 80% | 79% |
+| 26.7 | 99% | 99% | 99% | 99% | 95% | 90% |
+
+Rows from 26.2V up are measured on this pack; below that they follow the
+usual LiFePO4 curve and can be edited in the automation (`ocv_v` /
+`ocv_soc`, the 0 A column).
 
 **Tuning:**
 - **Pack capacity**: `capacity_kwh` (4.5 kWh, the energy delivered from

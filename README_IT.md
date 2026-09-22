@@ -641,16 +641,41 @@ quando la tensione è affidabile, e solo quando è chiaramente in disaccordo:
   tensione non dice nulla.
 - **Chiaramente in disaccordo** vuol dire fuori dalla fascia di SOC compatibili
   con la lettura ±0.1V (il PI30 riporta passi da 0.1V). Dentro la fascia vince
-  il conteggio; fuori, il conteggio recupera 1/20 della differenza al minuto.
+  il conteggio; fuori, il conteggio recupera la differenza con una costante di
+  tempo di 5 minuti (circa 1/5 al minuto).
 - Sul tratto piatto in alto (85-99%) la fascia è larga circa 20 punti e la
   tensione corregge raramente; da circa l'80% in giù corregge. Esempio: 26.3V
-  a -9A sono 26.40V compensati, fascia 60-74%, e un contatore fermo al 98%
-  scende a circa il 73% in un'ora.
+  a -9A sono 26.40V compensati, fascia 60-74%, e un contatore fermo al 96%
+  scende a circa il 74% in circa 15 minuti.
 - La parte 70-99% della tabella è misurata (SOC ricostruito dai contatori di
   energia tra due cariche complete, V = 25.32 + 0.0152·SOC + 0.0113·I, residuo
   0.06V). Sotto il 70%, mai raggiunto nei dati, segue la curva LiFePO4 tipica
   fino alla tensione dell'aggancio a 0%. La correzione non scrive mai
   esattamente 100 o 0: quello resta ai due agganci.
+
+Lo stesso modello scritto come tabella tensione × corrente (lato scarica;
+durante la carica la tensione non viene usata), per confrontarlo con una
+tabella fatta a mano. Ogni Ampere prelevato abbassa la lettura di circa 11
+mV; la gobba piatta intorno a 26.6-26.7V è il plateau LiFePO4, dove la
+tensione dice poco e decide il conteggio:
+
+| Tensione | -30 A | -20 A | -10 A | -8 A | -2 A | 0 A |
+|---|---|---|---|---|---|---|
+| 24.0 | 2% | 1% | 1% | 1% | 0% | 0% |
+| 24.5 | 5% | 5% | 4% | 4% | 3% | 3% |
+| 25.0 | 9% | 9% | 8% | 7% | 7% | 7% |
+| 25.5 | 27% | 21% | 17% | 16% | 14% | 13% |
+| 26.0 | 63% | 54% | 45% | 43% | 38% | 37% |
+| 26.2 | 75% | 70% | 61% | 59% | 54% | 52% |
+| 26.3 | 81% | 75% | 69% | 68% | 62% | 60% |
+| 26.4 | 98% | 80% | 74% | 73% | 70% | 68% |
+| 26.5 | 99% | 96% | 79% | 78% | 75% | 74% |
+| 26.6 | 99% | 99% | 93% | 88% | 80% | 79% |
+| 26.7 | 99% | 99% | 99% | 99% | 95% | 90% |
+
+Le righe da 26.2V in su sono misurate su questo pacco; sotto seguono la curva
+LiFePO4 tipica e si possono modificare nell'automazione (`ocv_v` /
+`ocv_soc`, la colonna 0 A).
 
 **Taratura:**
 - **Capacità pacco**: `capacity_kwh` (4.5 kWh, l'energia erogata dal 100%

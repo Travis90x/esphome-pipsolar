@@ -88,14 +88,15 @@ description: >-
       the table is read at voltage_ocv - 0.1V and + 0.1V, giving a
       band of SOCs the voltage is compatible with. Inside the band
       nothing happens (the count is more precise than the voltage);
-      outside, the count moves towards the nearest edge of the band,
-      closing 1/20 of the gap per minute (20-minute time constant), so
-      a single odd reading barely moves it.
+      outside, the count moves towards the nearest edge of the band
+      with a 5-minute time constant (about 1/5 of the gap per minute):
+      a wrong value is fixed within about 15 minutes, and a single odd
+      reading moves it only a little.
   On the flat top of the curve (85-99%) the band is 20 points wide
   and the voltage almost never overrides the count; from about 80%
   down it is 10-15 points wide and does. Example: 26.3V at -9A is
-  26.40V compensated, band 60-74%: a counter stuck at 98% comes down
-  to about 75% in about an hour, then the count takes over again.
+  26.40V compensated, band 60-74%: a counter stuck at 96% comes down
+  to about 74% in about 15 minutes, then the count takes over again.
   The table was measured from two days of history (20-22 Sep 2026):
   SOC reconstructed from the energy counters between two full
   charges, voltage fitted against SOC and current (V = 25.32 +
@@ -224,7 +225,7 @@ actions:
       max_dt_hours: "{{ 5 / 60 }}"
       correction_resistance_ohm: 0.0113
       correction_band_v: 0.1
-      correction_tau_min: 20
+      correction_tau_min: 5
       correction_max_current_a: 30
       correction_rest_min: 30
       ocv_v: [24.0, 24.8, 25.4, 25.7, 25.9, 26.05, 26.18, 26.30, 26.42, 26.53, 26.63, 26.67, 26.70, 26.72, 26.75]

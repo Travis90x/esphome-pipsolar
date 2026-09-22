@@ -456,20 +456,23 @@ resistiva interna anziché quella grezza (`voltage_ocv = voltage - current *
 internal_resistance_ohm`, stessa convenzione di segno del sensore
 corrente):
 
-- **100%** quando `voltage_ocv` raggiunge la tensione di float
-  (`sensor.heltec_pi30_display_pi30_battery_float_voltage` meno 0.1V di
-  margine) **e** il pacco non è sotto spinta (`current <=
-  tail_current_a`, `0` di default: fermo o in scarica). La seconda metà
-  è il test che conta: se il pacco tiene la tensione di float mentre
-  nessuno lo sta caricando, quella tensione viene dal suo stato di
-  carica, quindi è davvero pieno — senza bisogno di alcun modello. Un
-  pacco che sta ancora assorbendo corrente potrebbe essere
-  semplicemente tenuto lassù dal carica-batterie. Attenzione: nemmeno
-  una corrente di carica *bassa* è prova che il pacco sia pieno —
-  caricare a 2A perché non c'è surplus fotovoltaico non è la stessa
-  cosa di una carica che è calata perché la batteria non accetta più
-  nulla. Per questo la soglia di default è 0 e non un valore di
-  "corrente di coda".
+- **100%** (trigger `full_hold`) quando `voltage_ocv` raggiunge la
+  tensione di float (`sensor.heltec_pi30_display_pi30_battery_float_voltage`
+  meno 0.1V di margine) **e** il pacco non è sotto spinta (`current <=
+  tail_current_a`, `0` di default: fermo o in scarica), **entrambe vere
+  ininterrottamente per 5 minuti**. La seconda metà è il test che conta:
+  se il pacco tiene la tensione di float mentre nessuno lo sta caricando,
+  quella tensione viene dal suo stato di carica, quindi è davvero pieno —
+  senza bisogno di alcun modello. Un pacco che sta ancora assorbendo
+  corrente potrebbe essere semplicemente tenuto lassù dal
+  carica-batterie. Attenzione: nemmeno una corrente di carica *bassa* è
+  prova che il pacco sia pieno — caricare a 2A perché non c'è surplus
+  fotovoltaico non è la stessa cosa di una carica che è calata perché la
+  batteria non accetta più nulla. Per questo la soglia di default è 0 e
+  non un valore di "corrente di coda". I 5 minuti di tenuta filtrano la
+  carica superficiale: appena il caricatore si stacca, un pacco LiFePO4 a
+  metà carica resta vicino alla tensione di carica per un minuto o due
+  prima di rilassarsi alla sua tensione a riposo.
   Il flag *charging to floating mode* dell'inverter
   (`binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode`)
   è volutamente **escluso** da questo aggancio: descrive lo stadio del
@@ -480,14 +483,37 @@ corrente):
   (un pacco in scarica supera sempre il test "non sotto spinta"),
   inchiodando il sensore al 100% qualunque fosse il vero stato di
   carica.
-- **0%** quando `voltage_ocv` scende sotto la tensione di under-voltage
+- **0%** (trigger `empty_hold`) quando `voltage_ocv` scende sotto la
+  tensione di under-voltage
   (`sensor.heltec_pi30_display_pi30_battery_under_voltage`) più 0.2V di
-  margine, arrivando a 0% un po' prima che sia il BMS stesso a staccare la
-  batteria.
+  margine, ininterrottamente per 1 minuto, arrivando a 0% un po' prima
+  che sia il BMS stesso a staccare la batteria. Il minuto di tenuta
+  ignora l'abbassamento dovuto a un picco di carico (lo spunto di un
+  compressore) che il modello resistivo non compensa del tutto.
 
-Tra i due estremi il SOC si muove solo per integrazione della corrente,
-ogni 2 minuti — limitato all'intervallo 1..99, così il solo coulomb
-counting non può mai dichiarare un pacco pieno o vuoto da solo. Solo i
+Entrambi gli agganci sono trigger template di Home Assistant con una
+tenuta `for:`, quindi ciascuno scrive il suo valore **una volta sola**,
+sulla transizione falso → vero della sua condizione, e si riarma solo dopo
+che la condizione è tornata falsa. È questo che permette a un pacco pieno
+di iniziare a contare in discesa da 100 nel momento in cui esce corrente,
+invece di essere riscritto a 100 ogni 2 minuti finché la tensione resta
+alta. Se il pacco è già pieno (o vuoto) quando carichi l'automazione per
+la prima volta, l'aggancio aspetta l'episodio successivo: imposta l'helper
+Number a mano una volta, come descritto nel setup qui sotto.
+
+Tra i due estremi il SOC si muove solo per integrazione della corrente.
+Ogni 2 minuti (e all'avvio) il contatore si sposta di `corrente ×
+ore_trascorse / 155Ah × 100`, dove `ore_trascorse` è il tempo
+**misurato** dall'esecuzione precedente (dal `last_triggered`
+dell'automazione stessa), limitato a 6 minuti perché un lungo fermo non
+integri la corrente letta al riavvio su ore di storia sconosciuta. Il
+valore è salvato con 3 decimali: agli 1-2A a cui questo pacco sta fermo di
+notte un passo da 2 minuti vale 0.02-0.04%, che un arrotondamento a 1
+decimale buttava via del tutto (un'intera notte di autoconsumo mai
+contata). L'integrazione pura non può mai *dichiarare* un pacco pieno o
+vuoto: in salita si ferma a 99, in discesa a 1. Può però continuare a
+scendere da un 100 agganciato (o salire da uno 0 agganciato), e tiene il
+100 agganciato attraverso il ±1A di mantenimento dell'inverter. Solo i
 due agganci qui sopra scrivono esattamente 100 e esattamente 0.
 
 **Setup — 2 helper, tutto da UI, niente `configuration.yaml`:**
@@ -498,8 +524,9 @@ due agganci qui sopra scrivono esattamente 100 e esattamente 0.
    `input_number.pi30_battery_soc_calculated`, il contenitore del valore
    grezzo su cui scrive l'automazione. Al primo salvataggio impostalo a un
    valore vicino a quello letto da `sensor.heltec_pi30_battery_soc` —
-   l'automazione lo riaggancerà comunque la prima volta che tocca un
-   estremo.
+   l'automazione lo riaggancerà comunque la prima volta che il pacco
+   completa una carica (o si svuota). L'automazione ci scrive 3 decimali:
+   il passo `0.1` riguarda solo lo slider, `set_value` non ne è limitato.
 2. **Helper "Sensore basato su modello"** (Impostazioni → Dispositivi e
    servizi → Helper → Crea helper → Template → Sensor): Nome
    `PI30 battery SoC calculated`, unità `%`, classe dispositivo `Battery`,
@@ -528,12 +555,19 @@ vanificando il senso del coulomb counting (vedi l'avviso nella descrizione
 dello script stesso).
 
 **Taratura:**
-- **Capacità pacco**: `155` (Ah), variabile `capacity_ah` dell'automazione.
-- **Cadenza di integrazione**: 2 minuti (trigger `cadence`). Se cambiata,
-  aggiorna anche `dt_hours` (`= minuti_trigger / 60`).
-- **Margini di ricalibrazione**: 0.1V sotto il float per il 100%, 0.2V
-  sopra l'under-voltage per lo 0% — variabili `full_threshold` /
-  `empty_threshold`.
+- **Capacità pacco**: `155` (Ah), variabile `capacity_ah` dell'automazione
+  (`actions` → `variables`).
+- **Costanti degli agganci**: `tail_current_a` (0A),
+  `internal_resistance_ohm` (0.0095), `full_margin_v` (0.1V sotto il float
+  per il 100%) e `empty_margin_v` (0.2V sopra l'under-voltage per lo 0%)
+  stanno nelle `trigger_variables` dell'automazione, perché gli agganci
+  sono trigger e Home Assistant non rende le variabili dei trigger
+  visibili alle azioni.
+- **Tempi di tenuta**: il `for:` dei trigger `full_hold` (5 minuti) e
+  `empty_hold` (1 minuto).
+- **Cadenza di integrazione**: 2 minuti (trigger `cadence`). Si può cambiare
+  liberamente: il tempo trascorso è misurato, nient'altro dipende da essa.
+  Il limite di un singolo passo è `max_dt_hours` (6 minuti).
 
 **Taratura della resistenza interna (`internal_resistance_ohm`).** Stessa
 tensione di pacco, correnti diverse, SOC vero molto diverso: 27.5V con

@@ -445,19 +445,22 @@ at the two extremes using a voltage compensated for the internal resistance
 drop rather than the raw one (`voltage_ocv = voltage - current *
 internal_resistance_ohm`, same sign convention as the current sensor):
 
-- **100%** when `voltage_ocv` reaches the float voltage
-  (`sensor.heltec_pi30_display_pi30_battery_float_voltage` minus 0.1V
-  margin) **and** the pack is not being pushed (`current <=
-  tail_current_a`, `0` by default: idle or discharging). The second
-  half is the meaningful test: if the pack holds the float voltage
-  while nothing is charging it, that voltage comes from its own state
-  of charge, so it really is full — no model needed. A pack still
-  absorbing current may just be held up there by the charger. Note
-  that a *low* charge current is not evidence of a full pack either:
-  charging at 2A because there is no solar surplus is not the same
-  thing as a charge that tapered off because the battery would take
-  no more, which is why the default threshold is 0 rather than a
-  "tail current" value.
+- **100%** (`full_hold` trigger) when `voltage_ocv` reaches the float
+  voltage (`sensor.heltec_pi30_display_pi30_battery_float_voltage` minus
+  0.1V margin) **and** the pack is not being pushed (`current <=
+  tail_current_a`, `0` by default: idle or discharging), **both true
+  continuously for 5 minutes**. The second half is the meaningful test:
+  if the pack holds the float voltage while nothing is charging it, that
+  voltage comes from its own state of charge, so it really is full — no
+  model needed. A pack still absorbing current may just be held up there
+  by the charger. Note that a *low* charge current is not evidence of a
+  full pack either: charging at 2A because there is no solar surplus is
+  not the same thing as a charge that tapered off because the battery
+  would take no more, which is why the default threshold is 0 rather
+  than a "tail current" value. The 5-minute hold filters out surface
+  charge: right after the charger cuts off, a half-full LiFePO4 pack sits
+  near the charge voltage for a minute or two before relaxing to its
+  resting voltage.
   The inverter's *charging to floating mode* flag
   (`binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode`)
   is deliberately **not** part of this anchor: it describes the
@@ -467,15 +470,36 @@ internal_resistance_ohm`, same sign convention as the current sensor):
   voltage test it re-wrote 100% every 2 minutes for the whole night
   (a discharging pack always passes the "not being pushed" test),
   pinning the sensor at 100% whatever the real state of charge.
-- **0%** when `voltage_ocv` drops below the under-voltage threshold
+- **0%** (`empty_hold` trigger) when `voltage_ocv` drops below the
+  under-voltage threshold
   (`sensor.heltec_pi30_display_pi30_battery_under_voltage`) plus a 0.2V
-  margin, reaching 0% a bit before the BMS itself would disconnect the
-  battery.
+  margin, continuously for 1 minute, reaching 0% a bit before the BMS
+  itself would disconnect the battery. The 1-minute hold ignores the sag
+  of a load spike (a compressor start) that the resistive model does not
+  fully compensate.
 
-Between the two extremes, SOC only moves by integrating current, every 2
-minutes — clamped to the 1..99 range, so plain coulomb counting can never
-claim a full or empty pack on its own. Only the two anchors above write
-exactly 100 and exactly 0.
+Both anchors are Home Assistant template triggers with a `for:` hold, so
+each one writes its value **once**, on the false → true transition of its
+condition, and re-arms only after the condition has been false again. That
+is what lets a full pack start counting down from 100 the moment current
+flows out of it, instead of being re-written to 100 every 2 minutes for as
+long as its voltage stays high. If the pack is already full (or empty)
+when you first load the automation, the anchor waits for the next episode:
+set the Number helper by hand once, as described in the setup below.
+
+Between the two extremes, SOC only moves by integrating current. Every 2
+minutes (and at startup) the counter moves by `current × elapsed_hours /
+155Ah × 100`, where `elapsed_hours` is the **measured** time since the
+previous run (from the automation's own `last_triggered`), capped at 6
+minutes so that a long outage does not integrate the current read at boot
+over hours of unknown history. The value is stored with 3 decimals: at the
+1-2A this pack idles at overnight one 2-minute step is 0.02-0.04%, which a
+1-decimal rounding would throw away entirely (a whole night of
+self-consumption never counted). Plain integration can never *claim* a
+full or empty pack: rising, it stops at 99; falling, it stops at 1. It may
+however keep going down from an anchored 100 (or up from an anchored 0),
+and it holds an anchored 100 through the inverter's ±1A float trickle.
+Only the two anchors above write exactly 100 and exactly 0.
 
 **Setup — 2 helpers, all from the UI, no `configuration.yaml`:**
 
@@ -485,7 +509,9 @@ exactly 100 and exactly 0.
    creates `input_number.pi30_battery_soc_calculated`, the raw value
    container the automation writes to. On first save, set it to something
    close to `sensor.heltec_pi30_battery_soc`'s current reading — the
-   automation re-anchors it the first time it touches an extreme anyway.
+   automation re-anchors it the first time the pack completes a charge
+   (or runs empty) anyway. The automation writes 3 decimals into it; the
+   `0.1` step only affects the slider, `set_value` is not limited by it.
 2. **Template sensor helper** (Settings → Devices & services → Helpers →
    Create helper → Template → Sensor): Name `PI30 battery SoC calculated`,
    unit `%`, device class `Battery`, state class `Measurement`, and as
@@ -513,12 +539,17 @@ coulomb counting (see the warning in the script's own description).
 
 **Tuning:**
 - **Pack capacity**: `155` (Ah), the `capacity_ah` variable in the
-  automation.
-- **Integration cadence**: 2 minutes (`cadence` trigger). If changed, also
-  update `dt_hours` (`= trigger_minutes / 60`).
-- **Re-anchoring margins**: 0.1V below float for 100%, 0.2V above
-  under-voltage for 0% — the `full_threshold` / `empty_threshold`
-  variables.
+  automation (`actions` → `variables`).
+- **Anchor constants**: `tail_current_a` (0A), `internal_resistance_ohm`
+  (0.0095), `full_margin_v` (0.1V below float for 100%) and
+  `empty_margin_v` (0.2V above under-voltage for 0%) live in the
+  automation's `trigger_variables`, because the anchors are triggers and
+  Home Assistant does not expose trigger variables to the actions.
+- **Hold times**: the `for:` of the `full_hold` (5 minutes) and
+  `empty_hold` (1 minute) triggers.
+- **Integration cadence**: 2 minutes (`cadence` trigger). It can be changed
+  freely: the elapsed time is measured, nothing else depends on it. The cap
+  on a single step is `max_dt_hours` (6 minutes).
 
 **Internal resistance calibration (`internal_resistance_ohm`).** Same pack
 voltage, different currents, very different real SOC: 27.5V at a few Amps is

@@ -7,62 +7,86 @@ description: >-
   flat in the mid-range and shifts depending on how much the battery
   is drawing/delivering at that moment, so voltage alone is not
   enough.
-  The accumulated value is then re-anchored at the two extremes to
-  remove coulomb-counting drift, comparing the thresholds NOT against
-  raw voltage but against a voltage "compensated" for the internal
-  resistance drop (voltage_ocv = voltage - current *
-  internal_resistance_ohm, same sign convention as the current
-  sensor: positive while charging raises the measured voltage above
-  the true OCV, negative while discharging lowers it), otherwise a
-  battery still charging hard at high voltage would snap to 100% too
-  early (and the opposite on discharge):
-    - 100% when voltage_ocv reaches the float voltage
-      (sensor.heltec_pi30_display_pi30_battery_float_voltage) AND the
-      pack is not being pushed (current <= tail_current_a, 0 by
-      default: idle or discharging). Both halves are required, and the
-      second one is the meaningful test: if the pack holds the float
-      voltage while nothing is charging it, that voltage comes from
-      its own state of charge, so it really is full. A pack still
-      swallowing current may just be held up there by the charger,
-      whatever the voltage says — including the low-current case,
-      since charging at 2A because there is no surplus is not the same
-      thing as a charge that tapered off because the battery would
-      take no more.
-      The inverter's own "charging to floating mode" flag
-      (binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode)
-      is deliberately NOT used here: it is a charger-stage flag, not a
-      battery-state one, and the PI30 keeps it raised after the sun
-      goes down, all night long while the pack is discharging, until
-      the charger goes back to bulk. Combined with the "not being
-      pushed" test (which a discharging pack always passes) it
-      rewrote 100% every 2 minutes for the whole night, pinning the
-      sensor there regardless of the real state of charge.
-    - 0% when voltage_ocv drops below the under-voltage threshold
-      (sensor.heltec_pi30_display_pi30_battery_under_voltage) plus a
-      0.2V margin, to leave some headroom before the BMS itself
-      disconnects the battery.
-  Only those two anchors may write exactly 100 and exactly 0: plain
-  coulomb counting is clamped to the 1..99 range, so the counter can
-  never claim a full or empty pack on its own (that is what used to
-  pin the sensor at 100% while the pack was still charging at 39A).
+  INTEGRATION. Every 2 minutes (and at Home Assistant startup) the
+  counter moves by current * elapsed_hours / capacity_ah * 100, where
+  elapsed_hours is the REAL time since the previous run (from
+  this.attributes.last_triggered), not a fixed 2 minutes: a run that
+  arrives late, an anchor run in between or a restart no longer count
+  a wrong amount of time. It is capped at max_dt_hours (6 minutes) so
+  that a long outage does not integrate the current read at boot over
+  hours of unknown history. The value is stored with 3 decimals: at
+  the 1-2A that this pack idles at overnight one step is 0.02-0.04%,
+  which the previous 1-decimal rounding threw away entirely (a whole
+  night of self-consumption was never counted).
+  Plain integration can never CLAIM a full or empty pack: rising it
+  stops at 99, falling it stops at 1. It may however keep going down
+  from an anchored 100 (or up from an anchored 0), so once the pack is
+  anchored full the first Ah drawn out of it are counted from 100, not
+  from 99.
+  ANCHORS. Only the two template triggers below may write exactly 100
+  and exactly 0, to remove coulomb-counting drift, and each one fires
+  only once its condition has held for a while ("for"), so a single
+  odd reading (a load spike, surface charge right after the charger
+  cut off at 80%) cannot re-anchor the counter. The thresholds are
+  compared NOT against raw voltage but against a voltage "compensated"
+  for the internal resistance drop (voltage_ocv = voltage - current *
+  internal_resistance_ohm, same sign convention as the current sensor:
+  positive while charging raises the measured voltage above the true
+  OCV, negative while discharging lowers it), otherwise a battery still
+  charging hard at high voltage would look full too early (and the
+  opposite on discharge):
+    - full_hold -> 100%: voltage_ocv >= float voltage
+      (sensor.heltec_pi30_display_pi30_battery_float_voltage) minus
+      full_margin_v (0.1V), AND the pack is not being pushed (current
+      <= tail_current_a, 0 by default: idle or discharging), both
+      true continuously for 5 minutes. The second half is the
+      meaningful test: if the pack holds the float voltage while
+      nothing is charging it, that voltage comes from its own state of
+      charge, so it really is full. A pack still swallowing current may
+      just be held up there by the charger, whatever the voltage says
+      - including the low-current case, since charging at 2A because
+      there is no surplus is not the same thing as a charge that
+      tapered off because the battery would take no more.
+      The inverter's own "charging to floating mode" flag is
+      deliberately NOT used: it describes the charger's stage, not the
+      battery, and the PI30 keeps it raised all night while the pack
+      discharges; it used to pin this sensor at 100%.
+    - empty_hold -> 0%: voltage_ocv <= under-voltage threshold
+      (sensor.heltec_pi30_display_pi30_battery_under_voltage) plus
+      empty_margin_v (0.2V, headroom before the BMS itself disconnects
+      the battery), continuously for 1 minute.
+  A template trigger fires on the false -> true transition of its
+  condition, so each anchor writes once per episode; the counter then
+  holds the value on its own (0A at float keeps 100, the caps above
+  absorb the inverter's +-1A trickle) and re-anchors the next time the
+  condition is re-established. If the pack is already full (or empty)
+  when this automation is loaded, the anchor waits for the next
+  episode: set the helper by hand once, as the README says.
+  CONSTANTS live in trigger_variables (used by the two anchor
+  triggers; Home Assistant does not expose them to the actions) and in
+  actions > variables (capacity, cap): tail_current_a = 0 (A): the pack
+  must not be absorbing anything for the 100% anchor to fire. Watch the
+  sensor over a full charge cycle: if it never reaches 100% because the
+  inverter parks at a small positive current once in float (its own
+  trickle, and the PI30 reports whole Amps), raise this to that value
+  (1 or 2). Do not raise it above the minimum charging step the
+  charging automation uses, or a deliberate low-current charge would be
+  mistaken for a tapered one and the anchor would fire early.
   internal_resistance_ohm = 0.0095 (9.5 mOhm), calibrated on the real
   pack: derived from 19 (voltage, current) pairs found in the JK BMS
-  exported log ("Cell over charge protection" -> "released" events
-  2-3 seconds apart, same SOC), R = weighted average of dV/dI. See the
+  exported log ("Cell over charge protection" -> "released" events 2-3
+  seconds apart, same SOC), R = weighted average of dV/dI. See the
   repository's main README.md ("Home Assistant automations" section,
   "Real SOC via coulomb counting") for the method and how to recompute
-  it if the pack changes.
-  tail_current_a = 0 (A): the pack must not be absorbing anything for
-  the 100% anchor to fire. Watch the sensor over a full charge cycle:
-  if it never reaches 100% because the inverter parks at a small
-  positive current once in float (its own trickle, and the PI30
-  reports whole Amps), raise this to that value (1 or 2). Do not raise
-  it above the minimum charging step the charging automation uses,
-  or a deliberate low-current charge would be mistaken for a tapered
-  one and the anchor would fire early.
-  To change the pack capacity edit capacity_ah below (action >
-  variables). If you change the cadence of the "cadence" trigger,
-  update dt_hours accordingly (dt_hours = minutes / 60).
+  it if the pack changes. The hold times are the "for" of each anchor
+  trigger. To change the pack capacity edit capacity_ah below (actions
+  > variables). The cadence trigger can be changed freely: the elapsed
+  time is measured, nothing else depends on it.
+trigger_variables:
+  tail_current_a: 0
+  internal_resistance_ohm: 0.0095
+  full_margin_v: 0.1
+  empty_margin_v: 0.2
 triggers:
   - trigger: time_pattern
     id: cadence
@@ -70,45 +94,44 @@ triggers:
   - trigger: homeassistant
     id: startup
     event: start
+  - trigger: template
+    id: full_hold
+    value_template: >-
+      {% set voltage = states('sensor.heltec_pi30_battery_voltage') | float(default=none) %}
+      {% set current = states('sensor.heltec_pi30_battery_current') | float(default=none) %}
+      {% set float_voltage = states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float(default=none) %}
+      {{ voltage is not none and current is not none and float_voltage is not none
+         and current <= tail_current_a
+         and (voltage - current * internal_resistance_ohm) >= (float_voltage - full_margin_v) }}
+    for: "00:05:00"
+  - trigger: template
+    id: empty_hold
+    value_template: >-
+      {% set voltage = states('sensor.heltec_pi30_battery_voltage') | float(default=none) %}
+      {% set current = states('sensor.heltec_pi30_battery_current') | float(default=none) %}
+      {% set under_voltage = states('sensor.heltec_pi30_display_pi30_battery_under_voltage') | float(default=none) %}
+      {{ voltage is not none and current is not none and under_voltage is not none
+         and (voltage - current * internal_resistance_ohm) <= (under_voltage + empty_margin_v) }}
+    for: "00:01:00"
 conditions: []
 actions:
   - variables:
       capacity_ah: 155
-      internal_resistance_ohm: 0.0095
-      tail_current_a: 0
-      dt_hours: '{{ 2 / 60 }}'
-      voltage: >-
-        {{ states('sensor.heltec_pi30_battery_voltage') | float(default=none)
-        }}
+      max_dt_hours: "{{ 6 / 60 }}"
       current: >-
         {{ states('sensor.heltec_pi30_battery_current') | float(default=none)
         }}
-      float_voltage: >-
-        {{
-        states('sensor.heltec_pi30_display_pi30_battery_float_voltage') |
-        float(default=none) }}
-      under_voltage: >-
-        {{
-        states('sensor.heltec_pi30_display_pi30_battery_under_voltage') |
-        float(default=none) }}
       soc_now: >-
         {{ states('input_number.pi30_battery_soc_calculated') |
         float(default=50) }}
-      full_threshold: '{{ (float_voltage - 0.1) if float_voltage is not none else none }}'
-      empty_threshold: '{{ (under_voltage + 0.2) if under_voltage is not none else none }}'
-  - if:
-      - condition: template
-        value_template: '{{ voltage is none or current is none }}'
-    then:
-      - stop: Voltage or current unavailable, no update
-  - variables:
-      voltage_ocv: '{{ voltage - (current * internal_resistance_ohm) }}'
+      dt_hours: >-
+        {% set last = this.attributes.last_triggered if this is not none else none %}
+        {% set ts = as_timestamp(last, default=none) if last is not none else none %}
+        {{ 0 if ts is none else ([(now().timestamp() - ts) / 3600, max_dt_hours] | min) }}
   - choose:
       - conditions:
-          - condition: template
-            value_template: >-
-              {{ current <= tail_current_a and full_threshold is not none
-              and voltage_ocv >= full_threshold }}
+          - condition: trigger
+            id: full_hold
         sequence:
           - target:
               entity_id: input_number.pi30_battery_soc_calculated
@@ -116,25 +139,28 @@ actions:
               value: 100
             action: input_number.set_value
       - conditions:
-          - condition: template
-            value_template: '{{ empty_threshold is not none and voltage_ocv <= empty_threshold }}'
+          - condition: trigger
+            id: empty_hold
         sequence:
           - target:
               entity_id: input_number.pi30_battery_soc_calculated
             data:
               value: 0
             action: input_number.set_value
-      - conditions:
-          - condition: trigger
-            id: cadence
-        sequence:
-          - target:
-              entity_id: input_number.pi30_battery_soc_calculated
-            data:
-              value: >-
-                {{ min(max(soc_now + (current * dt_hours / capacity_ah *
-                100), 1), 99) | round(1) }}
-            action: input_number.set_value
-    default: []
+    default:
+      - if:
+          - condition: template
+            value_template: "{{ current is none }}"
+        then:
+          - stop: Battery current unavailable, no update
+      - target:
+          entity_id: input_number.pi30_battery_soc_calculated
+        data:
+          value: >-
+            {% set delta = current * dt_hours / capacity_ah * 100 %}
+            {% set floor = [1, soc_now] | min %}
+            {% set ceiling = [99, soc_now] | max %}
+            {{ ([floor, soc_now + delta, ceiling] | sort)[1] | round(3) }}
+        action: input_number.set_value
 mode: single
 max_exceeded: silent

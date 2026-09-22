@@ -519,10 +519,12 @@ SOC -= discharge_kW × hours / capacity_kwh × 100
 automation's own `last_triggered`), capped at 5 minutes so that a long
 outage does not integrate the power read at boot over hours of unknown
 history. `capacity_kwh` (4.5) is the energy the pack *delivers* from 100%
-to 0% (discharge side). `charge_efficiency` (0.93) is how much of each kWh
-pushed in comes back out: the pack charges at 27-28V and discharges at
-about 26V, so the same Ah are more kWh going in than coming out (26/27.5 ≈
-0.945), and a few percent more are lost as heat and balancing. The power
+to 0% (discharge side). `charge_efficiency` (0.5) is how much of each kWh
+the PI30 *says* it pushed in actually comes back out — **measured on this
+system**, see "What two days of history say" below; physics alone would
+give about 0.93 (charging at 27-28V, discharging at 26V, a few percent of
+losses), but this inverter reports about twice the charging current that
+really enters the pack. The power
 sensors' unit is read from the sensor (W or kW). The value is stored with 3
 decimals (at the 1-2A this pack idles at overnight one step is a few
 hundredths of a percent, which a 1-decimal rounding would throw away
@@ -555,6 +557,11 @@ the calibration notes the anchors write in the Logbook, the two lifetime
 kWh counters `sensor.heltec_pi30_batteria_energia_caricata` and
 `sensor.heltec_pi30_batteria_energia_scaricata` built on them.
 
+Both helpers are in the same folder as the automation, each with the UI
+recipe and the `configuration.yaml` equivalent:
+`Helper 1 - PI30 Battery SOC calculated (Number).yaml` and
+`Helper 2 - PI30 Battery SOC calculated (Template sensor).yaml`.
+
 1. **Number helper** (Settings → Devices & services → Helpers → Create
    helper → Number): Name `PI30 battery SOC calculated`, icon
    `mdi:battery-unknown`, min `0`, max `100`, step `0.1`, unit `%`. This
@@ -572,15 +579,16 @@ kWh counters `sensor.heltec_pi30_batteria_energia_caricata` and
    (or runs empty) anyway. The automation writes 3 decimals into it; the
    `0.1` step only affects the slider, `set_value` is not limited by it.
 2. **Template sensor helper** (Settings → Devices & services → Helpers →
-   Create helper → Template → Sensor): Name `PI30 battery SoC calculated`,
-   unit `%`, device class `Battery`, state class `Measurement`, and as
-   **State**:
+   Create helper → Template → Sensor): Name `Heltec PI30 Display PI30
+   battery SOC calculated`, unit `%`, device class `Battery`, state class
+   `Measurement`, and as **State**:
    ```
    {{ states('input_number.pi30_battery_soc_calculated') | float(default=0) | round(0) }}
    ```
-   This creates `sensor.pi30_battery_soc_calculated`, the proper battery
-   sensor usable in dashboards/graphs like any other SOC sensor. Create it
-   after the Number helper (it reads that entity_id).
+   This creates `sensor.heltec_pi30_display_pi30_battery_soc_calculated`,
+   the proper battery sensor the dashboards in `home_assistant/dashboard`
+   use, usable in graphs like any other SOC sensor. Create it after the
+   Number helper (it reads that entity_id).
 
 Then import `Automation - PI30 Battery SOC Energy Counting.yaml` (Settings
 → Automations → Edit in YAML) to do the integration and re-anchoring above.
@@ -607,6 +615,47 @@ energy counting (see the warning in the script's own description).
 - **Cadence**: 1 minute (`cadence` trigger). It can be changed freely: the
   elapsed time is measured, nothing else depends on it. The cap on a single
   step is `max_dt_hours` (5 minutes).
+- **Float trickle**: `tail_current_a` (2A, measured: see below). Do not raise
+  it further, or a deliberate low-current charge would be mistaken for a
+  tapered one.
+
+**What two days of history say (20-22 Sep 2026, voltage, current and the
+two kWh counters exported from Home Assistant).** Three facts that shaped
+the defaults above:
+
+- **The voltage is useless between the two extremes.** While discharging
+  at 3-25A the pack read 26.2-26.7V for the whole night; at rest it read
+  26.4-26.5V both mornings, after two nights that drew 1.0 and 1.2 kWh.
+  Between "full" and "morning" the only thing that moves is the energy,
+  which is why the SOC is counted, not read. The voltage becomes
+  informative again only above 27.2V at rest (full) and near the
+  under-voltage threshold (empty), and that is exactly where the two
+  anchors sit.
+- **The inverter floats at 27.5V with +2A, for hours.** Of the 587 minutes
+  spent above 27.4V, 536 read exactly +2A, 48 read +1A and one single
+  minute read 0A. A full pack cannot absorb 2A for five hours: it is the
+  PI30's whole-Amp reading of a small float current. With
+  `tail_current_a = 0` the 100% anchor never fired; it is now 2A, which
+  with the 27.4V threshold is still a safe "full" test.
+- **The charge counter is about twice the discharge counter between the
+  same two states.** Morning rest at 26.4V → full: the charge counter rose
+  2.50 kWh (day 1) and 2.05 kWh (day 2). Full → the same 26.4V rest: the
+  discharge counter rose 1.20 and 1.11 kWh. The discharge side is right —
+  it matches the inverter's output power integrated over the same nights
+  (1.20 vs 1.27 kWh, the difference being the inverter's own losses) — so
+  the PI30 reports roughly twice the charging current that really enters
+  the pack (39A for two hours, while the pack could only have taken about
+  45Ah). Hence `charge_efficiency = 0.5` instead of the textbook 0.93. If
+  the pack or the inverter changes, redo this check from the Logbook lines
+  the anchors write: rise of the charged counter between a 0% (or a known
+  resting state) and the next 100%, against the rise of the discharged
+  counter on the way back.
+
+**Starting value.** The counter only moves with energy, so it needs a
+sensible first value: with the pack resting at 26.4-26.5V after a normal
+night (about 1.2 kWh drawn from full, 4.5 kWh capacity) that is roughly
+**70-75%**. Set the Number helper to that by hand once; the next full
+charge anchors it to 100% and from there the count is exact.
 - **Anchor constants**: `tail_current_a` (0A), `internal_resistance_ohm`
   (0.0095), `full_margin_v` (0.1V below float for 100%), `full_floor_v`
   (27.2V, the lowest voltage that can ever count as full: change it only

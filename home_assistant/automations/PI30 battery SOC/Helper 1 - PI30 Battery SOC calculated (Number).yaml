@@ -1,0 +1,23 @@
+# Helper 1 of 2 for "Automation - PI30 Battery SOC Energy Counting.yaml".
+#
+# The raw value container the automation writes to. The entity id MUST be
+# input_number.pi30_battery_soc_calculated: the automation, the recalibrate
+# script and Helper 2 all read/write that id.
+#
+# From the UI (no configuration.yaml needed):
+#   Settings > Devices & services > Helpers > Create helper > Number
+#   Name: PI30 battery SOC calculated   (this name yields the entity id above;
+#                                        after saving, open the helper, gear
+#                                        icon, and check "Entity ID")
+#   Icon: mdi:battery-unknown   Min: 0   Max: 100   Step: 0.1   Unit: %
+#
+# Or, equivalently, in configuration.yaml (then restart):
+input_number:
+  pi30_battery_soc_calculated:
+    name: PI30 battery SOC calculated
+    icon: mdi:battery-unknown
+    min: 0
+    max: 100
+    step: 0.1
+    unit_of_measurement: "%"
+    mode: box

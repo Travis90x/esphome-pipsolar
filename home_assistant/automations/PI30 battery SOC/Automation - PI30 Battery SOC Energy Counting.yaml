@@ -7,13 +7,18 @@ description: >-
   moment, so voltage alone is not enough (26.6V at 5A for four hours
   says nothing about the SOC; 0.5 kWh moved in four hours does).
   IT WRITES INTO input_number.pi30_battery_soc_calculated, a Number
-  helper you create once from the UI (Settings > Helpers > Number,
-  name "PI30 battery SOC calculated", 0..100, step 0.1). If the
-  automation editor shows "entity not found" next to that id, the
-  helper does not exist or has another id: nothing can work until it
-  does, and whatever SOC you are looking at is another sensor (the
+  helper you create once ("Helper 1 - PI30 Battery SOC calculated
+  (Number).yaml" next to this file: UI recipe and YAML equivalent);
+  "Helper 2 - ... (Template sensor).yaml" is the rounded display sensor
+  sensor.heltec_pi30_display_pi30_battery_soc_calculated. If the
+  automation editor shows "entity not found" next to the helper id,
+  the helper does not exist or has another id: nothing can work until
+  it does, and whatever SOC you are looking at is another sensor (the
   inverter's own sensor.heltec_pi30_battery_soc, voltage-based and
-  happily stuck at 100%).
+  happily stuck at 100%). The counter needs a starting point: set the
+  helper by hand once (see the README for a guess from the resting
+  voltage); from then on it walks with the energy and the 100% anchor
+  corrects it at the end of every full charge.
   COUNTING. Once a minute (and at Home Assistant startup, and whenever
   you run the automation by hand) it reads the battery charge and
   discharge power (sensor.heltec_pi30_batteria_potenza_carica and
@@ -35,11 +40,21 @@ description: >-
   kWh, only sampled every 60 s instead of every 10 s, which for a
   battery is no loss at all.
   capacity_kwh = 4.5 is the energy the pack DELIVERS from 100% to 0%
-  (discharge side). charge_efficiency = 0.93 is how much of each kWh
-  pushed in comes back out: the pack charges at 27-28V and discharges
-  at about 26V, so the same Ah are more kWh going in than coming out
-  (26/27.5 = 0.945), and a few % more are lost as heat and balancing.
-  Both are tunable from the readings the anchors write in the Logbook
+  (discharge side). charge_efficiency = 0.5 is how much of each kWh
+  the PI30 SAYS it pushed in actually comes back out, MEASURED on this
+  system from two days of history (20-22 Sep 2026): from the pack
+  resting at 26.4V in the morning to full (29.0V bulk end, then float)
+  the charge counter rose by 2.50 and 2.05 kWh, and from full back to
+  the same 26.4V resting state the discharge counter rose by 1.20 and
+  1.11 kWh (ratios 0.48 and 0.54). The discharge counter agrees with
+  the inverter output power integrated over the same nights (1.20 vs
+  1.27 kWh), so it is the charge side that is inflated: this PI30
+  reports about twice the charging current that really enters the
+  pack (39A reported for two hours while the pack could only have
+  taken about 45Ah). Physics alone would give about 0.93 (charging at
+  27-28V, discharging at 26V, a few % of losses); do not "fix" this
+  value back to it without re-checking the two counters. Both are
+  tunable from the readings the anchors write in the Logbook
   (see ANCHORS): between a 0% anchor and the next 100% anchor the rise
   of sensor.heltec_pi30_batteria_energia_caricata is capacity_kwh /
   charge_efficiency; between a 100% anchor and the next 0% anchor the
@@ -115,14 +130,16 @@ description: >-
   triggers; Home Assistant does not expose them to the actions) and in
   actions > variables (capacity, efficiency, time cap). full_floor_v =
   27.2 (V): change it only for a different chemistry or cell count
-  (3.40V per cell for LiFePO4). tail_current_a = 0 (A): the pack must
-  not be absorbing anything for the 100% anchor to fire. Watch the
-  sensor over a full charge cycle: if it never reaches 100% because the
-  inverter parks at a small positive current once in float (its own
-  trickle, and the PI30 reports whole Amps), raise this to that value
-  (1 or 2). Do not raise it above the minimum charging step the
-  charging automation uses, or a deliberate low-current charge would be
-  mistaken for a tapered one and the anchor would fire early.
+  (3.40V per cell for LiFePO4). tail_current_a = 2 (A), MEASURED: once
+  bulk ends (29.0V) this inverter parks the pack at its 27.5V float
+  and keeps reporting +2A (536 of the 587 minutes spent above 27.4V
+  in the history show exactly 2A, 48 show 1A, one single minute shows
+  0A), a reading the full pack cannot really be absorbing for five
+  hours. With 0A the 100% anchor never fired. 2A is also the smallest
+  charging step the charging automation can set, and with the 27.4V
+  threshold that is safe: a pack held at or above 27.4V while taking
+  no more than 2A is full. Do not raise it further, or a deliberate
+  low-current charge would be mistaken for a tapered one.
   internal_resistance_ohm = 0.0095 (9.5 mOhm), calibrated on the real
   pack: derived from 19 (voltage, current) pairs found in the JK BMS
   exported log ("Cell over charge protection" -> "released" events 2-3
@@ -133,7 +150,7 @@ description: >-
   trigger. The cadence trigger can be changed freely: the elapsed time
   is measured, nothing else depends on it.
 trigger_variables:
-  tail_current_a: 0
+  tail_current_a: 2
   internal_resistance_ohm: 0.0095
   full_margin_v: 0.1
   full_floor_v: 27.2
@@ -169,7 +186,7 @@ conditions: []
 actions:
   - variables:
       capacity_kwh: 4.5
-      charge_efficiency: 0.93
+      charge_efficiency: 0.5
       max_dt_hours: "{{ 5 / 60 }}"
       charge_kw: >-
         {% set p = states('sensor.heltec_pi30_batteria_potenza_carica') | float(default=none) %}

@@ -534,10 +534,12 @@ SOC -= kW_scarica × ore / capacity_kwh × 100
 `last_triggered` dell'automazione stessa), limitato a 5 minuti perché un
 lungo fermo non integri la potenza letta al riavvio su ore di storia
 sconosciuta. `capacity_kwh` (4.5) è l'energia che il pacco *eroga* dal 100%
-allo 0% (lato scarica). `charge_efficiency` (0.93) è quanta parte di ogni
-kWh immesso torna fuori: il pacco si carica a 27-28V e si scarica a circa
-26V, quindi gli stessi Ah sono più kWh in entrata che in uscita (26/27.5 ≈
-0.945), e qualche punto in più si perde in calore e bilanciamento. L'unità
+allo 0% (lato scarica). `charge_efficiency` (0.5) è quanta parte di ogni
+kWh che il PI30 *dice* di aver immesso torna davvero fuori — **misurata su
+questo impianto**, vedi "Cosa dicono due giorni di storico" più sotto; la
+sola fisica darebbe circa 0.93 (carica a 27-28V, scarica a 26V, qualche
+punto di perdite), ma questo inverter riporta circa il doppio della corrente
+di carica che entra davvero nel pacco. L'unità
 dei sensori di potenza è letta dal sensore (W o kW). Il valore è salvato con
 3 decimali (agli 1-2A a cui questo pacco sta fermo di notte un passo vale
 pochi centesimi di percento, che un arrotondamento a 1 decimale butterebbe
@@ -571,6 +573,11 @@ per le note di taratura che gli agganci scrivono nel Registro, i due
 contatori di kWh totali `sensor.heltec_pi30_batteria_energia_caricata` e
 `sensor.heltec_pi30_batteria_energia_scaricata` costruiti su di essi.
 
+Entrambi gli helper sono nella stessa cartella dell'automazione, ciascuno
+con la ricetta da UI e l'equivalente per `configuration.yaml`:
+`Helper 1 - PI30 Battery SOC calculated (Number).yaml` e
+`Helper 2 - PI30 Battery SOC calculated (Template sensor).yaml`.
+
 1. **Helper "Numero"** (Impostazioni → Dispositivi e servizi → Helper →
    Crea helper → Numero): Nome `PI30 battery SOC calculated`, icona
    `mdi:battery-unknown`, min `0`, max `100`, passo `0.1`, unità `%`. Crea
@@ -589,15 +596,16 @@ contatori di kWh totali `sensor.heltec_pi30_batteria_energia_caricata` e
    completa una carica (o si svuota). L'automazione ci scrive 3 decimali:
    il passo `0.1` riguarda solo lo slider, `set_value` non ne è limitato.
 2. **Helper "Sensore basato su modello"** (Impostazioni → Dispositivi e
-   servizi → Helper → Crea helper → Template → Sensor): Nome
-   `PI30 battery SoC calculated`, unità `%`, classe dispositivo `Battery`,
-   classe di stato `Measurement`, e come **Stato**:
+   servizi → Helper → Crea helper → Template → Sensor): Nome `Heltec PI30
+   Display PI30 battery SOC calculated`, unità `%`, classe dispositivo
+   `Batteria`, classe di stato `Misurazione`, e come **Stato**:
    ```
    {{ states('input_number.pi30_battery_soc_calculated') | float(default=0) | round(0) }}
    ```
-   Crea `sensor.pi30_battery_soc_calculated`, il sensore batteria vero e
-   proprio utilizzabile in dashboard/grafici come qualsiasi altro sensore
-   SOC. Crealo dopo l'helper Numero (legge il suo entity_id).
+   Crea `sensor.heltec_pi30_display_pi30_battery_soc_calculated`, il
+   sensore batteria vero e proprio usato dalle dashboard in
+   `home_assistant/dashboard`, utilizzabile nei grafici come qualunque
+   altro sensore SOC. Crealo dopo l'helper Numero (legge quell'entity_id).
 
 Poi importa `Automation - PI30 Battery SOC Energy Counting.yaml`
 (Impostazioni → Automazioni → Modifica in YAML) per fare l'integrazione e
@@ -626,6 +634,49 @@ dello script stesso).
 - **Cadenza**: 1 minuto (trigger `cadence`). Si può cambiare liberamente: il
   tempo trascorso è misurato, nient'altro dipende da essa. Il limite di un
   singolo passo è `max_dt_hours` (5 minuti).
+- **Corrente di mantenimento**: `tail_current_a` (2A, misurata: vedi sotto).
+  Non alzarla oltre, o una carica volutamente a bassa corrente verrebbe
+  scambiata per una carica esaurita.
+
+**Cosa dicono due giorni di storico (20-22 set 2026: tensione, corrente e i
+due contatori di kWh esportati da Home Assistant).** Tre fatti che hanno
+deciso i valori qui sopra:
+
+- **La tensione è inutile tra i due estremi.** In scarica a 3-25A il pacco
+  ha letto 26.2-26.7V per tutta la notte; a riposo ha letto 26.4-26.5V
+  entrambe le mattine, dopo due notti da 1.0 e 1.2 kWh. Tra "pieno" e
+  "mattina" l'unica cosa che si muove è l'energia, ed è per questo che il
+  SOC si conta e non si legge. La tensione torna informativa solo sopra i
+  27.2V a riposo (pieno) e vicino alla soglia di under-voltage (vuoto), ed
+  è esattamente lì che stanno i due agganci.
+- **L'inverter mantiene a 27.5V con +2A, per ore.** Dei 587 minuti passati
+  sopra 27.4V, 536 leggono esattamente +2A, 48 leggono +1A e un solo minuto
+  legge 0A. Un pacco pieno non può assorbire 2A per cinque ore: è la
+  lettura ad Ampere interi del PI30 di una piccola corrente di
+  mantenimento. Con `tail_current_a = 0` l'aggancio al 100% non è mai
+  scattato; ora è 2A, che con la soglia di 27.4V resta un test di "pieno"
+  sicuro.
+- **Il contatore di carica vale circa il doppio di quello di scarica tra
+  gli stessi due stati.** Riposo mattutino a 26.4V → pieno: il contatore di
+  carica è salito di 2.50 kWh (giorno 1) e 2.05 kWh (giorno 2). Pieno → lo
+  stesso riposo a 26.4V: il contatore di scarica è salito di 1.20 e 1.11
+  kWh. Il lato scarica è giusto — coincide con la potenza in uscita
+  dell'inverter integrata sulle stesse notti (1.20 contro 1.27 kWh, la
+  differenza sono le perdite dell'inverter) — quindi il PI30 riporta circa
+  il doppio della corrente di carica che entra davvero nel pacco (39A per
+  due ore, mentre il pacco poteva accettarne circa 45Ah). Da qui
+  `charge_efficiency = 0.5` invece dello 0.93 da manuale. Se cambia il pacco
+  o l'inverter, rifai questo controllo dalle righe che gli agganci scrivono
+  nel Registro: aumento del contatore di carica tra uno 0% (o uno stato a
+  riposo noto) e il 100% successivo, contro l'aumento del contatore di
+  scarica al ritorno.
+
+**Valore di partenza.** Il contatore si muove solo con l'energia, quindi ha
+bisogno di un primo valore sensato: con il pacco a riposo a 26.4-26.5V dopo
+una notte normale (circa 1.2 kWh prelevati dal pieno, capacità 4.5 kWh) è
+all'incirca **70-75%**. Imposta l'helper Numero a mano su quel valore una
+volta sola; la prima carica completa lo aggancia al 100% e da lì il
+conteggio è esatto.
 - **Costanti degli agganci**: `tail_current_a` (0A),
   `internal_resistance_ohm` (0.0095), `full_margin_v` (0.1V sotto il float
   per il 100%), `full_floor_v` (27.2V, la tensione più bassa che può mai

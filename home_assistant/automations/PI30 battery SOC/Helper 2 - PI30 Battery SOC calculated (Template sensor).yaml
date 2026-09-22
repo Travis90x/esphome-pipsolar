@@ -1,0 +1,26 @@
+# Helper 2 of 2 for "Automation - PI30 Battery SOC Energy Counting.yaml".
+#
+# A proper battery sensor for dashboards and graphs, rounded to whole
+# percent, reading Helper 1 (create Helper 1 first). Optional: Helper 1 can
+# be shown directly, this one only makes it look like any other SOC sensor.
+#
+# From the UI (no configuration.yaml needed):
+#   Settings > Devices & services > Helpers > Create helper > Template > Sensor
+#   Name: Heltec PI30 Display PI30 battery SOC calculated
+#         (yields sensor.heltec_pi30_display_pi30_battery_soc_calculated,
+#          the id the dashboards in home_assistant/dashboard use)
+#   Unit: %   Device class: Battery   State class: Measurement
+#   State template:
+#     {{ states('input_number.pi30_battery_soc_calculated') | float(default=0) | round(0) }}
+#
+# Or, equivalently, in configuration.yaml (then restart):
+template:
+  - sensor:
+      - name: Heltec PI30 Display PI30 battery SOC calculated
+        unique_id: heltec_pi30_display_pi30_battery_soc_calculated
+        unit_of_measurement: "%"
+        device_class: battery
+        state_class: measurement
+        state: >-
+          {{ states('input_number.pi30_battery_soc_calculated') | float(default=0) | round(0) }}
+        availability: "{{ has_value('input_number.pi30_battery_soc_calculated') }}"

@@ -604,6 +604,34 @@ routinely**: doing so on every voltage tick-up turns the sensor back into
 something based on instantaneous voltage alone, defeating the point of
 energy counting (see the warning in the script's own description).
 
+**Voltage correction.** The count alone cannot know where it started: set
+wrong (a stale 100, a helper created mid-discharge) it would stay wrong until
+the next full charge. So every minute the voltage, compensated for the current
+with the steady-state resistance measured on this pack (11.3 mOhm), is turned
+into a SOC through a table measured from two days of history, and the count is
+pulled towards it — only when the voltage can be trusted, and only when it
+clearly disagrees:
+
+| Compensated voltage (V) | 24.00 | 25.40 | 25.90 | 26.18 | 26.30 | 26.42 | 26.53 | 26.63 | 26.67 | 26.70 | 26.72 | 26.75 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| SOC (%) | 0 | 10 | 30 | 50 | 60 | 70 | 75 | 80 | 85 | 90 | 95 | 99 |
+
+- **Trusted** means discharging or idle, at most 30A, with the charger off for at
+  least 30 minutes: right after a charge, surface charge makes any pack look
+  full, and while charging the voltage says nothing.
+- **Clearly disagrees** means outside the band of SOCs compatible with the
+  reading ±0.1V (the PI30 reports 0.1V steps). Inside the band the count wins;
+  outside, the count closes 1/20 of the gap per minute.
+- On the flat top (85-99%) the band is about 20 points wide and the voltage
+  rarely overrides the count; from about 80% down it does. Example: 26.3V at
+  -9A is 26.40V compensated, band 60-74%, and a counter stuck at 98% comes
+  down to about 73% within an hour.
+- The 70-99% part of the table is measured (SOC reconstructed from the energy
+  counters between two full charges, fitted as V = 25.32 + 0.0152·SOC +
+  0.0113·I, residual 0.06V). Below 70%, never reached in the data, it follows
+  the usual LiFePO4 curve down to the 0% anchor voltage. The correction never
+  writes exactly 100 or 0: that stays with the two anchors.
+
 **Tuning:**
 - **Pack capacity**: `capacity_kwh` (4.5 kWh, the energy delivered from
   100% to 0%) and `charge_efficiency` (0.93) in the automation (`actions`

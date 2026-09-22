@@ -73,6 +73,40 @@ description: >-
   trickles in float, and it is worth it: a stale 100 (from an earlier
   wrong anchor, or set by hand) must not sit there while the pack
   swallows 5A for hours.
+  VOLTAGE CORRECTION. The count alone cannot know where it started:
+  if it was set wrong (a stale 100, a helper created mid-discharge) it
+  would stay wrong until the next full charge. So every minute the
+  measured voltage, compensated for the current, is turned into a SOC
+  through a table measured on this pack (ocv_v / ocv_soc below), and
+  the count is pulled towards it - but only when the voltage can be
+  trusted and only when it clearly disagrees:
+    - trusted: discharging or idle (0 >= current >= -30A), and the
+      charger has been off for at least 30 minutes (charge power 0 and
+      unchanged for 30 min), otherwise surface charge after a charge
+      and the charging overvoltage make any pack look full;
+    - clearly disagrees: the PI30 reports voltage in 0.1V steps, so
+      the table is read at voltage_ocv - 0.1V and + 0.1V, giving a
+      band of SOCs the voltage is compatible with. Inside the band
+      nothing happens (the count is more precise than the voltage);
+      outside, the count moves towards the nearest edge of the band,
+      closing 1/20 of the gap per minute (20-minute time constant), so
+      a single odd reading barely moves it.
+  On the flat top of the curve (85-99%) the band is 20 points wide
+  and the voltage almost never overrides the count; from about 80%
+  down it is 10-15 points wide and does. Example: 26.3V at -9A is
+  26.40V compensated, band 60-74%: a counter stuck at 98% comes down
+  to about 75% in about an hour, then the count takes over again.
+  The table was measured from two days of history (20-22 Sep 2026):
+  SOC reconstructed from the energy counters between two full
+  charges, voltage fitted against SOC and current (V = 25.32 +
+  0.0152*SOC + 0.0113*I, residual 0.06V). The 70-99% part is those
+  measurements; below 70% (never reached in the data) it follows the
+  usual LiFePO4 curve down to 0% at the empty anchor voltage (24.0V).
+  The steady-state resistance used here, correction_resistance_ohm =
+  0.0113, is higher than internal_resistance_ohm = 0.0095 of the
+  anchors because it includes the slow polarisation of a pack that
+  has been delivering current for minutes, not just the instant drop.
+  The correction never writes exactly 100 or 0.
   ANCHORS. Only the two template triggers below may write exactly 100
   and exactly 0, to remove the drift of the count (and its wrong
   capacity/efficiency, if any), and each one fires only once its
@@ -188,6 +222,19 @@ actions:
       capacity_kwh: 4.5
       charge_efficiency: 0.5
       max_dt_hours: "{{ 5 / 60 }}"
+      correction_resistance_ohm: 0.0113
+      correction_band_v: 0.1
+      correction_tau_min: 20
+      correction_max_current_a: 30
+      correction_rest_min: 30
+      ocv_v: [24.0, 24.8, 25.4, 25.7, 25.9, 26.05, 26.18, 26.30, 26.42, 26.53, 26.63, 26.67, 26.70, 26.72, 26.75]
+      ocv_soc: [0, 5, 10, 20, 30, 40, 50, 60, 70, 75, 80, 85, 90, 95, 99]
+      voltage: >-
+        {{ states('sensor.heltec_pi30_battery_voltage') | float(default=none)
+        }}
+      current: >-
+        {{ states('sensor.heltec_pi30_battery_current') | float(default=none)
+        }}
       charge_kw: >-
         {% set p = states('sensor.heltec_pi30_batteria_potenza_carica') | float(default=none) %}
         {% set unit = state_attr('sensor.heltec_pi30_batteria_potenza_carica', 'unit_of_measurement') %}
@@ -203,6 +250,33 @@ actions:
         {% set last = this.attributes.last_triggered if this is not none else none %}
         {% set ts = as_timestamp(last, default=none) if last is not none else none %}
         {{ 0 if ts is none else ([(now().timestamp() - ts) / 3600, max_dt_hours] | min) }}
+      charger_off_long_enough: >-
+        {% set s = states.sensor.heltec_pi30_batteria_potenza_carica %}
+        {{ s is not none and (s.state | float(default=1)) == 0
+           and (now() - s.last_changed).total_seconds() >= correction_rest_min * 60 }}
+      voltage_band: >-
+        {% macro soc_at(v) -%}
+          {%- set ns = namespace(r=none) -%}
+          {%- if v <= ocv_v[0] -%}{%- set ns.r = ocv_soc[0] -%}
+          {%- elif v >= ocv_v[-1] -%}{%- set ns.r = ocv_soc[-1] -%}
+          {%- else -%}
+            {%- for i in range(1, ocv_v | length) -%}
+              {%- if ns.r is none and v <= ocv_v[i] -%}
+                {%- set ns.r = ocv_soc[i-1] + (ocv_soc[i] - ocv_soc[i-1]) * (v - ocv_v[i-1]) / (ocv_v[i] - ocv_v[i-1]) -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+          {{- ns.r -}}
+        {%- endmacro %}
+        {% if voltage is none or current is none or not charger_off_long_enough
+              or current > 0 or current < -correction_max_current_a %}
+          {{ none }}
+        {% else %}
+          {% set v_ocv = voltage - current * correction_resistance_ohm %}
+          {% set lo = soc_at(v_ocv - correction_band_v) | float %}
+          {% set hi = soc_at(v_ocv + correction_band_v) | float %}
+          {{ [lo, 100 if hi >= 99 else hi] }}
+        {% endif %}
       readings: >-
         V={{ states('sensor.heltec_pi30_battery_voltage') }}V
         I={{ states('sensor.heltec_pi30_battery_current') }}A
@@ -252,11 +326,19 @@ actions:
           value: >-
             {% set delta = (charge_kw * charge_efficiency - discharge_kw) * dt_hours / capacity_kwh * 100 %}
             {% if delta > 0 %}
-              {{ [soc_now + delta, 99] | min | round(3) }}
+              {% set counted = [soc_now + delta, 99] | min %}
             {% elif delta < 0 %}
-              {{ [soc_now + delta, [1, soc_now] | min] | max | round(3) }}
+              {% set counted = [soc_now + delta, [1, soc_now] | min] | max %}
             {% else %}
-              {{ soc_now }}
+              {% set counted = soc_now %}
+            {% endif %}
+            {% if voltage_band is none %}
+              {{ counted | round(3) }}
+            {% else %}
+              {% set target = [[counted, voltage_band[0]] | max, voltage_band[1]] | min %}
+              {% set gain = 1 - e ** (-(dt_hours * 60) / correction_tau_min) %}
+              {% set corrected = counted + gain * (target - counted) %}
+              {{ [[corrected, [1, counted] | min] | max, [99, counted] | max] | min | round(3) }}
             {% endif %}
         action: input_number.set_value
 mode: single

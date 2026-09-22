@@ -623,6 +623,35 @@ po' riporta il sensore a essere basato sulla sola tensione istantanea,
 vanificando il senso del conteggio dell'energia (vedi l'avviso nella descrizione
 dello script stesso).
 
+**Correzione con la tensione.** Il conteggio da solo non sa da dove è partito:
+se è partito sbagliato (un 100 stantio, un helper creato a metà scarica)
+resterebbe sbagliato fino alla carica completa successiva. Quindi ogni minuto
+la tensione, compensata per la corrente con la resistenza a regime misurata su
+questo pacco (11.3 mOhm), viene trasformata in SOC con una tabella ricavata da
+due giorni di storico, e il conteggio viene tirato verso quel valore — solo
+quando la tensione è affidabile, e solo quando è chiaramente in disaccordo:
+
+| Tensione compensata (V) | 24.00 | 25.40 | 25.90 | 26.18 | 26.30 | 26.42 | 26.53 | 26.63 | 26.67 | 26.70 | 26.72 | 26.75 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| SOC (%) | 0 | 10 | 30 | 50 | 60 | 70 | 75 | 80 | 85 | 90 | 95 | 99 |
+
+- **Affidabile** vuol dire in scarica o a riposo, al massimo 30A, con il
+  caricatore spento da almeno 30 minuti: subito dopo una carica la carica
+  superficiale fa sembrare pieno qualunque pacco, e durante la carica la
+  tensione non dice nulla.
+- **Chiaramente in disaccordo** vuol dire fuori dalla fascia di SOC compatibili
+  con la lettura ±0.1V (il PI30 riporta passi da 0.1V). Dentro la fascia vince
+  il conteggio; fuori, il conteggio recupera 1/20 della differenza al minuto.
+- Sul tratto piatto in alto (85-99%) la fascia è larga circa 20 punti e la
+  tensione corregge raramente; da circa l'80% in giù corregge. Esempio: 26.3V
+  a -9A sono 26.40V compensati, fascia 60-74%, e un contatore fermo al 98%
+  scende a circa il 73% in un'ora.
+- La parte 70-99% della tabella è misurata (SOC ricostruito dai contatori di
+  energia tra due cariche complete, V = 25.32 + 0.0152·SOC + 0.0113·I, residuo
+  0.06V). Sotto il 70%, mai raggiunto nei dati, segue la curva LiFePO4 tipica
+  fino alla tensione dell'aggancio a 0%. La correzione non scrive mai
+  esattamente 100 o 0: quello resta ai due agganci.
+
 **Taratura:**
 - **Capacità pacco**: `capacity_kwh` (4.5 kWh, l'energia erogata dal 100%
   allo 0%) e `charge_efficiency` (0.93) nell'automazione (`actions` →

@@ -5,21 +5,35 @@ description: >-
   the LiFePO4 Volt/SOC curve is too flat in the mid-range and shifts
   depending on how much the battery is drawing/delivering at that
   moment, so voltage alone is not enough (26.6V at 5A for four hours
-  says nothing about the SOC; 20Ah moved in four hours does).
-  COUNTING. Nothing is integrated here: the two lifetime energy
-  counters that already exist in Home Assistant,
-  sensor.heltec_pi30_batteria_energia_caricata (energy pushed into the
-  battery) and sensor.heltec_pi30_batteria_energia_scaricata (energy
-  drawn out of it), never reset, so every time one of them changes a
-  state trigger hands over its previous and its new value
-  (trigger.from_state / trigger.to_state) and the difference is the
-  energy moved since the last tick. That needs no helper to remember
-  the previous value and no integral of the current in the automation:
-  the counters keep running while this automation is off, and a tick
-  is never counted twice (mode: queued, so back-to-back ticks from the
-  two sensors are handled one after the other instead of dropped).
-    SOC += charged_kwh * charge_efficiency / capacity_kwh * 100
-    SOC -= discharged_kwh / capacity_kwh * 100
+  says nothing about the SOC; 0.5 kWh moved in four hours does).
+  IT WRITES INTO input_number.pi30_battery_soc_calculated, a Number
+  helper you create once from the UI (Settings > Helpers > Number,
+  name "PI30 battery SOC calculated", 0..100, step 0.1). If the
+  automation editor shows "entity not found" next to that id, the
+  helper does not exist or has another id: nothing can work until it
+  does, and whatever SOC you are looking at is another sensor (the
+  inverter's own sensor.heltec_pi30_battery_soc, voltage-based and
+  happily stuck at 100%).
+  COUNTING. Once a minute (and at Home Assistant startup, and whenever
+  you run the automation by hand) it reads the battery charge and
+  discharge power (sensor.heltec_pi30_batteria_potenza_carica and
+  sensor.heltec_pi30_batteria_potenza_scarica, the same two sensors
+  your lifetime energy counters are built on) and multiplies them by
+  the REAL time elapsed since the previous run (from
+  this.attributes.last_triggered, so a late run, an anchor run in
+  between, a restart or a manual run never count a wrong amount of
+  time), capped at max_dt_hours (5 minutes) so that a long outage does
+  not integrate the power read at boot over hours of unknown history:
+    SOC += charge_kw * charge_efficiency * hours / capacity_kwh * 100
+    SOC -= discharge_kw * hours / capacity_kwh * 100
+  Why not the two lifetime kWh counters directly? They tick every 10
+  seconds, and counting their ticks means running this automation
+  every 10 seconds (logbook and history full of it). Using them once a
+  minute instead would need a second helper to remember the counter
+  value of the previous run, and this setup is meant to stay at one
+  helper. Integrating the same power once a minute gives the same
+  kWh, only sampled every 60 s instead of every 10 s, which for a
+  battery is no loss at all.
   capacity_kwh = 4.5 is the energy the pack DELIVERS from 100% to 0%
   (discharge side). charge_efficiency = 0.93 is how much of each kWh
   pushed in comes back out: the pack charges at 27-28V and discharges
@@ -27,14 +41,13 @@ description: >-
   (26/27.5 = 0.945), and a few % more are lost as heat and balancing.
   Both are tunable from the readings the anchors write in the Logbook
   (see ANCHORS): between a 0% anchor and the next 100% anchor the rise
-  of the charged counter is capacity_kwh / charge_efficiency; between
-  a 100% anchor and the next 0% anchor the rise of the discharged
-  counter is capacity_kwh itself.
-  A tick is ignored when either value is not a number (sensor
-  unavailable, startup), when the counter went DOWN (a reset) or when
-  it jumped by more than max_step_kwh (0.5 kWh, a glitch: no real tick
-  moves 11% of the pack at once). The counters' unit is read from the
-  sensor (Wh, kWh or MWh) and converted to kWh.
+  of sensor.heltec_pi30_batteria_energia_caricata is capacity_kwh /
+  charge_efficiency; between a 100% anchor and the next 0% anchor the
+  rise of sensor.heltec_pi30_batteria_energia_scaricata is
+  capacity_kwh itself. The power sensors' unit is read from the
+  sensor (W or kW). The value is stored with 3 decimals: at the 1-2A
+  this pack idles at overnight one step is a few hundredths of a
+  percent, which a 1-decimal rounding would throw away entirely.
   Plain counting can never CLAIM a full or empty pack: rising it stops
   at 99, falling it stops at 1. It may however keep going down from an
   anchored 100 (or up from an anchored 0), so once the pack is anchored
@@ -92,16 +105,16 @@ description: >-
   holds the value on its own and re-anchors the next time the
   condition is re-established. Each anchor also writes a Logbook entry
   with the readings it fired on (voltage, current, thresholds, both
-  energy counters, previous SOC), so a wrong 100% or 0% can be traced
-  to its moment and capacity/efficiency can be calibrated from two
-  consecutive anchors (Logbook, filter on the helper entity). If the
-  pack is already full (or empty) when this automation is loaded, the
-  anchor waits for the next episode: set the helper by hand once, as
-  the README says.
+  lifetime energy counters, previous SOC), so a wrong 100% or 0% can
+  be traced to its moment and capacity/efficiency can be calibrated
+  from two consecutive anchors (Logbook, filter on the helper entity).
+  If the pack is already full (or empty) when this automation is
+  loaded, the anchor waits for the next episode: set the helper by
+  hand once, as the README says.
   CONSTANTS live in trigger_variables (used by the two anchor
   triggers; Home Assistant does not expose them to the actions) and in
-  actions > variables (capacity, efficiency, glitch cap). full_floor_v
-  = 27.2 (V): change it only for a different chemistry or cell count
+  actions > variables (capacity, efficiency, time cap). full_floor_v =
+  27.2 (V): change it only for a different chemistry or cell count
   (3.40V per cell for LiFePO4). tail_current_a = 0 (A): the pack must
   not be absorbing anything for the 100% anchor to fire. Watch the
   sensor over a full charge cycle: if it never reaches 100% because the
@@ -117,7 +130,8 @@ description: >-
   repository's main README.md ("Home Assistant automations" section,
   "Real SOC via energy counting") for the method and how to recompute
   it if the pack changes. The hold times are the "for" of each anchor
-  trigger.
+  trigger. The cadence trigger can be changed freely: the elapsed time
+  is measured, nothing else depends on it.
 trigger_variables:
   tail_current_a: 0
   internal_resistance_ohm: 0.0095
@@ -125,12 +139,12 @@ trigger_variables:
   full_floor_v: 27.2
   empty_margin_v: 0.2
 triggers:
-  - trigger: state
-    id: charged
-    entity_id: sensor.heltec_pi30_batteria_energia_caricata
-  - trigger: state
-    id: discharged
-    entity_id: sensor.heltec_pi30_batteria_energia_scaricata
+  - trigger: time_pattern
+    id: cadence
+    minutes: /1
+  - trigger: homeassistant
+    id: startup
+    event: start
   - trigger: template
     id: full_hold
     value_template: >-
@@ -156,10 +170,22 @@ actions:
   - variables:
       capacity_kwh: 4.5
       charge_efficiency: 0.93
-      max_step_kwh: 0.5
+      max_dt_hours: "{{ 5 / 60 }}"
+      charge_kw: >-
+        {% set p = states('sensor.heltec_pi30_batteria_potenza_carica') | float(default=none) %}
+        {% set unit = state_attr('sensor.heltec_pi30_batteria_potenza_carica', 'unit_of_measurement') %}
+        {{ none if p is none else (p if unit == 'kW' else p / 1000) }}
+      discharge_kw: >-
+        {% set p = states('sensor.heltec_pi30_batteria_potenza_scarica') | float(default=none) %}
+        {% set unit = state_attr('sensor.heltec_pi30_batteria_potenza_scarica', 'unit_of_measurement') %}
+        {{ none if p is none else (p if unit == 'kW' else p / 1000) }}
       soc_now: >-
         {{ states('input_number.pi30_battery_soc_calculated') |
         float(default=50) }}
+      dt_hours: >-
+        {% set last = this.attributes.last_triggered if this is not none else none %}
+        {% set ts = as_timestamp(last, default=none) if last is not none else none %}
+        {{ 0 if ts is none else ([(now().timestamp() - ts) / 3600, max_dt_hours] | min) }}
       readings: >-
         V={{ states('sensor.heltec_pi30_battery_voltage') }}V
         I={{ states('sensor.heltec_pi30_battery_current') }}A
@@ -168,21 +194,6 @@ actions:
         charged={{ states('sensor.heltec_pi30_batteria_energia_caricata') }}
         discharged={{ states('sensor.heltec_pi30_batteria_energia_scaricata') }}
         soc_before={{ states('input_number.pi30_battery_soc_calculated') }}
-      step_kwh: >-
-        {% if trigger.id not in ['charged', 'discharged'] or trigger.from_state is none or trigger.to_state is none %}
-          0
-        {% else %}
-          {% set before = trigger.from_state.state | float(default=none) %}
-          {% set after = trigger.to_state.state | float(default=none) %}
-          {% set unit = trigger.to_state.attributes.unit_of_measurement | default('kWh') %}
-          {% set to_kwh = {'Wh': 0.001, 'kWh': 1, 'MWh': 1000}.get(unit, 1) %}
-          {% if before is none or after is none %}
-            0
-          {% else %}
-            {% set step = (after - before) * to_kwh %}
-            {{ step if 0 < step <= max_step_kwh else 0 }}
-          {% endif %}
-        {% endif %}
   - choose:
       - conditions:
           - condition: trigger
@@ -212,31 +223,24 @@ actions:
               name: PI30 Battery SOC
               entity_id: input_number.pi30_battery_soc_calculated
               message: "anchored to 0% after 1 min at empty threshold ({{ readings }})"
-      - conditions:
-          - condition: trigger
-            id: charged
+    default:
+      - if:
           - condition: template
-            value_template: "{{ step_kwh > 0 }}"
-        sequence:
-          - target:
-              entity_id: input_number.pi30_battery_soc_calculated
-            data:
-              value: >-
-                {{ [soc_now + step_kwh * charge_efficiency / capacity_kwh * 100, 99] | min | round(3) }}
-            action: input_number.set_value
-      - conditions:
-          - condition: trigger
-            id: discharged
-          - condition: template
-            value_template: "{{ step_kwh > 0 }}"
-        sequence:
-          - target:
-              entity_id: input_number.pi30_battery_soc_calculated
-            data:
-              value: >-
-                {{ [soc_now - step_kwh / capacity_kwh * 100, [1, soc_now] | min] | max | round(3) }}
-            action: input_number.set_value
-    default: []
-mode: queued
-max: 10
+            value_template: "{{ charge_kw is none or discharge_kw is none or dt_hours <= 0 }}"
+        then:
+          - stop: Battery power unavailable or no elapsed time, no update
+      - target:
+          entity_id: input_number.pi30_battery_soc_calculated
+        data:
+          value: >-
+            {% set delta = (charge_kw * charge_efficiency - discharge_kw) * dt_hours / capacity_kwh * 100 %}
+            {% if delta > 0 %}
+              {{ [soc_now + delta, 99] | min | round(3) }}
+            {% elif delta < 0 %}
+              {{ [soc_now + delta, [1, soc_now] | min] | max | round(3) }}
+            {% else %}
+              {{ soc_now }}
+            {% endif %}
+        action: input_number.set_value
+mode: single
 max_exceeded: silent

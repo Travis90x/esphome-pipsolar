@@ -448,16 +448,15 @@ interna). Un sensore SOC basato solo sulla tensione istantanea (come
 impreciso proprio nel mezzo della curva, dove serve di più.
 
 **Come funziona.** Invece di leggere il SOC dalla tensione, si conta
-l'energia che entra ed esce dal pacco, usando i due contatori di energia
-totale che esistono già in Home Assistant
-(`sensor.heltec_pi30_batteria_energia_caricata` e
-`sensor.heltec_pi30_batteria_energia_scaricata`, kWh entrati e usciti dalla
-batteria, mai azzerati) rispetto alla capacità utile del pacco in kWh.
-L'automazione non integra nulla: ogni volta che uno dei due contatori
-cambia, un trigger di stato fornisce il valore precedente e quello nuovo, e
-la differenza è l'energia mossa dall'ultimo scatto. 26.6V a 5A per quattro
-ore non dicono nulla sul SOC; 20Ah mossi in quattro ore sì. Il conteggio
-puro deriva nel tempo (e si porta dietro ogni errore sulla capacità), quindi
+l'energia che entra ed esce dal pacco rispetto alla sua capacità utile in
+kWh: una volta al minuto (e all'avvio, e ogni volta che esegui
+l'automazione a mano) legge la potenza di carica e di scarica della
+batteria (`sensor.heltec_pi30_batteria_potenza_carica` e
+`sensor.heltec_pi30_batteria_potenza_scarica`, gli stessi due sensori su cui
+sono costruiti i contatori di kWh totali) e la moltiplica per il tempo reale
+trascorso dall'esecuzione precedente. 26.6V a 5A per quattro ore non dicono
+nulla sul SOC; 0.5 kWh mossi in quattro ore sì. Il conteggio puro deriva nel
+tempo (e si porta dietro ogni errore sulla capacità), quindi
 la stima viene riagganciata ai due estremi usando una tensione compensata
 per la caduta resistiva interna anziché quella grezza (`voltage_ocv =
 voltage - current * internal_resistance_ohm`, stessa convenzione di segno
@@ -514,7 +513,7 @@ sulla transizione falso → vero della sua condizione, e si riarma solo dopo
 che la condizione è tornata falsa. Ogni aggancio scrive anche una riga nel
 **Registro** (Logbook) con le letture su cui è scattato (tensione,
 corrente, soglie di float e under-voltage, entrambi i contatori di
-energia, SOC precedente), così un 100% o
+energia totale, SOC precedente), così un 100% o
 uno 0% sbagliato si può ricondurre al momento esatto: apri il Registro e
 filtra su `input_number.pi30_battery_soc_calculated`. È questo che permette
 a un pacco pieno
@@ -524,26 +523,34 @@ alta. Se il pacco è già pieno (o vuoto) quando carichi l'automazione per
 la prima volta, l'aggancio aspetta l'episodio successivo: imposta l'helper
 Number a mano una volta, come descritto nel setup qui sotto.
 
-Tra i due estremi il SOC si muove solo con i contatori di energia:
+Tra i due estremi il SOC si muove solo con l'energia mossa:
 
 ```
-SOC += kwh_caricati × charge_efficiency / capacity_kwh × 100
-SOC -= kwh_scaricati / capacity_kwh × 100
+SOC += kW_carica × charge_efficiency × ore / capacity_kwh × 100
+SOC -= kW_scarica × ore / capacity_kwh × 100
 ```
 
-`capacity_kwh` (4.5) è l'energia che il pacco *eroga* dal 100% allo 0%
-(lato scarica). `charge_efficiency` (0.93) è quanta parte di ogni kWh
-immesso torna fuori: il pacco si carica a 27-28V e si scarica a circa 26V,
-quindi gli stessi Ah sono più kWh in entrata che in uscita (26/27.5 ≈
-0.945), e qualche punto in più si perde in calore e bilanciamento. Uno
-scatto viene ignorato se uno dei due valori non è un numero (sensore non
-disponibile, avvio), se il contatore è *sceso* (un azzeramento) o se è
-saltato di più di `max_step_kwh` (0.5 kWh, un glitch: nessuno scatto reale
-muove l'11% del pacco in un colpo). L'unità dei contatori è letta dal
-sensore (Wh, kWh o MWh) e convertita in kWh. L'automazione gira in modalità
-`queued`, così scatti ravvicinati dei due sensori vengono gestiti uno dopo
-l'altro, mai persi. Il valore è salvato con 3 decimali; il sensore template
-lo arrotonda per la visualizzazione.
+`ore` è il tempo **misurato** dall'esecuzione precedente (dal
+`last_triggered` dell'automazione stessa), limitato a 5 minuti perché un
+lungo fermo non integri la potenza letta al riavvio su ore di storia
+sconosciuta. `capacity_kwh` (4.5) è l'energia che il pacco *eroga* dal 100%
+allo 0% (lato scarica). `charge_efficiency` (0.93) è quanta parte di ogni
+kWh immesso torna fuori: il pacco si carica a 27-28V e si scarica a circa
+26V, quindi gli stessi Ah sono più kWh in entrata che in uscita (26/27.5 ≈
+0.945), e qualche punto in più si perde in calore e bilanciamento. L'unità
+dei sensori di potenza è letta dal sensore (W o kW). Il valore è salvato con
+3 decimali (agli 1-2A a cui questo pacco sta fermo di notte un passo vale
+pochi centesimi di percento, che un arrotondamento a 1 decimale butterebbe
+via del tutto); il sensore template lo arrotonda per la visualizzazione.
+
+Perché non leggere direttamente i due contatori di kWh totali? Scattano ogni
+10 secondi, e contare i loro scatti vuol dire eseguire l'automazione ogni 10
+secondi, con registro e storico pieni di esecuzioni. Usarli una volta al
+minuto richiederebbe un secondo helper per ricordare il valore del
+contatore all'esecuzione precedente, e questo setup deve restare a un solo
+helper. Integrare la stessa potenza una volta al minuto dà gli stessi kWh,
+solo campionati ogni 60 s invece che ogni 10 s, che per una batteria non è
+nessuna perdita.
 
 Il conteggio puro non può mai *dichiarare* un pacco pieno o vuoto: in
 salita si ferma a 99, in discesa a 1. Può però continuare a scendere da un
@@ -557,18 +564,26 @@ qui sopra scrivono esattamente 100 e esattamente 0.
 
 **Setup — 2 helper, tutto da UI, niente `configuration.yaml`:**
 
-Prerequisito: due contatori di energia sempre crescenti per la batteria,
-`sensor.heltec_pi30_batteria_energia_caricata` (kWh caricati) e
-`sensor.heltec_pi30_batteria_energia_scaricata` (kWh scaricati), mai
-azzerati — i soliti helper *Integrale* (somma di Riemann) sulla potenza di
-carica e di scarica della batteria. Va bene qualunque unità tra Wh, kWh e
-MWh.
+Prerequisito: i sensori di potenza di carica e di scarica della batteria
+`sensor.heltec_pi30_batteria_potenza_carica` e
+`sensor.heltec_pi30_batteria_potenza_scarica` (W o kW, entrambi ≥ 0), più,
+per le note di taratura che gli agganci scrivono nel Registro, i due
+contatori di kWh totali `sensor.heltec_pi30_batteria_energia_caricata` e
+`sensor.heltec_pi30_batteria_energia_scaricata` costruiti su di essi.
 
 1. **Helper "Numero"** (Impostazioni → Dispositivi e servizi → Helper →
    Crea helper → Numero): Nome `PI30 battery SOC calculated`, icona
    `mdi:battery-unknown`, min `0`, max `100`, passo `0.1`, unità `%`. Crea
    `input_number.pi30_battery_soc_calculated`, il contenitore del valore
-   grezzo su cui scrive l'automazione. Al primo salvataggio impostalo a un
+   grezzo su cui scrive l'automazione. **L'entity id deve essere
+   esattamente quello**: apri l'helper, icona ingranaggio, controlla "ID
+   entità" e correggilo se il nome ha prodotto qualcos'altro. Se l'editor
+   dell'automazione mostra "entità non trovata" accanto a
+   `input_number.pi30_battery_soc_calculated`, questo helper manca e niente
+   può funzionare — e il SOC che stai guardando è un altro sensore, quasi
+   certamente `sensor.heltec_pi30_battery_soc` dell'inverter, che è basato
+   sulla tensione e resta beato al 100% per ore. Al primo salvataggio
+   impostalo a un
    valore vicino a quello letto da `sensor.heltec_pi30_battery_soc` —
    l'automazione lo riaggancerà comunque la prima volta che il pacco
    completa una carica (o si svuota). L'automazione ci scrive 3 decimali:
@@ -608,8 +623,9 @@ dello script stesso).
   charge_efficiency`; tra un 100% agganciato e lo 0% successivo, l'aumento
   del contatore di scarica vale `capacity_kwh`. Ogni riga di aggancio nel
   Registro riporta entrambi i contatori in quel momento.
-- **Tetto anti-glitch**: `max_step_kwh` (0.5 kWh), lo scatto singolo più
-  grande a cui si crede.
+- **Cadenza**: 1 minuto (trigger `cadence`). Si può cambiare liberamente: il
+  tempo trascorso è misurato, nient'altro dipende da essa. Il limite di un
+  singolo passo è `max_dt_hours` (5 minuti).
 - **Costanti degli agganci**: `tail_current_a` (0A),
   `internal_resistance_ohm` (0.0095), `full_margin_v` (0.1V sotto il float
   per il 100%), `full_floor_v` (27.2V, la tensione più bassa che può mai

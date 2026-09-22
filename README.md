@@ -438,15 +438,15 @@ A SOC sensor based only on instantaneous voltage (like
 inaccurate exactly in the middle of the curve, where it matters most.
 
 **How it works.** Instead of reading SOC from voltage, it counts the energy
-that goes in and out of the pack, using the two lifetime energy counters
-that already exist in Home Assistant (`sensor.heltec_pi30_batteria_energia_caricata`
-and `sensor.heltec_pi30_batteria_energia_scaricata`, kWh into and out of the
-battery, never reset) against the pack's usable capacity in kWh. Nothing is
-integrated in the automation itself: every time one of the two counters
-changes, a state trigger hands over its previous and its new value, and the
-difference is the energy moved since the last tick. 26.6V at 5A for four
-hours says nothing about the SOC; 20Ah moved in four hours does. Pure
-counting drifts over time (and inherits any error in the capacity), so the
+that goes in and out of the pack against the pack's usable capacity in kWh:
+once a minute (and at startup, and whenever you run the automation by hand)
+it reads the battery charge and discharge power
+(`sensor.heltec_pi30_batteria_potenza_carica` and
+`sensor.heltec_pi30_batteria_potenza_scarica`, the same two sensors the
+lifetime kWh counters are built on) and multiplies them by the real time
+elapsed since the previous run. 26.6V at 5A for four hours says nothing
+about the SOC; 0.5 kWh moved in four hours does. Pure counting drifts over
+time (and inherits any error in the capacity), so the
 estimate is re-anchored at the two extremes using a voltage compensated for
 the internal resistance drop rather than the raw one (`voltage_ocv =
 voltage - current * internal_resistance_ohm`, same sign convention as the
@@ -498,8 +498,8 @@ Both anchors are Home Assistant template triggers with a `for:` hold, so
 each one writes its value **once**, on the false → true transition of its
 condition, and re-arms only after the condition has been false again. Each
 anchor also writes a **Logbook** entry with the readings it fired on
-(voltage, current, float and under-voltage thresholds, both energy
-counters, previous SOC), so a
+(voltage, current, float and under-voltage thresholds, both lifetime
+energy counters, previous SOC), so a
 wrong 100% or 0% can be traced back to the exact moment: open the Logbook
 and filter on `input_number.pi30_battery_soc_calculated`. That
 is what lets a full pack start counting down from 100 the moment current
@@ -508,25 +508,33 @@ long as its voltage stays high. If the pack is already full (or empty)
 when you first load the automation, the anchor waits for the next episode:
 set the Number helper by hand once, as described in the setup below.
 
-Between the two extremes, SOC only moves with the energy counters:
+Between the two extremes, SOC only moves with the energy moved:
 
 ```
-SOC += charged_kwh × charge_efficiency / capacity_kwh × 100
-SOC -= discharged_kwh / capacity_kwh × 100
+SOC += charge_kW × charge_efficiency × hours / capacity_kwh × 100
+SOC -= discharge_kW × hours / capacity_kwh × 100
 ```
 
-`capacity_kwh` (4.5) is the energy the pack *delivers* from 100% to 0%
-(discharge side). `charge_efficiency` (0.93) is how much of each kWh pushed
-in comes back out: the pack charges at 27-28V and discharges at about 26V,
-so the same Ah are more kWh going in than coming out (26/27.5 ≈ 0.945), and
-a few percent more are lost as heat and balancing. A tick is ignored when
-either value is not a number (sensor unavailable, startup), when the counter
-went *down* (a reset) or when it jumped by more than `max_step_kwh` (0.5
-kWh, a glitch: no real tick moves 11% of the pack at once). The counters'
-unit is read from the sensor (Wh, kWh or MWh) and converted to kWh. The
-automation runs in `queued` mode so back-to-back ticks from the two
-sensors are handled one after the other, never dropped. The value is stored
-with 3 decimals; the template sensor rounds it for display.
+`hours` is the **measured** time since the previous run (from the
+automation's own `last_triggered`), capped at 5 minutes so that a long
+outage does not integrate the power read at boot over hours of unknown
+history. `capacity_kwh` (4.5) is the energy the pack *delivers* from 100%
+to 0% (discharge side). `charge_efficiency` (0.93) is how much of each kWh
+pushed in comes back out: the pack charges at 27-28V and discharges at
+about 26V, so the same Ah are more kWh going in than coming out (26/27.5 ≈
+0.945), and a few percent more are lost as heat and balancing. The power
+sensors' unit is read from the sensor (W or kW). The value is stored with 3
+decimals (at the 1-2A this pack idles at overnight one step is a few
+hundredths of a percent, which a 1-decimal rounding would throw away
+entirely); the template sensor rounds it for display.
+
+Why not read the two lifetime kWh counters directly? They tick every 10
+seconds, and counting their ticks means running the automation every 10
+seconds, with the logbook and the history full of it. Using them once a
+minute instead would need a second helper to remember the counter value of
+the previous run, and this setup is meant to stay at one helper.
+Integrating the same power once a minute gives the same kWh, only sampled
+every 60 s instead of every 10 s, which for a battery is no loss at all.
 
 Plain counting can never *claim* a full or empty pack: rising, it stops at
 99; falling, it stops at 1. It may however keep going down from an anchored
@@ -540,17 +548,25 @@ exactly 100 and exactly 0.
 
 **Setup — 2 helpers, all from the UI, no `configuration.yaml`:**
 
-Prerequisite: two ever-increasing energy counters for the battery,
-`sensor.heltec_pi30_batteria_energia_caricata` (kWh charged into it) and
-`sensor.heltec_pi30_batteria_energia_scaricata` (kWh drawn out of it), that
-are never reset — the usual Riemann-sum *Integral* helpers on the battery
-charge and discharge power. Any unit among Wh, kWh and MWh works.
+Prerequisite: the battery charge and discharge power sensors
+`sensor.heltec_pi30_batteria_potenza_carica` and
+`sensor.heltec_pi30_batteria_potenza_scarica` (W or kW, both ≥ 0), plus, for
+the calibration notes the anchors write in the Logbook, the two lifetime
+kWh counters `sensor.heltec_pi30_batteria_energia_caricata` and
+`sensor.heltec_pi30_batteria_energia_scaricata` built on them.
 
 1. **Number helper** (Settings → Devices & services → Helpers → Create
    helper → Number): Name `PI30 battery SOC calculated`, icon
    `mdi:battery-unknown`, min `0`, max `100`, step `0.1`, unit `%`. This
    creates `input_number.pi30_battery_soc_calculated`, the raw value
-   container the automation writes to. On first save, set it to something
+   container the automation writes to. **The entity id must be exactly
+   that one**: open the helper, gear icon, check "Entity ID" and fix it if
+   the name produced something else. If the automation editor shows
+   "entity not found" next to `input_number.pi30_battery_soc_calculated`,
+   this helper is missing and nothing can work — and whatever SOC you are
+   looking at is another sensor, most likely the inverter's own
+   `sensor.heltec_pi30_battery_soc`, which is voltage-based and happily
+   sits at 100% for hours. On first save, set it to something
    close to `sensor.heltec_pi30_battery_soc`'s current reading — the
    automation re-anchors it the first time the pack completes a charge
    (or runs empty) anyway. The automation writes 3 decimals into it; the
@@ -588,8 +604,9 @@ energy counting (see the warning in the script's own description).
   `capacity_kwh / charge_efficiency`; between a 100% anchor and the next 0%
   anchor, the rise of the discharged counter is `capacity_kwh` itself. Each
   anchor's Logbook line carries both counters at that moment.
-- **Glitch cap**: `max_step_kwh` (0.5 kWh), the largest single tick that is
-  believed.
+- **Cadence**: 1 minute (`cadence` trigger). It can be changed freely: the
+  elapsed time is measured, nothing else depends on it. The cap on a single
+  step is `max_dt_hours` (5 minutes).
 - **Anchor constants**: `tail_current_a` (0A), `internal_resistance_ohm`
   (0.0095), `full_margin_v` (0.1V below float for 100%), `full_floor_v`
   (27.2V, the lowest voltage that can ever count as full: change it only

@@ -456,11 +456,19 @@ resistiva interna anziché quella grezza (`voltage_ocv = voltage - current *
 internal_resistance_ohm`, stessa convenzione di segno del sensore
 corrente):
 
-- **100%** (trigger `full_hold`) quando `voltage_ocv` raggiunge la
-  tensione di float (`sensor.heltec_pi30_display_pi30_battery_float_voltage`
-  meno 0.1V di margine) **e** il pacco non è sotto spinta (`current <=
-  tail_current_a`, `0` di default: fermo o in scarica), **entrambe vere
-  ininterrottamente per 5 minuti**. La seconda metà è il test che conta:
+- **100%** (trigger `full_hold`) quando `voltage_ocv` raggiunge la soglia
+  di pieno **e** il pacco non è sotto spinta (`current <= tail_current_a`,
+  `0` di default: fermo o in scarica), **entrambe vere ininterrottamente
+  per 5 minuti**. La soglia di pieno è la *più alta* tra la tensione di
+  float (`sensor.heltec_pi30_display_pi30_battery_float_voltage` meno 0.1V
+  di margine) e un pavimento fisso di **27.2V** (`full_floor_v`, 3.40V per
+  cella × 8). Il pavimento serve perché la tensione di float è quella che
+  qualcuno ha programmato sull'inverter: con un float di 26.8V o meno,
+  "alla tensione di float" è il tratto piatto della curva LiFePO4 (26.6V a
+  riposo può essere qualunque cosa tra il 60% e l'85%) e l'aggancio
+  certificherebbe come 100% un pacco a metà. Sotto i 3.40V per cella una
+  cella LiFePO4 a riposo non è piena, qualunque cosa dicano le impostazioni
+  del caricatore. La seconda metà è il test che conta:
   se il pacco tiene la tensione di float mentre nessuno lo sta caricando,
   quella tensione viene dal suo stato di carica, quindi è davvero pieno —
   senza bisogno di alcun modello. Un pacco che sta ancora assorbendo
@@ -494,7 +502,12 @@ corrente):
 Entrambi gli agganci sono trigger template di Home Assistant con una
 tenuta `for:`, quindi ciascuno scrive il suo valore **una volta sola**,
 sulla transizione falso → vero della sua condizione, e si riarma solo dopo
-che la condizione è tornata falsa. È questo che permette a un pacco pieno
+che la condizione è tornata falsa. Ogni aggancio scrive anche una riga nel
+**Registro** (Logbook) con le letture su cui è scattato (tensione,
+corrente, soglie di float e under-voltage, SOC precedente), così un 100% o
+uno 0% sbagliato si può ricondurre al momento esatto: apri il Registro e
+filtra su `input_number.pi30_battery_soc_calculated`. È questo che permette
+a un pacco pieno
 di iniziare a contare in discesa da 100 nel momento in cui esce corrente,
 invece di essere riscritto a 100 ogni 2 minuti finché la tensione resta
 alta. Se il pacco è già pieno (o vuoto) quando carichi l'automazione per
@@ -512,9 +525,14 @@ notte un passo da 2 minuti vale 0.02-0.04%, che un arrotondamento a 1
 decimale buttava via del tutto (un'intera notte di autoconsumo mai
 contata). L'integrazione pura non può mai *dichiarare* un pacco pieno o
 vuoto: in salita si ferma a 99, in discesa a 1. Può però continuare a
-scendere da un 100 agganciato (o salire da uno 0 agganciato), e tiene il
-100 agganciato attraverso il ±1A di mantenimento dell'inverter. Solo i
-due agganci qui sopra scrivono esattamente 100 e esattamente 0.
+scendere da un 100 agganciato (o salire da uno 0 agganciato). Il contrario
+è volutamente **vietato**: una qualsiasi corrente di carica porta un 100
+agganciato a 99, perché un pacco che sta ancora assorbendo corrente non è
+più certificato pieno. Costa un'oscillazione 100 ↔ 99 mentre l'inverter
+mantiene a ±1A in float, e ne vale la pena: un 100 stantio (da un aggancio
+sbagliato precedente, o messo a mano) non deve restare lì mentre il pacco
+assorbe 5A per ore. Solo i due agganci qui sopra scrivono esattamente 100
+e esattamente 0.
 
 **Setup — 2 helper, tutto da UI, niente `configuration.yaml`:**
 
@@ -559,7 +577,9 @@ dello script stesso).
   (`actions` → `variables`).
 - **Costanti degli agganci**: `tail_current_a` (0A),
   `internal_resistance_ohm` (0.0095), `full_margin_v` (0.1V sotto il float
-  per il 100%) e `empty_margin_v` (0.2V sopra l'under-voltage per lo 0%)
+  per il 100%), `full_floor_v` (27.2V, la tensione più bassa che può mai
+  contare come pieno: cambiala solo per un'altra chimica o un altro numero
+  di celle) e `empty_margin_v` (0.2V sopra l'under-voltage per lo 0%)
   stanno nelle `trigger_variables` dell'automazione, perché gli agganci
   sono trigger e Home Assistant non rende le variabili dei trigger
   visibili alle azioni.

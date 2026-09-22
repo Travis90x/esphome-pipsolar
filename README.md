@@ -445,11 +445,18 @@ at the two extremes using a voltage compensated for the internal resistance
 drop rather than the raw one (`voltage_ocv = voltage - current *
 internal_resistance_ohm`, same sign convention as the current sensor):
 
-- **100%** (`full_hold` trigger) when `voltage_ocv` reaches the float
-  voltage (`sensor.heltec_pi30_display_pi30_battery_float_voltage` minus
-  0.1V margin) **and** the pack is not being pushed (`current <=
+- **100%** (`full_hold` trigger) when `voltage_ocv` reaches the full
+  threshold **and** the pack is not being pushed (`current <=
   tail_current_a`, `0` by default: idle or discharging), **both true
-  continuously for 5 minutes**. The second half is the meaningful test:
+  continuously for 5 minutes**. The full threshold is the *higher* of the
+  float voltage (`sensor.heltec_pi30_display_pi30_battery_float_voltage`
+  minus 0.1V margin) and a fixed floor of **27.2V** (`full_floor_v`, 3.40V
+  per cell × 8). The floor is there because the float voltage is whatever
+  the inverter was programmed with: with a float of 26.8V or lower, "at
+  float voltage" is the flat middle of the LiFePO4 curve (26.6V at rest is
+  anywhere between 60% and 85%) and the anchor would certify a half-full
+  pack as 100%. Below 3.40V per cell a resting LiFePO4 cell is not full,
+  whatever the charger settings say. The second half is the meaningful test:
   if the pack holds the float voltage while nothing is charging it, that
   voltage comes from its own state of charge, so it really is full — no
   model needed. A pack still absorbing current may just be held up there
@@ -480,7 +487,11 @@ internal_resistance_ohm`, same sign convention as the current sensor):
 
 Both anchors are Home Assistant template triggers with a `for:` hold, so
 each one writes its value **once**, on the false → true transition of its
-condition, and re-arms only after the condition has been false again. That
+condition, and re-arms only after the condition has been false again. Each
+anchor also writes a **Logbook** entry with the readings it fired on
+(voltage, current, float and under-voltage thresholds, previous SOC), so a
+wrong 100% or 0% can be traced back to the exact moment: open the Logbook
+and filter on `input_number.pi30_battery_soc_calculated`. That
 is what lets a full pack start counting down from 100 the moment current
 flows out of it, instead of being re-written to 100 every 2 minutes for as
 long as its voltage stays high. If the pack is already full (or empty)
@@ -497,9 +508,14 @@ over hours of unknown history. The value is stored with 3 decimals: at the
 1-decimal rounding would throw away entirely (a whole night of
 self-consumption never counted). Plain integration can never *claim* a
 full or empty pack: rising, it stops at 99; falling, it stops at 1. It may
-however keep going down from an anchored 100 (or up from an anchored 0),
-and it holds an anchored 100 through the inverter's ±1A float trickle.
-Only the two anchors above write exactly 100 and exactly 0.
+however keep going down from an anchored 100 (or up from an anchored 0).
+The reverse is deliberately **not** allowed: any charge current at all
+moves an anchored 100 down to 99, because a pack that is still taking
+current is no longer certified full. That costs a 100 ↔ 99 flicker while
+the inverter trickles ±1A in float, and it is worth it: a stale 100 (from
+an earlier wrong anchor, or set by hand) must not sit there while the pack
+swallows 5A for hours. Only the two anchors above write exactly 100 and
+exactly 0.
 
 **Setup — 2 helpers, all from the UI, no `configuration.yaml`:**
 
@@ -541,8 +557,10 @@ coulomb counting (see the warning in the script's own description).
 - **Pack capacity**: `155` (Ah), the `capacity_ah` variable in the
   automation (`actions` → `variables`).
 - **Anchor constants**: `tail_current_a` (0A), `internal_resistance_ohm`
-  (0.0095), `full_margin_v` (0.1V below float for 100%) and
-  `empty_margin_v` (0.2V above under-voltage for 0%) live in the
+  (0.0095), `full_margin_v` (0.1V below float for 100%), `full_floor_v`
+  (27.2V, the lowest voltage that can ever count as full: change it only
+  for another chemistry or cell count) and `empty_margin_v` (0.2V above
+  under-voltage for 0%) live in the
   automation's `trigger_variables`, because the anchors are triggers and
   Home Assistant does not expose trigger variables to the actions.
 - **Hold times**: the `for:` of the `full_hold` (5 minutes) and

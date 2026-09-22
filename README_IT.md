@@ -433,10 +433,10 @@ trigger:
 
 </details>
 
-### SOC reale via coulomb counting (tensione + corrente)
+### SOC reale via conteggio dell'energia (tensione + energia entrata/uscita)
 
 File: [`home_assistant/automations/PI30 battery SOC/`](<home_assistant/automations/PI30 battery SOC/>)
-- `Automation - PI30 Battery SOC Coulomb Counting.yaml`
+- `Automation - PI30 Battery SOC Energy Counting.yaml`
 - `Script - PI30 Battery SOC Recalibrate from Voltage.yaml`
 
 Il pacco LiFePO4 8S ha una curva Volt/SOC molto piatta tra il 20% e l'80%
@@ -447,14 +447,21 @@ interna). Un sensore SOC basato solo sulla tensione istantanea (come
 `sensor.heltec_pi30_battery_soc`, letto dal protocollo PI30) è quindi
 impreciso proprio nel mezzo della curva, dove serve di più.
 
-**Come funziona.** Invece di leggere il SOC dalla tensione, si integra nel
-tempo la corrente di `sensor.heltec_pi30_battery_current` rispetto alla
-capacità nominale del pacco (155Ah) — il classico "coulomb counting" usato
-dai BMS. Il coulomb counting puro deriva nel tempo, quindi la stima viene
-riagganciata ai due estremi usando una tensione compensata per la caduta
-resistiva interna anziché quella grezza (`voltage_ocv = voltage - current *
-internal_resistance_ohm`, stessa convenzione di segno del sensore
-corrente):
+**Come funziona.** Invece di leggere il SOC dalla tensione, si conta
+l'energia che entra ed esce dal pacco, usando i due contatori di energia
+totale che esistono già in Home Assistant
+(`sensor.heltec_pi30_batteria_energia_caricata` e
+`sensor.heltec_pi30_batteria_energia_scaricata`, kWh entrati e usciti dalla
+batteria, mai azzerati) rispetto alla capacità utile del pacco in kWh.
+L'automazione non integra nulla: ogni volta che uno dei due contatori
+cambia, un trigger di stato fornisce il valore precedente e quello nuovo, e
+la differenza è l'energia mossa dall'ultimo scatto. 26.6V a 5A per quattro
+ore non dicono nulla sul SOC; 20Ah mossi in quattro ore sì. Il conteggio
+puro deriva nel tempo (e si porta dietro ogni errore sulla capacità), quindi
+la stima viene riagganciata ai due estremi usando una tensione compensata
+per la caduta resistiva interna anziché quella grezza (`voltage_ocv =
+voltage - current * internal_resistance_ohm`, stessa convenzione di segno
+del sensore corrente):
 
 - **100%** (trigger `full_hold`) quando `voltage_ocv` raggiunge la soglia
   di pieno **e** il pacco non è sotto spinta (`current <= tail_current_a`,
@@ -477,7 +484,9 @@ corrente):
   prova che il pacco sia pieno — caricare a 2A perché non c'è surplus
   fotovoltaico non è la stessa cosa di una carica che è calata perché la
   batteria non accetta più nulla. Per questo la soglia di default è 0 e
-  non un valore di "corrente di coda". I 5 minuti di tenuta filtrano la
+  non un valore di "corrente di coda". Nemmeno un conteggio che dice "sono
+  entrati 4.5 kWh" è una prova: si ferma a 99 e aspetta questo aggancio. I
+  5 minuti di tenuta filtrano la
   carica superficiale: appena il caricatore si stacca, un pacco LiFePO4 a
   metà carica resta vicino alla tensione di carica per un minuto o due
   prima di rilassarsi alla sua tensione a riposo.
@@ -504,7 +513,8 @@ tenuta `for:`, quindi ciascuno scrive il suo valore **una volta sola**,
 sulla transizione falso → vero della sua condizione, e si riarma solo dopo
 che la condizione è tornata falsa. Ogni aggancio scrive anche una riga nel
 **Registro** (Logbook) con le letture su cui è scattato (tensione,
-corrente, soglie di float e under-voltage, SOC precedente), così un 100% o
+corrente, soglie di float e under-voltage, entrambi i contatori di
+energia, SOC precedente), così un 100% o
 uno 0% sbagliato si può ricondurre al momento esatto: apri il Registro e
 filtra su `input_number.pi30_battery_soc_calculated`. È questo che permette
 a un pacco pieno
@@ -514,27 +524,45 @@ alta. Se il pacco è già pieno (o vuoto) quando carichi l'automazione per
 la prima volta, l'aggancio aspetta l'episodio successivo: imposta l'helper
 Number a mano una volta, come descritto nel setup qui sotto.
 
-Tra i due estremi il SOC si muove solo per integrazione della corrente.
-Ogni 2 minuti (e all'avvio) il contatore si sposta di `corrente ×
-ore_trascorse / 155Ah × 100`, dove `ore_trascorse` è il tempo
-**misurato** dall'esecuzione precedente (dal `last_triggered`
-dell'automazione stessa), limitato a 6 minuti perché un lungo fermo non
-integri la corrente letta al riavvio su ore di storia sconosciuta. Il
-valore è salvato con 3 decimali: agli 1-2A a cui questo pacco sta fermo di
-notte un passo da 2 minuti vale 0.02-0.04%, che un arrotondamento a 1
-decimale buttava via del tutto (un'intera notte di autoconsumo mai
-contata). L'integrazione pura non può mai *dichiarare* un pacco pieno o
-vuoto: in salita si ferma a 99, in discesa a 1. Può però continuare a
-scendere da un 100 agganciato (o salire da uno 0 agganciato). Il contrario
-è volutamente **vietato**: una qualsiasi corrente di carica porta un 100
-agganciato a 99, perché un pacco che sta ancora assorbendo corrente non è
-più certificato pieno. Costa un'oscillazione 100 ↔ 99 mentre l'inverter
-mantiene a ±1A in float, e ne vale la pena: un 100 stantio (da un aggancio
-sbagliato precedente, o messo a mano) non deve restare lì mentre il pacco
-assorbe 5A per ore. Solo i due agganci qui sopra scrivono esattamente 100
-e esattamente 0.
+Tra i due estremi il SOC si muove solo con i contatori di energia:
+
+```
+SOC += kwh_caricati × charge_efficiency / capacity_kwh × 100
+SOC -= kwh_scaricati / capacity_kwh × 100
+```
+
+`capacity_kwh` (4.5) è l'energia che il pacco *eroga* dal 100% allo 0%
+(lato scarica). `charge_efficiency` (0.93) è quanta parte di ogni kWh
+immesso torna fuori: il pacco si carica a 27-28V e si scarica a circa 26V,
+quindi gli stessi Ah sono più kWh in entrata che in uscita (26/27.5 ≈
+0.945), e qualche punto in più si perde in calore e bilanciamento. Uno
+scatto viene ignorato se uno dei due valori non è un numero (sensore non
+disponibile, avvio), se il contatore è *sceso* (un azzeramento) o se è
+saltato di più di `max_step_kwh` (0.5 kWh, un glitch: nessuno scatto reale
+muove l'11% del pacco in un colpo). L'unità dei contatori è letta dal
+sensore (Wh, kWh o MWh) e convertita in kWh. L'automazione gira in modalità
+`queued`, così scatti ravvicinati dei due sensori vengono gestiti uno dopo
+l'altro, mai persi. Il valore è salvato con 3 decimali; il sensore template
+lo arrotonda per la visualizzazione.
+
+Il conteggio puro non può mai *dichiarare* un pacco pieno o vuoto: in
+salita si ferma a 99, in discesa a 1. Può però continuare a scendere da un
+100 agganciato (o salire da uno 0 agganciato). Il contrario è volutamente
+**vietato**: una qualsiasi carica porta un 100 agganciato a 99, perché un
+pacco che sta ancora assorbendo energia non è più certificato pieno. Costa
+un'oscillazione 100 ↔ 99 mentre l'inverter mantiene in float, e ne vale la
+pena: un 100 stantio (da un aggancio sbagliato precedente, o messo a mano)
+non deve restare lì mentre il pacco assorbe 5A per ore. Solo i due agganci
+qui sopra scrivono esattamente 100 e esattamente 0.
 
 **Setup — 2 helper, tutto da UI, niente `configuration.yaml`:**
+
+Prerequisito: due contatori di energia sempre crescenti per la batteria,
+`sensor.heltec_pi30_batteria_energia_caricata` (kWh caricati) e
+`sensor.heltec_pi30_batteria_energia_scaricata` (kWh scaricati), mai
+azzerati — i soliti helper *Integrale* (somma di Riemann) sulla potenza di
+carica e di scarica della batteria. Va bene qualunque unità tra Wh, kWh e
+MWh.
 
 1. **Helper "Numero"** (Impostazioni → Dispositivi e servizi → Helper →
    Crea helper → Numero): Nome `PI30 battery SOC calculated`, icona
@@ -556,7 +584,7 @@ e esattamente 0.
    proprio utilizzabile in dashboard/grafici come qualsiasi altro sensore
    SOC. Crealo dopo l'helper Numero (legge il suo entity_id).
 
-Poi importa `Automation - PI30 Battery SOC Coulomb Counting.yaml`
+Poi importa `Automation - PI30 Battery SOC Energy Counting.yaml`
 (Impostazioni → Automazioni → Modifica in YAML) per fare l'integrazione e
 la ricalibrazione descritte sopra.
 
@@ -566,15 +594,22 @@ volta sola** `Script - PI30 Battery SOC Recalibrate from Voltage.yaml`
 eseguilo) così il contatore non parte da 0%: interpola linearmente la
 tensione compensata tra i due estremi reali e imposta subito l'helper
 Numero a quella stima. È una retta, non la vera curva del LiFePO4: va bene
-come punto di partenza, non come sostituto del coulomb counting quotidiano.
+come punto di partenza, non come sostituto del conteggio quotidiano.
 **Non rilanciarlo di routine**: farlo ogni volta che la tensione sale un
 po' riporta il sensore a essere basato sulla sola tensione istantanea,
-vanificando il senso del coulomb counting (vedi l'avviso nella descrizione
+vanificando il senso del conteggio dell'energia (vedi l'avviso nella descrizione
 dello script stesso).
 
 **Taratura:**
-- **Capacità pacco**: `155` (Ah), variabile `capacity_ah` dell'automazione
-  (`actions` → `variables`).
+- **Capacità pacco**: `capacity_kwh` (4.5 kWh, l'energia erogata dal 100%
+  allo 0%) e `charge_efficiency` (0.93) nell'automazione (`actions` →
+  `variables`). Entrambi si leggono dal Registro: tra uno 0% agganciato e il
+  100% successivo, l'aumento del contatore di carica vale `capacity_kwh /
+  charge_efficiency`; tra un 100% agganciato e lo 0% successivo, l'aumento
+  del contatore di scarica vale `capacity_kwh`. Ogni riga di aggancio nel
+  Registro riporta entrambi i contatori in quel momento.
+- **Tetto anti-glitch**: `max_step_kwh` (0.5 kWh), lo scatto singolo più
+  grande a cui si crede.
 - **Costanti degli agganci**: `tail_current_a` (0A),
   `internal_resistance_ohm` (0.0095), `full_margin_v` (0.1V sotto il float
   per il 100%), `full_floor_v` (27.2V, la tensione più bassa che può mai
@@ -585,9 +620,6 @@ dello script stesso).
   visibili alle azioni.
 - **Tempi di tenuta**: il `for:` dei trigger `full_hold` (5 minuti) e
   `empty_hold` (1 minuto).
-- **Cadenza di integrazione**: 2 minuti (trigger `cadence`). Si può cambiare
-  liberamente: il tempo trascorso è misurato, nient'altro dipende da essa.
-  Il limite di un singolo passo è `max_dt_hours` (6 minuti).
 
 **Taratura della resistenza interna (`internal_resistance_ohm`).** Stessa
 tensione di pacco, correnti diverse, SOC vero molto diverso: 27.5V con

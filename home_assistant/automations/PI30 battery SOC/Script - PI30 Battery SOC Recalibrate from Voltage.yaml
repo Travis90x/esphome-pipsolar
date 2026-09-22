@@ -6,11 +6,11 @@ description: >-
   extremes (a few tenths of a volt move several percentage points),
   and running it every time voltage ticks up turns the SOC back into
   something based on instantaneous voltage alone, defeating the point
-  of having coulomb counting at all.
-  After the first run, let only the "PI30 Battery SOC Coulomb
-  Counting" automation do the work, integrating current every 2
-  minutes: that is the real SOC, this script only gives it a
-  reasonable starting point instead of 0%.
+  of having energy counting at all.
+  After the first run, let only the "PI30 Battery SOC Energy
+  Counting" automation do the work, counting the kWh that go in and
+  out: that is the real SOC, this script only gives it a reasonable
+  starting point instead of 0%.
   Resets input_number.pi30_battery_soc_calculated by linearly
   interpolating, between the two real extremes already configured on
   the inverter (under-voltage threshold + 0.2V = 0%, float voltage -
@@ -22,7 +22,7 @@ description: >-
   on how many Amps the battery was drawing/delivering at that moment.
   internal_resistance_ohm = 0.0095 (9.5 mOhm), calibrated on the real
   pack from the JK BMS log (see the repository's main README.md, "Home
-  Assistant automations" section, "Real SOC via coulomb counting", for
+  Assistant automations" section, "Real SOC via energy counting", for
   the method and how to recompute it if the pack changes).
   It is still a rough straight-line estimate, not the real S-shaped
   LiFePO4 curve.

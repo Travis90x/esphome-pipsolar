@@ -423,10 +423,10 @@ trigger:
 
 </details>
 
-### Real SOC via coulomb counting (voltage + current)
+### Real SOC via energy counting (voltage + energy in/out)
 
 Files: [`home_assistant/automations/PI30 battery SOC/`](<home_assistant/automations/PI30 battery SOC/>)
-- `Automation - PI30 Battery SOC Coulomb Counting.yaml`
+- `Automation - PI30 Battery SOC Energy Counting.yaml`
 - `Script - PI30 Battery SOC Recalibrate from Voltage.yaml`
 
 The 8S LiFePO4 pack has a Volt/SOC curve that's very flat between roughly 20%
@@ -437,13 +437,20 @@ A SOC sensor based only on instantaneous voltage (like
 `sensor.heltec_pi30_battery_soc`, read from the PI30 protocol) is therefore
 inaccurate exactly in the middle of the curve, where it matters most.
 
-**How it works.** Instead of reading SOC from voltage, it integrates over
-time the current from `sensor.heltec_pi30_battery_current` against the
-pack's nominal capacity (155Ah) — the classic "coulomb counting" used by
-BMSs. Pure coulomb counting drifts over time, so the estimate is re-anchored
-at the two extremes using a voltage compensated for the internal resistance
-drop rather than the raw one (`voltage_ocv = voltage - current *
-internal_resistance_ohm`, same sign convention as the current sensor):
+**How it works.** Instead of reading SOC from voltage, it counts the energy
+that goes in and out of the pack, using the two lifetime energy counters
+that already exist in Home Assistant (`sensor.heltec_pi30_batteria_energia_caricata`
+and `sensor.heltec_pi30_batteria_energia_scaricata`, kWh into and out of the
+battery, never reset) against the pack's usable capacity in kWh. Nothing is
+integrated in the automation itself: every time one of the two counters
+changes, a state trigger hands over its previous and its new value, and the
+difference is the energy moved since the last tick. 26.6V at 5A for four
+hours says nothing about the SOC; 20Ah moved in four hours does. Pure
+counting drifts over time (and inherits any error in the capacity), so the
+estimate is re-anchored at the two extremes using a voltage compensated for
+the internal resistance drop rather than the raw one (`voltage_ocv =
+voltage - current * internal_resistance_ohm`, same sign convention as the
+current sensor):
 
 - **100%** (`full_hold` trigger) when `voltage_ocv` reaches the full
   threshold **and** the pack is not being pushed (`current <=
@@ -464,7 +471,9 @@ internal_resistance_ohm`, same sign convention as the current sensor):
   full pack either: charging at 2A because there is no solar surplus is
   not the same thing as a charge that tapered off because the battery
   would take no more, which is why the default threshold is 0 rather
-  than a "tail current" value. The 5-minute hold filters out surface
+  than a "tail current" value. A count that says "4.5 kWh went in" is
+  not evidence either: it stops at 99 and waits for this anchor. The
+  5-minute hold filters out surface
   charge: right after the charger cuts off, a half-full LiFePO4 pack sits
   near the charge voltage for a minute or two before relaxing to its
   resting voltage.
@@ -489,7 +498,8 @@ Both anchors are Home Assistant template triggers with a `for:` hold, so
 each one writes its value **once**, on the false → true transition of its
 condition, and re-arms only after the condition has been false again. Each
 anchor also writes a **Logbook** entry with the readings it fired on
-(voltage, current, float and under-voltage thresholds, previous SOC), so a
+(voltage, current, float and under-voltage thresholds, both energy
+counters, previous SOC), so a
 wrong 100% or 0% can be traced back to the exact moment: open the Logbook
 and filter on `input_number.pi30_battery_soc_calculated`. That
 is what lets a full pack start counting down from 100 the moment current
@@ -498,26 +508,43 @@ long as its voltage stays high. If the pack is already full (or empty)
 when you first load the automation, the anchor waits for the next episode:
 set the Number helper by hand once, as described in the setup below.
 
-Between the two extremes, SOC only moves by integrating current. Every 2
-minutes (and at startup) the counter moves by `current × elapsed_hours /
-155Ah × 100`, where `elapsed_hours` is the **measured** time since the
-previous run (from the automation's own `last_triggered`), capped at 6
-minutes so that a long outage does not integrate the current read at boot
-over hours of unknown history. The value is stored with 3 decimals: at the
-1-2A this pack idles at overnight one 2-minute step is 0.02-0.04%, which a
-1-decimal rounding would throw away entirely (a whole night of
-self-consumption never counted). Plain integration can never *claim* a
-full or empty pack: rising, it stops at 99; falling, it stops at 1. It may
-however keep going down from an anchored 100 (or up from an anchored 0).
-The reverse is deliberately **not** allowed: any charge current at all
-moves an anchored 100 down to 99, because a pack that is still taking
-current is no longer certified full. That costs a 100 ↔ 99 flicker while
-the inverter trickles ±1A in float, and it is worth it: a stale 100 (from
-an earlier wrong anchor, or set by hand) must not sit there while the pack
-swallows 5A for hours. Only the two anchors above write exactly 100 and
-exactly 0.
+Between the two extremes, SOC only moves with the energy counters:
+
+```
+SOC += charged_kwh × charge_efficiency / capacity_kwh × 100
+SOC -= discharged_kwh / capacity_kwh × 100
+```
+
+`capacity_kwh` (4.5) is the energy the pack *delivers* from 100% to 0%
+(discharge side). `charge_efficiency` (0.93) is how much of each kWh pushed
+in comes back out: the pack charges at 27-28V and discharges at about 26V,
+so the same Ah are more kWh going in than coming out (26/27.5 ≈ 0.945), and
+a few percent more are lost as heat and balancing. A tick is ignored when
+either value is not a number (sensor unavailable, startup), when the counter
+went *down* (a reset) or when it jumped by more than `max_step_kwh` (0.5
+kWh, a glitch: no real tick moves 11% of the pack at once). The counters'
+unit is read from the sensor (Wh, kWh or MWh) and converted to kWh. The
+automation runs in `queued` mode so back-to-back ticks from the two
+sensors are handled one after the other, never dropped. The value is stored
+with 3 decimals; the template sensor rounds it for display.
+
+Plain counting can never *claim* a full or empty pack: rising, it stops at
+99; falling, it stops at 1. It may however keep going down from an anchored
+100 (or up from an anchored 0). The reverse is deliberately **not**
+allowed: any charge at all moves an anchored 100 down to 99, because a
+pack that is still taking energy is no longer certified full. That costs a
+100 ↔ 99 flicker while the inverter trickles in float, and it is worth it:
+a stale 100 (from an earlier wrong anchor, or set by hand) must not sit
+there while the pack swallows 5A for hours. Only the two anchors above write
+exactly 100 and exactly 0.
 
 **Setup — 2 helpers, all from the UI, no `configuration.yaml`:**
+
+Prerequisite: two ever-increasing energy counters for the battery,
+`sensor.heltec_pi30_batteria_energia_caricata` (kWh charged into it) and
+`sensor.heltec_pi30_batteria_energia_scaricata` (kWh drawn out of it), that
+are never reset — the usual Riemann-sum *Integral* helpers on the battery
+charge and discharge power. Any unit among Wh, kWh and MWh works.
 
 1. **Number helper** (Settings → Devices & services → Helpers → Create
    helper → Number): Name `PI30 battery SOC calculated`, icon
@@ -539,7 +566,7 @@ exactly 0.
    sensor usable in dashboards/graphs like any other SOC sensor. Create it
    after the Number helper (it reads that entity_id).
 
-Then import `Automation - PI30 Battery SOC Coulomb Counting.yaml` (Settings
+Then import `Automation - PI30 Battery SOC Energy Counting.yaml` (Settings
 → Automations → Edit in YAML) to do the integration and re-anchoring above.
 
 Optionally, right after creating the Number helper, run
@@ -548,14 +575,21 @@ Optionally, right after creating the Number helper, run
 doesn't start at 0%: it linearly interpolates the compensated voltage
 between the two real extremes and seeds the Number helper with that
 estimate. It's a straight line, not the real LiFePO4 curve — fine as a
-starting point, not a substitute for daily coulomb counting. **Don't run it
+starting point, not a substitute for daily energy counting. **Don't run it
 routinely**: doing so on every voltage tick-up turns the sensor back into
 something based on instantaneous voltage alone, defeating the point of
-coulomb counting (see the warning in the script's own description).
+energy counting (see the warning in the script's own description).
 
 **Tuning:**
-- **Pack capacity**: `155` (Ah), the `capacity_ah` variable in the
-  automation (`actions` → `variables`).
+- **Pack capacity**: `capacity_kwh` (4.5 kWh, the energy delivered from
+  100% to 0%) and `charge_efficiency` (0.93) in the automation (`actions`
+  → `variables`). Both are readable off the Logbook: between a 0% anchor
+  and the next 100% anchor, the rise of the charged counter is
+  `capacity_kwh / charge_efficiency`; between a 100% anchor and the next 0%
+  anchor, the rise of the discharged counter is `capacity_kwh` itself. Each
+  anchor's Logbook line carries both counters at that moment.
+- **Glitch cap**: `max_step_kwh` (0.5 kWh), the largest single tick that is
+  believed.
 - **Anchor constants**: `tail_current_a` (0A), `internal_resistance_ohm`
   (0.0095), `full_margin_v` (0.1V below float for 100%), `full_floor_v`
   (27.2V, the lowest voltage that can ever count as full: change it only
@@ -565,9 +599,6 @@ coulomb counting (see the warning in the script's own description).
   Home Assistant does not expose trigger variables to the actions.
 - **Hold times**: the `for:` of the `full_hold` (5 minutes) and
   `empty_hold` (1 minute) triggers.
-- **Integration cadence**: 2 minutes (`cadence` trigger). It can be changed
-  freely: the elapsed time is measured, nothing else depends on it. The cap
-  on a single step is `max_dt_hours` (6 minutes).
 
 **Internal resistance calibration (`internal_resistance_ohm`).** Same pack
 voltage, different currents, very different real SOC: 27.5V at a few Amps is

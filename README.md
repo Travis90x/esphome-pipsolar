@@ -471,7 +471,7 @@ current sensor):
   full pack either: charging at 2A because there is no solar surplus is
   not the same thing as a charge that tapered off because the battery
   would take no more, which is why the default threshold is 0 rather
-  than a "tail current" value. A count that says "4.5 kWh went in" is
+  than a "tail current" value. A count that says "3.9 kWh went in" is
   not evidence either: it stops at 99 and waits for this anchor. The
   5-minute hold filters out surface
   charge: right after the charger cuts off, a half-full LiFePO4 pack sits
@@ -512,19 +512,26 @@ Between the two extremes, SOC only moves with the energy moved:
 
 ```
 SOC += charge_kW × charge_efficiency × hours / capacity_kwh × 100
-SOC -= discharge_kW × hours / capacity_kwh × 100
+SOC -= (discharge_kW + idle_drain) × hours / capacity_kwh × 100
 ```
 
 `hours` is the **measured** time since the previous run (from the
 automation's own `last_triggered`), capped at 5 minutes so that a long
 outage does not integrate the power read at boot over hours of unknown
-history. `capacity_kwh` (4.5) is the energy the pack *delivers* from 100%
-to 0% (discharge side). `charge_efficiency` (0.5) is how much of each kWh
-the PI30 *says* it pushed in actually comes back out — **measured on this
-system**, see "What two days of history say" below; physics alone would
-give about 0.93 (charging at 27-28V, discharging at 26V, a few percent of
-losses), but this inverter reports about twice the charging current that
-really enters the pack. The power
+history. The three constants are **measured on this system** over a
+complete full → empty → full cycle (see "What three days of history say"
+below):
+
+- `capacity_kwh` = **3.9 kWh**, the energy the pack delivers from 100% to 0%
+  (the nominal 155Ah × 25.6V is 3.97 kWh).
+- `charge_efficiency` = **0.87**, the share of each charged kWh the PI30
+  reports that ends up stored in the pack.
+- `idle_drain_w` = **50 W**, the power the pack loses that the PI30 never
+  reports: the inverter's own consumption, taken from the battery whenever
+  the charger is not running. It is subtracted every minute in which the
+  charge power is 0.
+
+The power
 sensors' unit is read from the sensor (W or kW). The value is stored with 3
 decimals (at the 1-2A this pack idles at overnight one step is a few
 hundredths of a percent, which a 1-decimal rounding would throw away
@@ -606,109 +613,74 @@ energy counting (see the warning in the script's own description).
 
 **Voltage correction.** The count alone cannot know where it started: set
 wrong (a stale 100, a helper created mid-discharge) it would stay wrong until
-the next full charge. So every minute the voltage, compensated for the current
-with the steady-state resistance measured on this pack (11.3 mOhm), is turned
-into a SOC through a table measured from two days of history, and the count is
-pulled towards it — only when the voltage can be trusted, and only when it
-clearly disagrees:
+the next full charge. So every minute the voltage, compensated for the real
+current (the reported one plus the 50 W idle drain) with the steady-state
+resistance measured on this pack (10 mOhm), is turned into a SOC through a
+table measured from 0% to 99% on this pack, and the count is pulled towards
+it — only when the voltage can be trusted, and only when it clearly
+disagrees:
 
-| Compensated voltage (V) | 24.00 | 25.40 | 25.90 | 26.18 | 26.30 | 26.42 | 26.53 | 26.63 | 26.67 | 26.70 | 26.72 | 26.75 |
+| Compensated voltage (V) | 22.70 | 23.40 | 24.00 | 24.50 | 25.00 | 25.60 | 25.96 | 26.22 | 26.42 | 26.57 | 26.67 | 26.75 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| SOC (%) | 0 | 10 | 30 | 50 | 60 | 70 | 75 | 80 | 85 | 90 | 95 | 99 |
+| SOC (%) | 0 | 1 | 2 | 4 | 6 | 9 | 20 | 30 | 50 | 65 | 75 | 99 |
 
 - **Trusted** means discharging or idle, at most 30A, with the charger off for at
   least 30 minutes: right after a charge, surface charge makes any pack look
   full, and while charging the voltage says nothing.
 - **Clearly disagrees** means outside the band of SOCs compatible with the
-  reading ±0.1V (the PI30 reports 0.1V steps). Inside the band the count wins;
-  outside, the count closes the gap with a 5-minute time constant (about 1/5
-  per minute).
-- On the flat top (85-99%) the band is about 20 points wide and the voltage
-  rarely overrides the count; from about 80% down it does. Example: 26.3V at
-  -9A is 26.40V compensated, band 60-74%, and a counter stuck at 96% comes
-  down to about 74% in about 15 minutes.
-- The 70-99% part of the table is measured (SOC reconstructed from the energy
-  counters between two full charges, fitted as V = 25.32 + 0.0152·SOC +
-  0.0113·I, residual 0.06V). Below 70%, never reached in the data, it follows
-  the usual LiFePO4 curve down to the 0% anchor voltage. The correction never
-  writes exactly 100 or 0: that stays with the two anchors.
+  reading ±0.15V (the PI30 reports 0.1V steps). Inside the band the count
+  wins; outside, the count closes the gap with a 5-minute time constant
+  (about 1/5 per minute).
+- The band is 25-30 points wide on the flat top (70-99%), 10-15 points below
+  50%, and only a few points below 10%, where the curve bends (25.0V is 6%,
+  24.0V is 2%): there the voltage leads. Example: 26.3V at -9A is 26.41V
+  compensated, band 33-64%, and a counter stuck at 96% comes down to about
+  65% in about 15 minutes.
+- The table comes from the SOC reconstructed with the calibrated count over
+  the 22-23 Sep cycle (median compensated voltage per 5% of SOC, and per
+  minute in the five hours at rest before the BMS cut, 25.1V → 22.7V). The
+  correction never writes exactly 100 or 0: that stays with the two anchors.
 
-The same model written as a voltage × current table (discharge side; while
-charging the voltage is not used), so it can be compared with a hand-made
-one. Each Amp drawn lowers the reading by about 11 mV; the flat hump near
-26.6-26.7V is the LiFePO4 plateau, where the voltage says little and the
-count decides:
+The same model written as a voltage × current table (discharge side, reported
+current; while charging the voltage is not used). Each Amp drawn lowers the
+reading by about 10 mV; the flat hump near 26.4-26.7V is the LiFePO4
+plateau, where the voltage says little and the count decides; below 25.5V
+the knee makes the voltage precise:
 
-| Voltage | -30 A | -20 A | -10 A | -8 A | -2 A | 0 A |
-|---|---|---|---|---|---|---|
-| 24.0 | 2% | 1% | 1% | 1% | 0% | 0% |
-| 24.5 | 5% | 5% | 4% | 4% | 3% | 3% |
-| 25.0 | 9% | 9% | 8% | 7% | 7% | 7% |
-| 25.5 | 27% | 21% | 17% | 16% | 14% | 13% |
-| 26.0 | 63% | 54% | 45% | 43% | 38% | 37% |
-| 26.2 | 75% | 70% | 61% | 59% | 54% | 52% |
-| 26.3 | 81% | 75% | 69% | 68% | 62% | 60% |
-| 26.4 | 98% | 80% | 74% | 73% | 70% | 68% |
-| 26.5 | 99% | 96% | 79% | 78% | 75% | 74% |
-| 26.6 | 99% | 99% | 93% | 88% | 80% | 79% |
-| 26.7 | 99% | 99% | 99% | 99% | 95% | 90% |
-
-Rows from 26.2V up are measured on this pack; below that they follow the
-usual LiFePO4 curve and can be edited in the automation (`ocv_v` /
-`ocv_soc`, the 0 A column).
+| Voltage | -30 A | -20 A | -10 A | -5 A | 0 A |
+|---|---|---|---|---|---|
+| 23.0 | 1% | 1% | 1% | 1% | 0% |
+| 23.5 | 2% | 2% | 1% | 1% | 1% |
+| 24.0 | 3% | 3% | 2% | 2% | 2% |
+| 24.5 | 5% | 5% | 4% | 4% | 4% |
+| 25.0 | 8% | 7% | 7% | 6% | 6% |
+| 25.5 | 16% | 13% | 10% | 9% | 9% |
+| 25.7 | 22% | 19% | 16% | 15% | 13% |
+| 25.9 | 30% | 26% | 22% | 20% | 19% |
+| 26.0 | 39% | 30% | 26% | 24% | 22% |
+| 26.1 | 50% | 39% | 30% | 28% | 26% |
+| 26.2 | 60% | 50% | 39% | 34% | 30% |
+| 26.3 | 69% | 60% | 50% | 44% | 39% |
+| 26.4 | 92% | 69% | 60% | 55% | 50% |
+| 26.5 | 99% | 92% | 69% | 65% | 60% |
+| 26.6 | 99% | 99% | 92% | 75% | 69% |
+| 26.7 | 99% | 99% | 99% | 99% | 92% |
 
 **Tuning:**
-- **Pack capacity**: `capacity_kwh` (4.5 kWh, the energy delivered from
-  100% to 0%) and `charge_efficiency` (0.93) in the automation (`actions`
-  → `variables`). Both are readable off the Logbook: between a 0% anchor
-  and the next 100% anchor, the rise of the charged counter is
-  `capacity_kwh / charge_efficiency`; between a 100% anchor and the next 0%
-  anchor, the rise of the discharged counter is `capacity_kwh` itself. Each
-  anchor's Logbook line carries both counters at that moment.
+- **Pack model**: `capacity_kwh` (3.9), `charge_efficiency` (0.87) and
+  `idle_drain_w` (50) in the automation (`actions` → `variables`), all three
+  measured (see below). Each anchor's Logbook line carries both lifetime
+  energy counters, so a new full → empty → full cycle gives them again.
 - **Cadence**: 1 minute (`cadence` trigger). It can be changed freely: the
   elapsed time is measured, nothing else depends on it. The cap on a single
   step is `max_dt_hours` (5 minutes).
 - **Float trickle**: `tail_current_a` (2A, measured: see below). Do not raise
   it further, or a deliberate low-current charge would be mistaken for a
   tapered one.
-
-**What two days of history say (20-22 Sep 2026, voltage, current and the
-two kWh counters exported from Home Assistant).** Three facts that shaped
-the defaults above:
-
-- **The voltage is useless between the two extremes.** While discharging
-  at 3-25A the pack read 26.2-26.7V for the whole night; at rest it read
-  26.4-26.5V both mornings, after two nights that drew 1.0 and 1.2 kWh.
-  Between "full" and "morning" the only thing that moves is the energy,
-  which is why the SOC is counted, not read. The voltage becomes
-  informative again only above 27.2V at rest (full) and near the
-  under-voltage threshold (empty), and that is exactly where the two
-  anchors sit.
-- **The inverter floats at 27.5V with +2A, for hours.** Of the 587 minutes
-  spent above 27.4V, 536 read exactly +2A, 48 read +1A and one single
-  minute read 0A. A full pack cannot absorb 2A for five hours: it is the
-  PI30's whole-Amp reading of a small float current. With
-  `tail_current_a = 0` the 100% anchor never fired; it is now 2A, which
-  with the 27.4V threshold is still a safe "full" test.
-- **The charge counter is about twice the discharge counter between the
-  same two states.** Morning rest at 26.4V → full: the charge counter rose
-  2.50 kWh (day 1) and 2.05 kWh (day 2). Full → the same 26.4V rest: the
-  discharge counter rose 1.20 and 1.11 kWh. The discharge side is right —
-  it matches the inverter's output power integrated over the same nights
-  (1.20 vs 1.27 kWh, the difference being the inverter's own losses) — so
-  the PI30 reports roughly twice the charging current that really enters
-  the pack (39A for two hours, while the pack could only have taken about
-  45Ah). Hence `charge_efficiency = 0.5` instead of the textbook 0.93. If
-  the pack or the inverter changes, redo this check from the Logbook lines
-  the anchors write: rise of the charged counter between a 0% (or a known
-  resting state) and the next 100%, against the rise of the discharged
-  counter on the way back.
-
-**Starting value.** The counter only moves with energy, so it needs a
-sensible first value: with the pack resting at 26.4-26.5V after a normal
-night (about 1.2 kWh drawn from full, 4.5 kWh capacity) that is roughly
-**70-75%**. Set the Number helper to that by hand once; the next full
-charge anchors it to 100% and from there the count is exact.
+- **Voltage correction**: `ocv_v` / `ocv_soc` (the table),
+  `correction_band_v` (0.15V), `correction_tau_min` (5),
+  `correction_resistance_ohm` (0.010), `correction_max_current_a` (30),
+  `correction_rest_min` (30).
 - **Anchor constants**: `tail_current_a` (0A), `internal_resistance_ohm`
   (0.0095), `full_margin_v` (0.1V below float for 100%), `full_floor_v`
   (27.2V, the lowest voltage that can ever count as full: change it only
@@ -718,6 +690,36 @@ charge anchors it to 100% and from there the count is exact.
   Home Assistant does not expose trigger variables to the actions.
 - **Hold times**: the `for:` of the `full_hold` (5 minutes) and
   `empty_hold` (1 minute) triggers.
+
+**What three days of history say (21-23 Sep 2026: voltage, current, battery
+power, inverter mode and priorities exported from Home Assistant).**
+
+- **One complete cycle happened.** Full in float on 22 Sep at 15:59, empty
+  when the BMS cut the pack at 22.7V (2.84V per cell) on 23 Sep at 10:00,
+  full again at 15:10. Together with a full → morning → full cycle on 21-22
+  Sep that gives three energy balances for three unknowns, solved exactly:
+  capacity 3.91 kWh, charge efficiency 0.874, idle drain 50 W. With those
+  values the count reads 0.2% at the moment of the BMS cut and 100.0% at the
+  end of the next charge.
+- **The PI30 hides about 50 W.** From 04:36 to 10:00 on 23 Sep, in Line mode,
+  it reported exactly 0A for five and a half hours while the pack went from
+  25.1V to 22.7V at rest. That is the inverter's own consumption, never shown
+  in the battery current. Over a night it is 0.6-0.9 kWh: ignoring it is
+  what made the charge counter look "twice" the discharge counter in an
+  earlier calibration (which had set the charge factor to 0.5 and the
+  capacity to 4.5 kWh; both were wrong).
+- **The voltage is almost useless from 55% to 99%.** 26.42V compensated is
+  50%, 26.73V is 95%: 0.3V for 45 points, with the PI30 reading in 0.1V
+  steps. Below 50% it becomes informative, and below 10% the curve bends
+  sharply: 25.0V at rest is 6%, 24.0V is 2%, 22.7V is the BMS cut.
+- **The inverter floats at 27.5V with +2A, for hours.** Of the minutes spent
+  above 27.4V, almost all read exactly +2A and only one read 0A. With
+  `tail_current_a = 0` the 100% anchor never fired; it is now 2A.
+
+**Starting value.** Not needed any more: with the voltage correction, a
+wrong starting value is fixed within about 15-20 minutes of discharge
+wherever the voltage is informative, and the next full charge anchors it to
+100% anyway.
 
 **Internal resistance calibration (`internal_resistance_ohm`).** Same pack
 voltage, different currents, very different real SOC: 27.5V at a few Amps is

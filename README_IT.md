@@ -484,7 +484,7 @@ del sensore corrente):
   fotovoltaico non è la stessa cosa di una carica che è calata perché la
   batteria non accetta più nulla. Per questo la soglia di default è 0 e
   non un valore di "corrente di coda". Nemmeno un conteggio che dice "sono
-  entrati 4.5 kWh" è una prova: si ferma a 99 e aspetta questo aggancio. I
+  entrati 3.9 kWh" è una prova: si ferma a 99 e aspetta questo aggancio. I
   5 minuti di tenuta filtrano la
   carica superficiale: appena il caricatore si stacca, un pacco LiFePO4 a
   metà carica resta vicino alla tensione di carica per un minuto o due
@@ -527,19 +527,26 @@ Tra i due estremi il SOC si muove solo con l'energia mossa:
 
 ```
 SOC += kW_carica × charge_efficiency × ore / capacity_kwh × 100
-SOC -= kW_scarica × ore / capacity_kwh × 100
+SOC -= (kW_scarica + consumo_nascosto) × ore / capacity_kwh × 100
 ```
 
 `ore` è il tempo **misurato** dall'esecuzione precedente (dal
 `last_triggered` dell'automazione stessa), limitato a 5 minuti perché un
 lungo fermo non integri la potenza letta al riavvio su ore di storia
-sconosciuta. `capacity_kwh` (4.5) è l'energia che il pacco *eroga* dal 100%
-allo 0% (lato scarica). `charge_efficiency` (0.5) è quanta parte di ogni
-kWh che il PI30 *dice* di aver immesso torna davvero fuori — **misurata su
-questo impianto**, vedi "Cosa dicono due giorni di storico" più sotto; la
-sola fisica darebbe circa 0.93 (carica a 27-28V, scarica a 26V, qualche
-punto di perdite), ma questo inverter riporta circa il doppio della corrente
-di carica che entra davvero nel pacco. L'unità
+sconosciuta. Le tre costanti sono **misurate su questo impianto** su un ciclo
+completo pieno → vuoto → pieno (vedi "Cosa dicono tre giorni di storico" più
+sotto):
+
+- `capacity_kwh` = **3.9 kWh**, l'energia che il pacco eroga dal 100% allo 0%
+  (la nominale 155Ah × 25.6V è 3.97 kWh).
+- `charge_efficiency` = **0.87**, la quota di ogni kWh di carica riportato dal
+  PI30 che finisce davvero immagazzinata nel pacco.
+- `idle_drain_w` = **50 W**, la potenza che il pacco perde e che il PI30 non
+  riporta mai: l'autoconsumo dell'inverter, preso dalla batteria ogni volta
+  che il caricatore non è in funzione. Viene sottratto ogni minuto in cui la
+  potenza di carica è 0.
+
+L'unità
 dei sensori di potenza è letta dal sensore (W o kW). Il valore è salvato con
 3 decimali (agli 1-2A a cui questo pacco sta fermo di notte un passo vale
 pochi centesimi di percento, che un arrotondamento a 1 decimale butterebbe
@@ -626,111 +633,76 @@ dello script stesso).
 **Correzione con la tensione.** Il conteggio da solo non sa da dove è partito:
 se è partito sbagliato (un 100 stantio, un helper creato a metà scarica)
 resterebbe sbagliato fino alla carica completa successiva. Quindi ogni minuto
-la tensione, compensata per la corrente con la resistenza a regime misurata su
-questo pacco (11.3 mOhm), viene trasformata in SOC con una tabella ricavata da
-due giorni di storico, e il conteggio viene tirato verso quel valore — solo
-quando la tensione è affidabile, e solo quando è chiaramente in disaccordo:
+la tensione, compensata per la corrente reale (quella riportata più i 50 W di
+consumo nascosto) con la resistenza a regime misurata su questo pacco (10
+mOhm), viene trasformata in SOC con una tabella misurata dallo 0% al 99% su
+questo pacco, e il conteggio viene tirato verso quel valore — solo quando la
+tensione è affidabile, e solo quando è chiaramente in disaccordo:
 
-| Tensione compensata (V) | 24.00 | 25.40 | 25.90 | 26.18 | 26.30 | 26.42 | 26.53 | 26.63 | 26.67 | 26.70 | 26.72 | 26.75 |
+| Tensione compensata (V) | 22.70 | 23.40 | 24.00 | 24.50 | 25.00 | 25.60 | 25.96 | 26.22 | 26.42 | 26.57 | 26.67 | 26.75 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| SOC (%) | 0 | 10 | 30 | 50 | 60 | 70 | 75 | 80 | 85 | 90 | 95 | 99 |
+| SOC (%) | 0 | 1 | 2 | 4 | 6 | 9 | 20 | 30 | 50 | 65 | 75 | 99 |
 
 - **Affidabile** vuol dire in scarica o a riposo, al massimo 30A, con il
   caricatore spento da almeno 30 minuti: subito dopo una carica la carica
   superficiale fa sembrare pieno qualunque pacco, e durante la carica la
   tensione non dice nulla.
 - **Chiaramente in disaccordo** vuol dire fuori dalla fascia di SOC compatibili
-  con la lettura ±0.1V (il PI30 riporta passi da 0.1V). Dentro la fascia vince
-  il conteggio; fuori, il conteggio recupera la differenza con una costante di
-  tempo di 5 minuti (circa 1/5 al minuto).
-- Sul tratto piatto in alto (85-99%) la fascia è larga circa 20 punti e la
-  tensione corregge raramente; da circa l'80% in giù corregge. Esempio: 26.3V
-  a -9A sono 26.40V compensati, fascia 60-74%, e un contatore fermo al 96%
-  scende a circa il 74% in circa 15 minuti.
-- La parte 70-99% della tabella è misurata (SOC ricostruito dai contatori di
-  energia tra due cariche complete, V = 25.32 + 0.0152·SOC + 0.0113·I, residuo
-  0.06V). Sotto il 70%, mai raggiunto nei dati, segue la curva LiFePO4 tipica
-  fino alla tensione dell'aggancio a 0%. La correzione non scrive mai
-  esattamente 100 o 0: quello resta ai due agganci.
+  con la lettura ±0.15V (il PI30 riporta passi da 0.1V). Dentro la fascia
+  vince il conteggio; fuori, il conteggio recupera la differenza con una
+  costante di tempo di 5 minuti (circa 1/5 al minuto).
+- La fascia è larga 25-30 punti sul tratto piatto in alto (70-99%), 10-15
+  punti sotto il 50%, e pochi punti sotto il 10%, dove la curva piega (25.0V
+  è 6%, 24.0V è 2%): lì comanda la tensione. Esempio: 26.3V a -9A sono
+  26.41V compensati, fascia 33-64%, e un contatore fermo al 96% scende a
+  circa il 65% in circa 15 minuti.
+- La tabella viene dal SOC ricostruito con il conteggio tarato sul ciclo del
+  22-23 settembre (tensione compensata mediana per ogni 5% di SOC, e minuto
+  per minuto nelle cinque ore a riposo prima dello stacco del BMS, 25.1V →
+  22.7V). La correzione non scrive mai esattamente 100 o 0: quello resta ai
+  due agganci.
 
-Lo stesso modello scritto come tabella tensione × corrente (lato scarica;
-durante la carica la tensione non viene usata), per confrontarlo con una
-tabella fatta a mano. Ogni Ampere prelevato abbassa la lettura di circa 11
-mV; la gobba piatta intorno a 26.6-26.7V è il plateau LiFePO4, dove la
-tensione dice poco e decide il conteggio:
+Lo stesso modello scritto come tabella tensione × corrente (lato scarica,
+corrente riportata; durante la carica la tensione non viene usata). Ogni
+Ampere prelevato abbassa la lettura di circa 10 mV; la gobba piatta intorno a
+26.4-26.7V è il plateau LiFePO4, dove la tensione dice poco e decide il
+conteggio; sotto i 25.5V il ginocchio della curva rende la tensione precisa:
 
-| Tensione | -30 A | -20 A | -10 A | -8 A | -2 A | 0 A |
-|---|---|---|---|---|---|---|
-| 24.0 | 2% | 1% | 1% | 1% | 0% | 0% |
-| 24.5 | 5% | 5% | 4% | 4% | 3% | 3% |
-| 25.0 | 9% | 9% | 8% | 7% | 7% | 7% |
-| 25.5 | 27% | 21% | 17% | 16% | 14% | 13% |
-| 26.0 | 63% | 54% | 45% | 43% | 38% | 37% |
-| 26.2 | 75% | 70% | 61% | 59% | 54% | 52% |
-| 26.3 | 81% | 75% | 69% | 68% | 62% | 60% |
-| 26.4 | 98% | 80% | 74% | 73% | 70% | 68% |
-| 26.5 | 99% | 96% | 79% | 78% | 75% | 74% |
-| 26.6 | 99% | 99% | 93% | 88% | 80% | 79% |
-| 26.7 | 99% | 99% | 99% | 99% | 95% | 90% |
-
-Le righe da 26.2V in su sono misurate su questo pacco; sotto seguono la curva
-LiFePO4 tipica e si possono modificare nell'automazione (`ocv_v` /
-`ocv_soc`, la colonna 0 A).
+| Tensione | -30 A | -20 A | -10 A | -5 A | 0 A |
+|---|---|---|---|---|---|
+| 23.0 | 1% | 1% | 1% | 1% | 0% |
+| 23.5 | 2% | 2% | 1% | 1% | 1% |
+| 24.0 | 3% | 3% | 2% | 2% | 2% |
+| 24.5 | 5% | 5% | 4% | 4% | 4% |
+| 25.0 | 8% | 7% | 7% | 6% | 6% |
+| 25.5 | 16% | 13% | 10% | 9% | 9% |
+| 25.7 | 22% | 19% | 16% | 15% | 13% |
+| 25.9 | 30% | 26% | 22% | 20% | 19% |
+| 26.0 | 39% | 30% | 26% | 24% | 22% |
+| 26.1 | 50% | 39% | 30% | 28% | 26% |
+| 26.2 | 60% | 50% | 39% | 34% | 30% |
+| 26.3 | 69% | 60% | 50% | 44% | 39% |
+| 26.4 | 92% | 69% | 60% | 55% | 50% |
+| 26.5 | 99% | 92% | 69% | 65% | 60% |
+| 26.6 | 99% | 99% | 92% | 75% | 69% |
+| 26.7 | 99% | 99% | 99% | 99% | 92% |
 
 **Taratura:**
-- **Capacità pacco**: `capacity_kwh` (4.5 kWh, l'energia erogata dal 100%
-  allo 0%) e `charge_efficiency` (0.93) nell'automazione (`actions` →
-  `variables`). Entrambi si leggono dal Registro: tra uno 0% agganciato e il
-  100% successivo, l'aumento del contatore di carica vale `capacity_kwh /
-  charge_efficiency`; tra un 100% agganciato e lo 0% successivo, l'aumento
-  del contatore di scarica vale `capacity_kwh`. Ogni riga di aggancio nel
-  Registro riporta entrambi i contatori in quel momento.
+- **Modello del pacco**: `capacity_kwh` (3.9), `charge_efficiency` (0.87) e
+  `idle_drain_w` (50) nell'automazione (`actions` → `variables`), tutti e tre
+  misurati (vedi sotto). Ogni riga di aggancio nel Registro riporta entrambi
+  i contatori di energia totale, quindi un nuovo ciclo pieno → vuoto → pieno
+  li restituisce di nuovo.
 - **Cadenza**: 1 minuto (trigger `cadence`). Si può cambiare liberamente: il
   tempo trascorso è misurato, nient'altro dipende da essa. Il limite di un
   singolo passo è `max_dt_hours` (5 minuti).
 - **Corrente di mantenimento**: `tail_current_a` (2A, misurata: vedi sotto).
   Non alzarla oltre, o una carica volutamente a bassa corrente verrebbe
   scambiata per una carica esaurita.
-
-**Cosa dicono due giorni di storico (20-22 set 2026: tensione, corrente e i
-due contatori di kWh esportati da Home Assistant).** Tre fatti che hanno
-deciso i valori qui sopra:
-
-- **La tensione è inutile tra i due estremi.** In scarica a 3-25A il pacco
-  ha letto 26.2-26.7V per tutta la notte; a riposo ha letto 26.4-26.5V
-  entrambe le mattine, dopo due notti da 1.0 e 1.2 kWh. Tra "pieno" e
-  "mattina" l'unica cosa che si muove è l'energia, ed è per questo che il
-  SOC si conta e non si legge. La tensione torna informativa solo sopra i
-  27.2V a riposo (pieno) e vicino alla soglia di under-voltage (vuoto), ed
-  è esattamente lì che stanno i due agganci.
-- **L'inverter mantiene a 27.5V con +2A, per ore.** Dei 587 minuti passati
-  sopra 27.4V, 536 leggono esattamente +2A, 48 leggono +1A e un solo minuto
-  legge 0A. Un pacco pieno non può assorbire 2A per cinque ore: è la
-  lettura ad Ampere interi del PI30 di una piccola corrente di
-  mantenimento. Con `tail_current_a = 0` l'aggancio al 100% non è mai
-  scattato; ora è 2A, che con la soglia di 27.4V resta un test di "pieno"
-  sicuro.
-- **Il contatore di carica vale circa il doppio di quello di scarica tra
-  gli stessi due stati.** Riposo mattutino a 26.4V → pieno: il contatore di
-  carica è salito di 2.50 kWh (giorno 1) e 2.05 kWh (giorno 2). Pieno → lo
-  stesso riposo a 26.4V: il contatore di scarica è salito di 1.20 e 1.11
-  kWh. Il lato scarica è giusto — coincide con la potenza in uscita
-  dell'inverter integrata sulle stesse notti (1.20 contro 1.27 kWh, la
-  differenza sono le perdite dell'inverter) — quindi il PI30 riporta circa
-  il doppio della corrente di carica che entra davvero nel pacco (39A per
-  due ore, mentre il pacco poteva accettarne circa 45Ah). Da qui
-  `charge_efficiency = 0.5` invece dello 0.93 da manuale. Se cambia il pacco
-  o l'inverter, rifai questo controllo dalle righe che gli agganci scrivono
-  nel Registro: aumento del contatore di carica tra uno 0% (o uno stato a
-  riposo noto) e il 100% successivo, contro l'aumento del contatore di
-  scarica al ritorno.
-
-**Valore di partenza.** Il contatore si muove solo con l'energia, quindi ha
-bisogno di un primo valore sensato: con il pacco a riposo a 26.4-26.5V dopo
-una notte normale (circa 1.2 kWh prelevati dal pieno, capacità 4.5 kWh) è
-all'incirca **70-75%**. Imposta l'helper Numero a mano su quel valore una
-volta sola; la prima carica completa lo aggancia al 100% e da lì il
-conteggio è esatto.
+- **Correzione con la tensione**: `ocv_v` / `ocv_soc` (la tabella),
+  `correction_band_v` (0.15V), `correction_tau_min` (5),
+  `correction_resistance_ohm` (0.010), `correction_max_current_a` (30),
+  `correction_rest_min` (30).
 - **Costanti degli agganci**: `tail_current_a` (0A),
   `internal_resistance_ohm` (0.0095), `full_margin_v` (0.1V sotto il float
   per il 100%), `full_floor_v` (27.2V, la tensione più bassa che può mai
@@ -741,6 +713,38 @@ conteggio è esatto.
   visibili alle azioni.
 - **Tempi di tenuta**: il `for:` dei trigger `full_hold` (5 minuti) e
   `empty_hold` (1 minuto).
+
+**Cosa dicono tre giorni di storico (21-23 set 2026: tensione, corrente,
+potenza di batteria, modalità e priorità dell'inverter esportate da Home
+Assistant).**
+
+- **C'è stato un ciclo completo.** Pieno in float il 22 settembre alle 15:59,
+  vuoto quando il BMS ha staccato il pacco a 22.7V (2.84V per cella) il 23
+  alle 10:00, di nuovo pieno alle 15:10. Insieme a un ciclo pieno → mattino →
+  pieno del 21-22 settembre fanno tre bilanci energetici per tre incognite,
+  risolti esattamente: capacità 3.91 kWh, rendimento di carica 0.874, consumo
+  nascosto 50 W. Con questi valori il conteggio segna 0.2% nel momento dello
+  stacco del BMS e 100.0% alla fine della carica successiva.
+- **Il PI30 nasconde circa 50 W.** Dalle 04:36 alle 10:00 del 23, in Line
+  mode, ha riportato esattamente 0A per cinque ore e mezza mentre il pacco
+  a riposo scendeva da 25.1V a 22.7V. È l'autoconsumo dell'inverter, mai
+  mostrato nella corrente di batteria. In una notte fanno 0.6-0.9 kWh:
+  ignorarlo è ciò che faceva sembrare il contatore di carica "il doppio" di
+  quello di scarica in una taratura precedente (che aveva messo il fattore di
+  carica a 0.5 e la capacità a 4.5 kWh; erano sbagliati entrambi).
+- **Dal 55% al 99% la tensione è quasi inutile.** 26.42V compensati sono il
+  50%, 26.73V il 95%: 0.3V per 45 punti, con il PI30 che legge a passi di
+  0.1V. Sotto il 50% diventa informativa, e sotto il 10% la curva piega
+  bruscamente: 25.0V a riposo sono il 6%, 24.0V il 2%, 22.7V lo stacco del
+  BMS.
+- **L'inverter mantiene a 27.5V con +2A, per ore.** Dei minuti passati sopra
+  27.4V quasi tutti leggono esattamente +2A e uno solo legge 0A. Con
+  `tail_current_a = 0` l'aggancio al 100% non scattava mai; ora è 2A.
+
+**Valore di partenza.** Non serve più: con la correzione in tensione un
+valore di partenza sbagliato si corregge entro 15-20 minuti di scarica
+dovunque la tensione sia informativa, e la carica completa successiva lo
+aggancia comunque al 100%.
 
 **Taratura della resistenza interna (`internal_resistance_ohm`).** Stessa
 tensione di pacco, correnti diverse, SOC vero molto diverso: 27.5V con

@@ -15,10 +15,10 @@ description: >-
   the helper does not exist or has another id: nothing can work until
   it does, and whatever SOC you are looking at is another sensor (the
   inverter's own sensor.heltec_pi30_battery_soc, voltage-based and
-  happily stuck at 100%). The counter needs a starting point: set the
-  helper by hand once (see the README for a guess from the resting
-  voltage); from then on it walks with the energy and the 100% anchor
-  corrects it at the end of every full charge.
+  happily stuck at 100%). The starting value does not matter much: a
+  wrong one is pulled back by the voltage correction within about
+  15-20 minutes of discharge wherever the voltage is informative, and
+  the 100% anchor resets it at the end of every full charge.
   COUNTING. Once a minute (and at Home Assistant startup, and whenever
   you run the automation by hand) it reads the battery charge and
   discharge power (sensor.heltec_pi30_batteria_potenza_carica and
@@ -39,27 +39,33 @@ description: >-
   helper. Integrating the same power once a minute gives the same
   kWh, only sampled every 60 s instead of every 10 s, which for a
   battery is no loss at all.
-  capacity_kwh = 4.5 is the energy the pack DELIVERS from 100% to 0%
-  (discharge side). charge_efficiency = 0.5 is how much of each kWh
-  the PI30 SAYS it pushed in actually comes back out, MEASURED on this
-  system from two days of history (20-22 Sep 2026): from the pack
-  resting at 26.4V in the morning to full (29.0V bulk end, then float)
-  the charge counter rose by 2.50 and 2.05 kWh, and from full back to
-  the same 26.4V resting state the discharge counter rose by 1.20 and
-  1.11 kWh (ratios 0.48 and 0.54). The discharge counter agrees with
-  the inverter output power integrated over the same nights (1.20 vs
-  1.27 kWh), so it is the charge side that is inflated: this PI30
-  reports about twice the charging current that really enters the
-  pack (39A reported for two hours while the pack could only have
-  taken about 45Ah). Physics alone would give about 0.93 (charging at
-  27-28V, discharging at 26V, a few % of losses); do not "fix" this
-  value back to it without re-checking the two counters. Both are
-  tunable from the readings the anchors write in the Logbook
-  (see ANCHORS): between a 0% anchor and the next 100% anchor the rise
-  of sensor.heltec_pi30_batteria_energia_caricata is capacity_kwh /
-  charge_efficiency; between a 100% anchor and the next 0% anchor the
-  rise of sensor.heltec_pi30_batteria_energia_scaricata is
-  capacity_kwh itself. The power sensors' unit is read from the
+  CALIBRATION, from three days of history (21-23 Sep 2026) that
+  include one complete cycle: full (float, 22 Sep 15:59) -> empty (the
+  BMS cut the pack at 22.7V, 23 Sep 10:00) -> full again (23 Sep
+  15:10), plus one full -> morning -> full cycle. Three energy balances,
+  three unknowns, one exact solution:
+    capacity_kwh = 3.9 : energy the pack delivers from 100% to 0%
+      (the nominal 155Ah x 25.6V is 3.97 kWh);
+    charge_efficiency = 0.87 : share of each charged kWh the PI30
+      reports that is stored in the pack;
+    idle_drain_w = 50 : power the pack loses that the PI30 NEVER
+      reports - the inverter's own consumption, taken from the
+      battery whenever the charger is not running. It shows as 0A
+      while the voltage keeps falling: on 23 Sep, 04:36-10:00, in Line
+      mode, the PI30 read 0A for five and a half hours while the pack
+      went from 25.1V to 22.7V.
+  With these values the count closes both cycles within 0.2 points (it
+  reads 0.2% at the moment the BMS cut the pack, and 100.0% at the end
+  of the next charge). Ignoring the idle drain is what made the charge
+  side look "twice" the discharge side in an earlier calibration: the
+  missing 50W x 11-18 hours is 0.6-0.9 kWh per night.
+  So the counting is:
+    SOC += charge_kw * charge_efficiency * hours / capacity_kwh * 100
+    SOC -= (discharge_kw + idle_drain_w / 1000) * hours / capacity_kwh * 100
+  where the idle drain is applied whenever charge_kw is 0. Recheck all
+  three if the pack or the inverter changes: the anchors write both
+  lifetime energy counters in the Logbook, so a full -> empty -> full
+  cycle gives the numbers again. The power sensors' unit is read from the
   sensor (W or kW). The value is stored with 3 decimals: at the 1-2A
   this pack idles at overnight one step is a few hundredths of a
   percent, which a 1-decimal rounding would throw away entirely.
@@ -76,7 +82,8 @@ description: >-
   VOLTAGE CORRECTION. The count alone cannot know where it started:
   if it was set wrong (a stale 100, a helper created mid-discharge) it
   would stay wrong until the next full charge. So every minute the
-  measured voltage, compensated for the current, is turned into a SOC
+  measured voltage, compensated for the real current (the reported
+  one plus the idle drain), is turned into a SOC
   through a table measured on this pack (ocv_v / ocv_soc below), and
   the count is pulled towards it - but only when the voltage can be
   trusted and only when it clearly disagrees:
@@ -85,28 +92,30 @@ description: >-
       unchanged for 30 min), otherwise surface charge after a charge
       and the charging overvoltage make any pack look full;
     - clearly disagrees: the PI30 reports voltage in 0.1V steps, so
-      the table is read at voltage_ocv - 0.1V and + 0.1V, giving a
+      the table is read at voltage_ocv - 0.15V and + 0.15V, giving a
       band of SOCs the voltage is compatible with. Inside the band
       nothing happens (the count is more precise than the voltage);
       outside, the count moves towards the nearest edge of the band
       with a 5-minute time constant (about 1/5 of the gap per minute):
       a wrong value is fixed within about 15 minutes, and a single odd
       reading moves it only a little.
-  On the flat top of the curve (85-99%) the band is 20 points wide
-  and the voltage almost never overrides the count; from about 80%
-  down it is 10-15 points wide and does. Example: 26.3V at -9A is
-  26.40V compensated, band 60-74%: a counter stuck at 96% comes down
-  to about 74% in about 15 minutes, then the count takes over again.
-  The table was measured from two days of history (20-22 Sep 2026):
-  SOC reconstructed from the energy counters between two full
-  charges, voltage fitted against SOC and current (V = 25.32 +
-  0.0152*SOC + 0.0113*I, residual 0.06V). The 70-99% part is those
-  measurements; below 70% (never reached in the data) it follows the
-  usual LiFePO4 curve down to 0% at the empty anchor voltage (24.0V).
-  The steady-state resistance used here, correction_resistance_ohm =
-  0.0113, is higher than internal_resistance_ohm = 0.0095 of the
-  anchors because it includes the slow polarisation of a pack that
-  has been delivering current for minutes, not just the instant drop.
+  On the flat top of the curve (70-99%) the band is 25-30 points wide
+  and the voltage almost never overrides the count; below 50% it is
+  10-15 points wide, and below 10% (the knee: 25.0V is 6%, 24.0V is
+  2%) it is a few points, so there the voltage leads. Example: 26.3V
+  at -9A is 26.41V compensated (real current -10.9A with the idle
+  drain), band 33-64%: a counter stuck at 96% comes down to about 65%
+  in about 15 minutes, then the count takes over again.
+  The table (ocv_v / ocv_soc) was measured on this pack from 0% to
+  99%: SOC reconstructed with the calibrated count over the full ->
+  empty -> full cycle of 22-23 Sep 2026, voltage fitted against SOC
+  and real current (resistance 10 mOhm, residual about 0.06V), median
+  compensated voltage per 5% of SOC, and per minute in the last five
+  hours before the BMS cut (25.1V -> 22.7V at rest). The steady-state
+  resistance used here, correction_resistance_ohm = 0.010, is slightly
+  higher than internal_resistance_ohm = 0.0095 of the anchors because
+  it includes the slow polarisation of a pack that has been delivering
+  current for minutes, not just the instant drop.
   The correction never writes exactly 100 or 0.
   ANCHORS. Only the two template triggers below may write exactly 100
   and exactly 0, to remove the drift of the count (and its wrong
@@ -140,7 +149,7 @@ description: >-
       whatever the voltage says - including the low-current case, since
       charging at 2A because there is no surplus is not the same thing
       as a charge that tapered off because the battery would take no
-      more. And a count that says "4.5 kWh went in" is not evidence
+      more. And a count that says "3.9 kWh went in" is not evidence
       either: it stops at 99 and waits for this anchor.
       The inverter's own "charging to floating mode" flag is
       deliberately NOT used: it describes the charger's stage, not the
@@ -220,16 +229,17 @@ triggers:
 conditions: []
 actions:
   - variables:
-      capacity_kwh: 4.5
-      charge_efficiency: 0.5
+      capacity_kwh: 3.9
+      charge_efficiency: 0.87
       max_dt_hours: "{{ 5 / 60 }}"
-      correction_resistance_ohm: 0.0113
-      correction_band_v: 0.1
+      correction_resistance_ohm: 0.010
+      idle_drain_w: 50
+      correction_band_v: 0.15
       correction_tau_min: 5
       correction_max_current_a: 30
       correction_rest_min: 30
-      ocv_v: [24.0, 24.8, 25.4, 25.7, 25.9, 26.05, 26.18, 26.30, 26.42, 26.53, 26.63, 26.67, 26.70, 26.72, 26.75]
-      ocv_soc: [0, 5, 10, 20, 30, 40, 50, 60, 70, 75, 80, 85, 90, 95, 99]
+      ocv_v: [22.70, 23.40, 24.00, 24.50, 25.00, 25.60, 25.76, 25.96, 26.10, 26.22, 26.30, 26.36, 26.42, 26.47, 26.52, 26.57, 26.63, 26.67, 26.69, 26.71, 26.73, 26.75]
+      ocv_soc: [0, 1, 2, 4, 6, 9, 15, 20, 25, 30, 37, 43, 50, 55, 60, 65, 70, 75, 82, 90, 95, 99]
       voltage: >-
         {{ states('sensor.heltec_pi30_battery_voltage') | float(default=none)
         }}
@@ -273,7 +283,8 @@ actions:
               or current > 0 or current < -correction_max_current_a %}
           {{ none }}
         {% else %}
-          {% set v_ocv = voltage - current * correction_resistance_ohm %}
+          {% set real_current = current - idle_drain_w / voltage %}
+          {% set v_ocv = voltage - real_current * correction_resistance_ohm %}
           {% set lo = soc_at(v_ocv - correction_band_v) | float %}
           {% set hi = soc_at(v_ocv + correction_band_v) | float %}
           {{ [lo, 100 if hi >= 99 else hi] }}
@@ -325,7 +336,8 @@ actions:
           entity_id: input_number.pi30_battery_soc_calculated
         data:
           value: >-
-            {% set delta = (charge_kw * charge_efficiency - discharge_kw) * dt_hours / capacity_kwh * 100 %}
+            {% set drain_kw = discharge_kw + (idle_drain_w / 1000 if charge_kw == 0 else 0) %}
+            {% set delta = (charge_kw * charge_efficiency - drain_kw) * dt_hours / capacity_kwh * 100 %}
             {% if delta > 0 %}
               {% set counted = [soc_now + delta, 99] | min %}
             {% elif delta < 0 %}

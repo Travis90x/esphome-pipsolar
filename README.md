@@ -294,17 +294,36 @@ Sensors read:
 | `sensor.heltec_pi30_display_pi30_max_utility_charging_current` | utility charging current confirmed by the PI30 |
 | `sensor.heltec_pi30_display_pi30_max_total_charging_current` | total charging current confirmed by the PI30 |
 | `sensor.heltec_pi30_battery_voltage` | PI30 battery voltage |
-| `number.heltec_pi30_display_pi30_set_battery_under_voltage` | PSDV, battery cut-off configured on the inverter |
+| `sensor.heltec_pi30_display_pi30_battery_under_voltage` | PSDV, battery under-voltage threshold read back from the inverter (24.0V if unreadable) |
 
-`max_manual_current` (default `60`) and `battery_keep_under_voltage` (=
-PSDV + 0.2V) are plain variables inside the automation, **not helpers** — to
+`max_manual_current` (default `60`) and `hold_release_margin_v` (default
+`0.3` V) are plain variables inside the automation, **not helpers** — to
 change them, open the automation in YAML mode and edit the numbers directly.
+
+**Hold at the under-voltage threshold.** When the PI30 battery voltage drops
+to `sensor.heltec_pi30_display_pi30_battery_under_voltage`, KEEP runs instead
+of DISCHARGE: SBU, charger "solar + utility", utility current fixed at 2A. At
+that voltage the inverter in SBU is already in Line mode (the loads run on the
+grid), so the 2A only cover the inverter's own consumption, about 50W, which
+the PI30 never shows in the battery current and which would otherwise drain
+the pack down to the BMS cut. That is what happened on 23 Sep 2026: the
+charger priority stayed on "solar only", the PI30 reported 0A for five and a
+half hours in Line mode while the pack went from 25.1V to 22.7V, the BMS
+disconnected it at 10:00 and the inverter switched off with the whole output.
+KEEP is not a grid recharge: the pack stays around the threshold. It stays
+active until the voltage rises `hold_release_margin_v` above the threshold,
+then DISCHARGE takes over again, and KEEP comes back if the voltage falls to
+the threshold again. Real charging is still left to the surplus (the CHARGE
+branches). A template trigger (`sotto_tensione`) makes the automation react
+within a minute of reaching the threshold, instead of waiting for the
+10-minute check. The KEEP script also forces the utility current back to 2A
+when the priorities are already right.
 
 Writes: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
 `script.pi30_batteria_da_caricare` (CHARGE), `script.pi30_batteria_da_scaricare`
 (DISCHARGE), `script.pi30_batteria_da_mantenere` (KEEP — used instead of
-DISCHARGE when the PI30 battery is already close to cut-off).
+DISCHARGE to hold the PI30 battery at the under-voltage threshold with 2A).
 
 Utility current steps: `2 10 20 30 40 50 60`.
 
@@ -375,11 +394,12 @@ OTHERWISE
 
 OTHERWISE
 	IF
-		sensor.heltec_pi30_battery_voltage < battery_keep_under_voltage
-		(where battery_keep_under_voltage = number.heltec_pi30_display_pi30_set_battery_under_voltage + 0.2)
+		sensor.heltec_pi30_battery_voltage <= sensor.heltec_pi30_display_pi30_battery_under_voltage
+		OR (KEEP already active AND voltage < under-voltage + hold_release_margin_v)
+		(KEEP active = output priority SBU AND charger priority solar + utility)
 	THEN
 		KEEP = script.pi30_batteria_da_mantenere
-		(the PI30 battery is already close to cut-off: do not discharge it further)
+		(SBU, solar + utility, 2A: hold the battery at the threshold, do not recharge it from the grid)
 	OTHERWISE
 		DISCHARGE = script.pi30_batteria_da_scaricare
 

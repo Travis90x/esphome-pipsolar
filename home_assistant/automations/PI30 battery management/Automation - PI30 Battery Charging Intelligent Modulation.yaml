@@ -7,6 +7,24 @@ description: >-
   modulazione, modifica il valore di MAX_MANUAL_CURRENT nella variabile
   max_manual_current qui sotto (riga "action > variables") e salva
   l'automazione.
+  MANTENIMENTO ALLA SOTTOTENSIONE. Quando la tensione della batteria PI30
+  scende a sensor.heltec_pi30_display_pi30_battery_under_voltage (la
+  soglia di sottotensione letta dall'inverter), invece di SCARICA viene
+  eseguito MANTIENI (script.pi30_batteria_da_mantenere): SBU, carica
+  "solare + rete" e corrente massima da rete fissa a 2A. In SBU a quella
+  tensione l'inverter è già in Line mode (i carichi vanno sulla rete),
+  quindi i 2A servono solo a coprire l'autoconsumo dell'inverter, circa
+  50W, che altrimenti scaricherebbe la batteria fino allo stacco del BMS
+  (successo il 23/09/2026 alle 10:00: 5 ore e mezza a 0A segnati mentre
+  la tensione scendeva da 25.1V a 22.7V). Non è una ricarica dalla rete:
+  la batteria resta intorno alla soglia. Il mantenimento resta attivo
+  finché la tensione non sale di hold_release_margin_v (0.3V) sopra la
+  soglia; poi torna SCARICA, e riparte se la tensione ridiscende alla
+  soglia. La carica vera resta affidata al surplus, cioè ai rami di
+  CARICA qui sopra. Il trigger sotto_tensione fa intervenire
+  l'automazione entro un minuto dal raggiungimento della soglia, senza
+  aspettare il controllo dei 10 minuti. Se la soglia non è leggibile si
+  usa 24.0V, per sicurezza.
 triggers:
   - trigger: homeassistant
     id: avvio
@@ -25,6 +43,14 @@ triggers:
       hours: 0
       minutes: 0
       seconds: 10
+  - trigger: template
+    id: sotto_tensione
+    value_template: >-
+      {{ states('sensor.heltec_pi30_battery_voltage') | float(99) <=
+      states('sensor.heltec_pi30_display_pi30_battery_under_voltage') |
+      float(24.0) }}
+    for:
+      minutes: 1
 actions:
   - variables:
       charging_steps:
@@ -54,9 +80,18 @@ actions:
       power_known: '{{ grid_power is not none and battery_power is not none }}'
       sensors_unknown: '{{ soc is none or voltage is none }}'
       pi30_voltage: '{{ states(''sensor.heltec_pi30_battery_voltage'') | float(default=none) }}'
-      battery_keep_under_voltage: >-
-        {{ states('number.heltec_pi30_display_pi30_set_battery_under_voltage')
-        | float(default=0) + 0.2 }}
+      under_voltage: >-
+        {{ states('sensor.heltec_pi30_display_pi30_battery_under_voltage') |
+        float(default=24.0) }}
+      hold_release_margin_v: 0.3
+      hold_active: >-
+        {{ states('sensor.heltec_pi30_display_pi30_output_source_priority') |
+        float(0) == 2.0 and
+        states('sensor.heltec_pi30_display_pi30_charger_source_priority') |
+        float(0) == 2.0 }}
+      hold_needed: >-
+        {{ pi30_voltage is not none and (pi30_voltage <= under_voltage or
+        (hold_active and pi30_voltage < under_voltage + hold_release_margin_v)) }}
   - if:
       - condition: template
         value_template: '{{ soc_known and soc > 99 }}'
@@ -334,10 +369,9 @@ actions:
                           - if:
                               - condition: template
                                 value_template: >-
-                                  {{ pi30_voltage is not none and pi30_voltage <
-                                  battery_keep_under_voltage }}
+                                  {{ hold_needed }}
                             then:
-                              # Batteria PI30 già vicina al cut-off: mantenere invece di scaricare
+                              # Batteria PI30 alla soglia di sottotensione: mantenere a 2A invece di scaricare
                               - target:
                                   entity_id: script.pi30_batteria_da_mantenere
                                 action: script.turn_on

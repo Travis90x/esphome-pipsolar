@@ -1,5 +1,12 @@
 alias: PI30 batteria da mantenere
-description: ''
+description: >-
+  Mantenimento alla soglia di sottotensione: SBU, carica "solare + rete",
+  corrente massima da rete 2A. A quella tensione l'inverter in SBU è già in
+  Line mode, quindi i 2A coprono solo il suo autoconsumo (circa 50W) e la
+  batteria resta intorno alla soglia invece di scendere fino allo stacco
+  del BMS. La corrente viene riportata a 2A anche quando le priorità sono
+  già giuste, così un valore più alto lasciato da un'altra logica non
+  diventa una ricarica dalla rete.
 sequence:
   - delay:
       hours: 0
@@ -33,16 +40,16 @@ sequence:
           minutes: 0
           seconds: 1
           milliseconds: 0
-      - if:
-          - condition: numeric_state
-            entity_id: sensor.heltec_pi30_display_pi30_max_utility_charging_current
-            above: 2
-        then:
-          - action: select.select_option
-            target:
-              entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
-            data:
-              option: '2'
+  - if:
+      - condition: numeric_state
+        entity_id: sensor.heltec_pi30_display_pi30_max_utility_charging_current
+        above: 2
+    then:
+      - action: select.select_option
+        target:
+          entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+        data:
+          option: '2'
   - delay:
       hours: 0
       minutes: 0

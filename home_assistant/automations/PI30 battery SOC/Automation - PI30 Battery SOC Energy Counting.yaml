@@ -116,7 +116,12 @@ description: >-
   higher than internal_resistance_ohm = 0.0095 of the anchors because
   it includes the slow polarisation of a pack that has been delivering
   current for minutes, not just the instant drop.
-  The correction never writes exactly 100 or 0.
+  Near the two ends the band is widened to the end itself (a band
+  reaching 99% counts as reaching 100%, one reaching 3% or less counts
+  as reaching 0%), so the correction never lifts an anchored 0 while
+  the battery is held at the under-voltage threshold by the charging
+  automation (at 23.8-24.0V, where the table says 2%), nor lowers an
+  anchored 100. The correction itself never writes exactly 100 or 0.
   ANCHORS. Only the two template triggers below may write exactly 100
   and exactly 0, to remove the drift of the count (and its wrong
   capacity/efficiency, if any), and each one fires only once its
@@ -287,7 +292,7 @@ actions:
           {% set v_ocv = voltage - real_current * correction_resistance_ohm %}
           {% set lo = soc_at(v_ocv - correction_band_v) | float %}
           {% set hi = soc_at(v_ocv + correction_band_v) | float %}
-          {{ [lo, 100 if hi >= 99 else hi] }}
+          {{ [0 if lo <= 3 else lo, 100 if hi >= 99 else hi] }}
         {% endif %}
       readings: >-
         V={{ states('sensor.heltec_pi30_battery_voltage') }}V

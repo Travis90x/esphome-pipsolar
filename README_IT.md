@@ -302,18 +302,37 @@ Sensori letti:
 | `sensor.heltec_pi30_display_pi30_max_utility_charging_current` | corrente di carica da rete confermata dal PI30 |
 | `sensor.heltec_pi30_display_pi30_max_total_charging_current` | corrente totale confermata dal PI30 |
 | `sensor.heltec_pi30_battery_voltage` | Tensione batteria PI30 |
-| `number.heltec_pi30_display_pi30_set_battery_under_voltage` | PSDV, cut-off batteria impostato sull'inverter |
+| `sensor.heltec_pi30_display_pi30_battery_under_voltage` | PSDV, soglia di sottotensione letta dall'inverter (24.0V se non leggibile) |
 
-`max_manual_current` (default `60`) e `battery_keep_under_voltage` (=
-PSDV + 0.2V) sono semplici variabili dentro l'automazione, **non helper** —
-per cambiarle, apri l'automazione in modalità YAML e modifica direttamente
-i numeri.
+`max_manual_current` (default `60`) e `hold_release_margin_v` (default
+`0.3` V) sono semplici variabili dentro l'automazione, **non helper** — per
+cambiarle, apri l'automazione in modalità YAML e modifica direttamente i
+numeri.
+
+**Mantenimento alla soglia di sottotensione.** Quando la tensione della
+batteria PI30 scende a `sensor.heltec_pi30_display_pi30_battery_under_voltage`,
+al posto di SCARICA viene eseguito MANTIENI: SBU, carica "solare + rete",
+corrente da rete fissa a 2A. A quella tensione l'inverter in SBU è già in Line
+mode (i carichi vanno sulla rete), quindi i 2A coprono solo l'autoconsumo
+dell'inverter, circa 50W, che il PI30 non mostra mai nella corrente di
+batteria e che altrimenti scaricherebbe il pacco fino allo stacco del BMS. È
+quello che è successo il 23/09/2026: la priorità di carica è rimasta su "solo
+solare", il PI30 ha segnato 0A per cinque ore e mezza in Line mode mentre il
+pacco scendeva da 25.1V a 22.7V, il BMS l'ha staccato alle 10:00 e l'inverter
+si è spento con tutta l'uscita. MANTIENI non è una ricarica dalla rete: il
+pacco resta intorno alla soglia. Resta attivo finché la tensione non sale di
+`hold_release_margin_v` sopra la soglia, poi torna SCARICA, e MANTIENI riparte
+se la tensione ridiscende alla soglia. La carica vera resta affidata al
+surplus (i rami CARICA). Un trigger template (`sotto_tensione`) fa intervenire
+l'automazione entro un minuto dal raggiungimento della soglia, senza
+aspettare il controllo dei 10 minuti. Lo script MANTIENI riporta la corrente
+da rete a 2A anche quando le priorità sono già giuste.
 
 Scritture: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
 `script.pi30_batteria_da_caricare` (CARICA), `script.pi30_batteria_da_scaricare`
 (SCARICA), `script.pi30_batteria_da_mantenere` (MANTIENI — usato al posto di
-SCARICA quando la batteria PI30 è già vicina al cut-off).
+SCARICA per tenere la batteria PI30 alla soglia di sottotensione con 2A).
 
 Step di corrente da rete: `2 10 20 30 40 50 60`.
 
@@ -384,11 +403,12 @@ ALTRIMENTI
 
 ALTRIMENTI
 	SE
-		sensor.heltec_pi30_battery_voltage < battery_keep_under_voltage
-		(dove battery_keep_under_voltage = number.heltec_pi30_display_pi30_set_battery_under_voltage + 0.2)
+		sensor.heltec_pi30_battery_voltage <= sensor.heltec_pi30_display_pi30_battery_under_voltage
+		OPPURE (MANTIENI già attivo E tensione < sottotensione + hold_release_margin_v)
+		(MANTIENI attivo = priorità uscita SBU E priorità carica solare + rete)
 	ALLORA
 		MANTIENI = script.pi30_batteria_da_mantenere
-		(la batteria PI30 è già vicina al cut-off: non scaricarla ulteriormente)
+		(SBU, solare + rete, 2A: tiene la batteria alla soglia, non la ricarica dalla rete)
 	ALTRIMENTI
 		SCARICA = script.pi30_batteria_da_scaricare
 

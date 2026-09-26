@@ -325,23 +325,16 @@ il pacco scendeva da 23.6V a 22.8V e il BMS l'ha staccato; con 9-10A, dalle
 volt in pochi minuti; MANTIENI resta attivo finché la tensione non è
 `hold_release_margin_v` sopra la soglia, poi torna SCARICA, e MANTIENI riparte
 quando la tensione ridiscende alla soglia: dalla rete si preleva solo quello
-che l'inverter consuma, non è una ricarica. **Non disattivare
-questa automazione**: disattivata non protegge più il pacco (il 25/09 era
+che l'inverter consuma, non è una ricarica. MANTIENI è il **primo controllo** di ogni esecuzione e vince
+su tutti i rami CARICA e SCARICA, quindi anche una carica a 2A (che non basta)
+viene sostituita da MANTIENI quando il pacco è alla soglia. L'automazione fa
+tutto da sola e deve restare sempre attiva: disattivata non protegge più il pacco (il 25/09 era
 disattivata, alla soglia non è intervenuto nulla e il BMS ha spento
 l'inverter alle 22:00). La carica vera resta affidata al
 surplus (i rami CARICA). Un trigger template (`sotto_tensione`) fa intervenire
 l'automazione entro un minuto dal raggiungimento della soglia, senza
 aspettare il controllo dei 10 minuti. Lo script MANTIENI porta la corrente
 da rete a 10A anche quando le priorità sono già giuste.
-
-**Spegnere la modulazione.** Per fermare la modulazione della carica spegni
-l'helper `input_boolean.pi30_modulazione_carica` (`Helper - PI30 modulazione
-carica (Toggle).yaml`, stessa cartella) invece di disattivare l'automazione.
-Con l'helper spento l'automazione fa solo la protezione: MANTIENI (SBU,
-"solare + rete", 10A) alla soglia di sottotensione e, quando la tensione è
-`hold_release_margin_v` sopra la soglia con le impostazioni di MANTIENI ancora
-attive (SBU + "solare + rete" + 10A), SCARICA; per il resto non tocca
-l'inverter. Se l'helper non esiste la modulazione resta attiva, come prima.
 
 Scritture: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
@@ -355,6 +348,16 @@ Step di corrente da rete: `2 10 20 30 40 50 60`.
 <summary>Logica decisionale completa (clicca per espandere)</summary>
 
 ```
+PRIMA DI TUTTO
+SE
+	sensor.heltec_pi30_battery_voltage <= sensor.heltec_pi30_display_pi30_battery_under_voltage
+	OPPURE (MANTIENI già attivo E tensione < sottotensione + hold_release_margin_v)
+	(MANTIENI attivo = priorità uscita SBU E priorità carica solare + rete)
+ALLORA
+	MANTIENI = script.pi30_batteria_da_mantenere
+	(SBU, solare + rete, 10A: tiene la batteria appena sopra la soglia, non la ricarica dalla rete)
+	e STOP: nessuno dei rami sotto viene eseguito
+
 Segnale favorevole OR nulla noto
 SE
 	SOC or VOLT goodwe noti (almeno 1 dei due) e favorevole (batteria goodwe carica E potenza di carica al minimo + NON consuma tanto la goodwe + NON preleva tanto dalla rete) =
@@ -417,15 +420,7 @@ ALTRIMENTI
 		MODIFICA select.heltec_pi30_display_pi30_set_max_utility_charging_current = 2
 
 ALTRIMENTI
-	SE
-		sensor.heltec_pi30_battery_voltage <= sensor.heltec_pi30_display_pi30_battery_under_voltage
-		OPPURE (MANTIENI già attivo E tensione < sottotensione + hold_release_margin_v)
-		(MANTIENI attivo = priorità uscita SBU E priorità carica solare + rete)
-	ALLORA
-		MANTIENI = script.pi30_batteria_da_mantenere
-		(SBU, solare + rete, 10A: tiene la batteria appena sopra la soglia, non la ricarica dalla rete)
-	ALTRIMENTI
-		SCARICA = script.pi30_batteria_da_scaricare
+	SCARICA = script.pi30_batteria_da_scaricare
 
 VUOL DIRE CHE
 SE

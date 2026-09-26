@@ -23,17 +23,13 @@ description: >-
   hold_release_margin_v (0.5V) sopra la soglia, poi torna SCARICA, e
   riparte se la tensione ridiscende alla soglia: dalla rete si preleva
   solo quello che l'inverter consuma, non una ricarica.
-  NON DISATTIVARE QUESTA AUTOMAZIONE: disattivata non protegge più la
-  batteria (il 25/09 era disattivata, alla soglia non è intervenuto
-  nulla e il BMS ha spento l'inverter alle 22:00). Per fermare la
-  modulazione della carica spegni invece l'helper
-  input_boolean.pi30_modulazione_carica ("Helper - PI30 modulazione
-  carica (Toggle).yaml"): da spento l'automazione fa SOLO la protezione,
-  cioè MANTIENI alla soglia e, quando la tensione è risalita di
-  hold_release_margin_v con le impostazioni di MANTIENI ancora attive
-  (SBU + "solare + rete" + 10A), SCARICA; per il resto non tocca
-  l'inverter. Se l'helper non esiste la modulazione è attiva, come
-  prima. La carica vera resta affidata al surplus, cioè ai rami di
+  Il mantenimento è il PRIMO controllo di ogni esecuzione e vince su
+  tutti i rami di CARICA e SCARICA: anche una carica a 2A (che non
+  basta) viene sostituita da MANTIENI quando la batteria è alla soglia.
+  L'automazione fa tutto da sola e deve restare sempre attiva:
+  disattivata non protegge la batteria (il 25/09 era disattivata, alla
+  soglia non è intervenuto nulla e il BMS ha spento l'inverter alle
+  22:00). La carica vera resta affidata al surplus, cioè ai rami di
   CARICA qui sopra. Il trigger sotto_tensione fa intervenire
   l'automazione entro un minuto dal raggiungimento della soglia, senza
   aspettare il controllo dei 10 minuti. Se la soglia non è leggibile si
@@ -105,30 +101,15 @@ actions:
       hold_needed: >-
         {{ pi30_voltage is not none and (pi30_voltage <= under_voltage or
         (hold_active and pi30_voltage < under_voltage + hold_release_margin_v)) }}
-      modulation_on: "{{ not is_state('input_boolean.pi30_modulazione_carica', 'off') }}"
   - if:
       - condition: template
-        value_template: "{{ not modulation_on }}"
+        value_template: '{{ hold_needed }}'
     then:
-      # Modulazione spenta: solo protezione dallo stacco del BMS
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: "{{ pi30_voltage is not none and pi30_voltage <= under_voltage }}"
-            sequence:
-              - target:
-                  entity_id: script.pi30_batteria_da_mantenere
-                action: script.turn_on
-          - conditions:
-              - condition: template
-                value_template: >-
-                  {{ hold_active and current_utility == 10 and pi30_voltage is not none
-                  and pi30_voltage >= under_voltage + hold_release_margin_v }}
-            sequence:
-              - target:
-                  entity_id: script.pi30_batteria_da_scaricare
-                action: script.turn_on
-      - stop: Modulazione spenta, solo protezione di sottotensione
+      # Batteria PI30 alla soglia di sottotensione: MANTIENI a 10A, prima di ogni altro ramo
+      - target:
+          entity_id: script.pi30_batteria_da_mantenere
+        action: script.turn_on
+      - stop: Batteria PI30 alla soglia di sottotensione, mantenimento
   - if:
       - condition: template
         value_template: '{{ soc_known and soc > 99 }}'
@@ -403,20 +384,10 @@ actions:
                               option: '2'
                             action: select.select_option
                         else:
-                          - if:
-                              - condition: template
-                                value_template: >-
-                                  {{ hold_needed }}
-                            then:
-                              # Batteria PI30 alla soglia di sottotensione: mantenere a 2A invece di scaricare
-                              - target:
-                                  entity_id: script.pi30_batteria_da_mantenere
-                                action: script.turn_on
-                            else:
-                              - target:
-                                  entity_id: script.pi30_batteria_da_scaricare
-                                action: script.turn_on
-                              - delay: '00:00:02'
+                          - target:
+                              entity_id: script.pi30_batteria_da_scaricare
+                            action: script.turn_on
+                          - delay: '00:00:02'
                 else:
                   - target:
                       entity_id: script.pi30_batteria_da_caricare

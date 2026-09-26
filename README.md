@@ -316,23 +316,16 @@ reported +2A while the pack went from 23.6V to 22.8V and the BMS cut it; with
 few tenths of a volt within minutes; KEEP stays active until the voltage is
 `hold_release_margin_v` above the threshold, then DISCHARGE takes over again,
 and KEEP comes back when the voltage falls to the threshold again: the grid
-only supplies what the inverter consumes, it is not a recharge. **Do not disable this
-automation**: disabled, it no longer protects the pack (it was disabled on 25
+only supplies what the inverter consumes, it is not a recharge. KEEP is the **first check** of every run and wins over all
+the CHARGE and DISCHARGE branches, so even a 2A charge (not enough) is
+replaced by KEEP when the pack is at the threshold. The automation does
+everything on its own and must stay enabled: disabled, it no longer protects the pack (it was disabled on 25
 Sep, nothing happened at the threshold and the BMS switched the inverter off
 at 22:00). Real charging is still left to the surplus (the CHARGE
 branches). A template trigger (`sotto_tensione`) makes the automation react
 within a minute of reaching the threshold, instead of waiting for the
 10-minute check. The KEEP script also forces the utility current to 10A
 when the priorities are already right.
-
-**Switching the modulation off.** To stop the charge modulation, turn off
-the helper `input_boolean.pi30_modulazione_carica` (`Helper - PI30 modulazione
-carica (Toggle).yaml`, same folder) instead of disabling the automation. With
-the helper off the automation only protects the pack: KEEP (SBU, "solar +
-utility", 10A) at the under-voltage threshold and, once the voltage is
-`hold_release_margin_v` above it with KEEP's settings still in place (SBU +
-"solar + utility" + 10A), DISCHARGE; otherwise it does not touch the inverter.
-If the helper does not exist the modulation stays on, as before.
 
 Writes: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
@@ -346,6 +339,16 @@ Utility current steps: `2 10 20 30 40 50 60`.
 <summary>Full decision logic (click to expand)</summary>
 
 ```
+FIRST, BEFORE ANYTHING ELSE
+IF
+	sensor.heltec_pi30_battery_voltage <= sensor.heltec_pi30_display_pi30_battery_under_voltage
+	OR (KEEP already active AND voltage < under-voltage + hold_release_margin_v)
+	(KEEP active = output priority SBU AND charger priority solar + utility)
+THEN
+	KEEP = script.pi30_batteria_da_mantenere
+	(SBU, solar + utility, 10A: hold the battery just above the threshold, do not recharge it from the grid)
+	and STOP: none of the branches below runs
+
 Favorable signal OR nothing known
 IF
 	Goodwe SOC or VOLT known (at least one of the two) and favorable (goodwe battery full AND charging power at minimum + goodwe NOT drawing much + NOT drawing much from the grid) =
@@ -408,15 +411,7 @@ OTHERWISE
 		SET select.heltec_pi30_display_pi30_set_max_utility_charging_current = 2
 
 OTHERWISE
-	IF
-		sensor.heltec_pi30_battery_voltage <= sensor.heltec_pi30_display_pi30_battery_under_voltage
-		OR (KEEP already active AND voltage < under-voltage + hold_release_margin_v)
-		(KEEP active = output priority SBU AND charger priority solar + utility)
-	THEN
-		KEEP = script.pi30_batteria_da_mantenere
-		(SBU, solar + utility, 10A: hold the battery just above the threshold, do not recharge it from the grid)
-	OTHERWISE
-		DISCHARGE = script.pi30_batteria_da_scaricare
+	DISCHARGE = script.pi30_batteria_da_scaricare
 
 WHICH MEANS
 IF

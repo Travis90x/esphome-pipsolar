@@ -316,13 +316,25 @@ reported +2A while the pack went from 23.6V to 22.8V and the BMS cut it; with
 few tenths of a volt within minutes; KEEP stays active until the voltage is
 `hold_release_margin_v` above the threshold, then DISCHARGE takes over again,
 and KEEP comes back when the voltage falls to the threshold again: the grid
-only supplies what the inverter consumes, it is not a recharge. **KEEP only
-works while this automation is enabled**: on 25 Sep it was disabled from
-15:20 to 01:41 and nothing happened at the threshold. Real charging is still left to the surplus (the CHARGE
+only supplies what the inverter consumes, it is not a recharge. When this
+automation is disabled (it was on 25 Sep, and nothing happened at the
+threshold), the separate **Under-voltage Guard** does the same KEEP /
+DISCHARGE cycle: see below. Real charging is still left to the surplus (the CHARGE
 branches). A template trigger (`sotto_tensione`) makes the automation react
 within a minute of reaching the threshold, instead of waiting for the
 10-minute check. The KEEP script also forces the utility current to 10A
 when the priorities are already right.
+
+**Under-voltage Guard** (`Automation - PI30 Battery Under-voltage
+Guard.yaml`, same folder). Runs only while the MAN automation
+(`automation.pi30_battery_charging_intelligent_modulation`) is **not** on, so
+the pack is protected even when you switch MAN off. When the PI30 battery
+voltage has been at or below the under-voltage threshold for 1 minute it runs
+KEEP (SBU, "solar + utility", 10A); when the voltage has been 0.5V above the
+threshold for 5 minutes and KEEP's settings are still in place, it runs
+DISCHARGE (SBU, "solar only"). It also checks every 10 minutes and at Home
+Assistant start. If you set SBU + "solar + utility" + 10A by hand with MAN
+off, the guard will put it back to "solar only" once the voltage recovers.
 
 Writes: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,

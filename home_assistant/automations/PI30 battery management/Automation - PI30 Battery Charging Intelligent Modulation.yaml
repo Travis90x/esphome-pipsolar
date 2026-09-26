@@ -22,10 +22,10 @@ description: >-
   minuti; il mantenimento resta attivo finché la tensione non sale di
   hold_release_margin_v (0.5V) sopra la soglia, poi torna SCARICA, e
   riparte se la tensione ridiscende alla soglia: dalla rete si preleva
-  solo quello che l'inverter consuma, non una ricarica. ATTENZIONE: il
-  mantenimento funziona solo se questa automazione è ATTIVA; il 25/09
-  era disattivata dalle 15:20 alle 01:41 e alla soglia non è intervenuto
-  nulla. La carica vera resta affidata al surplus, cioè ai rami di
+  solo quello che l'inverter consuma, non una ricarica. Quando questa
+  automazione è disattivata, lo stesso mantenimento lo fa "Automation -
+  PI30 Battery Under-voltage Guard.yaml" (il 25/09 MAN era disattivata e
+  alla soglia non è intervenuto nulla). La carica vera resta affidata al surplus, cioè ai rami di
   CARICA qui sopra. Il trigger sotto_tensione fa intervenire
   l'automazione entro un minuto dal raggiungimento della soglia, senza
   aspettare il controllo dei 10 minuti. Se la soglia non è leggibile si

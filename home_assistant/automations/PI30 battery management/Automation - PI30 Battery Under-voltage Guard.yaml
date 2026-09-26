@@ -1,0 +1,84 @@
+alias: PI30 Battery Under-voltage Guard
+description: >-
+  Protezione della batteria PI30 dallo stacco del BMS, indipendente
+  dall'automazione MAN (automation.pi30_battery_charging_intelligent_modulation).
+  Lavora SOLO quando MAN è disattivata: con MAN attiva lo stesso
+  mantenimento lo fa già MAN, e le due non si pestano i piedi.
+  PERCHÉ. In SBU, sotto la tensione di ritorno a rete (circa 24.5V su
+  questo impianto) l'inverter passa in Line mode: i carichi vanno sulla
+  rete, ma se la priorità di carica è "solo solare" di notte non carica
+  nessuno, e l'autoconsumo dell'inverter (circa 50W, mai mostrato nella
+  corrente di batteria, anzi il PI30 segna +1A) scarica il pacco fino
+  allo stacco del BMS a 22.7V, che spegne l'inverter. Successo il
+  25/09/2026: Line mode alle 18:30 a 24.5V, stacco alle 22:00 a 22.7V,
+  inverter spento fino alle 03:58, con MAN disattivata.
+  COSA FA. Quando la tensione scende alla soglia di sottotensione letta
+  dall'inverter (sensor.heltec_pi30_display_pi30_battery_under_voltage,
+  24.0V se non leggibile) per 1 minuto, esegue MANTIENI
+  (script.pi30_batteria_da_mantenere: SBU, carica "solare + rete",
+  corrente da rete 10A). Quando la tensione è risalita di
+  release_margin_v (0.5V) sopra la soglia per 5 minuti, e il mantenimento
+  è ancora quello impostato da MANTIENI (SBU + "solare + rete" + 10A),
+  esegue SCARICA (script.pi30_batteria_da_scaricare: SBU, "solo solare").
+  Il ciclo si ripete finché non torna il sole: dalla rete si preleva solo
+  l'autoconsumo dell'inverter, non una ricarica. Il controllo ogni 10
+  minuti e all'avvio copre i casi in cui la tensione era già sotto soglia
+  quando l'automazione è partita. ATTENZIONE: se imposti a mano SBU +
+  "solare + rete" + 10A con MAN spenta, al rientro sopra soglia questa
+  automazione lo riporterà a "solo solare".
+triggers:
+  - trigger: template
+    id: sotto_tensione
+    value_template: >-
+      {{ states('sensor.heltec_pi30_battery_voltage') | float(99) <=
+      states('sensor.heltec_pi30_display_pi30_battery_under_voltage') | float(24.0) }}
+    for:
+      minutes: 1
+  - trigger: template
+    id: risalita
+    value_template: >-
+      {{ states('sensor.heltec_pi30_battery_voltage') | float(0) >=
+      states('sensor.heltec_pi30_display_pi30_battery_under_voltage') | float(24.0) + 0.5 }}
+    for:
+      minutes: 5
+  - trigger: time_pattern
+    id: controllo_10_minuti
+    minutes: /10
+  - trigger: homeassistant
+    id: avvio
+    event: start
+conditions:
+  - condition: template
+    value_template: >-
+      {{ not is_state('automation.pi30_battery_charging_intelligent_modulation', 'on') }}
+actions:
+  - variables:
+      release_margin_v: 0.5
+      voltage: >-
+        {{ states('sensor.heltec_pi30_battery_voltage') | float(default=none) }}
+      under_voltage: >-
+        {{ states('sensor.heltec_pi30_display_pi30_battery_under_voltage') |
+        float(default=24.0) }}
+      hold_active: >-
+        {{ states('sensor.heltec_pi30_display_pi30_output_source_priority') | float(0) == 2.0
+           and states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(0) == 2.0
+           and states('sensor.heltec_pi30_display_pi30_max_utility_charging_current') | int(0) == 10 }}
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ voltage is not none and voltage <= under_voltage }}"
+        sequence:
+          - action: script.turn_on
+            target:
+              entity_id: script.pi30_batteria_da_mantenere
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ hold_active and voltage is not none
+                 and voltage >= under_voltage + release_margin_v }}
+        sequence:
+          - action: script.turn_on
+            target:
+              entity_id: script.pi30_batteria_da_scaricare
+mode: single
+max_exceeded: silent

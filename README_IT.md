@@ -325,13 +325,25 @@ il pacco scendeva da 23.6V a 22.8V e il BMS l'ha staccato; con 9-10A, dalle
 volt in pochi minuti; MANTIENI resta attivo finché la tensione non è
 `hold_release_margin_v` sopra la soglia, poi torna SCARICA, e MANTIENI riparte
 quando la tensione ridiscende alla soglia: dalla rete si preleva solo quello
-che l'inverter consuma, non è una ricarica. **MANTIENI funziona solo se
-l'automazione è attiva**: il 25/09 era disattivata dalle 15:20 alle 01:41 e
-alla soglia non è intervenuto nulla. La carica vera resta affidata al
+che l'inverter consuma, non è una ricarica. Quando questa
+automazione è disattivata (lo era il 25/09, e alla soglia non è intervenuto
+nulla), lo stesso ciclo MANTIENI / SCARICA lo fa la **Guardia di
+sottotensione** separata: vedi sotto. La carica vera resta affidata al
 surplus (i rami CARICA). Un trigger template (`sotto_tensione`) fa intervenire
 l'automazione entro un minuto dal raggiungimento della soglia, senza
 aspettare il controllo dei 10 minuti. Lo script MANTIENI porta la corrente
 da rete a 10A anche quando le priorità sono già giuste.
+
+**Guardia di sottotensione** (`Automation - PI30 Battery Under-voltage
+Guard.yaml`, stessa cartella). Lavora solo quando l'automazione MAN
+(`automation.pi30_battery_charging_intelligent_modulation`) **non** è attiva,
+così il pacco è protetto anche quando spegni MAN. Quando la tensione della
+batteria PI30 resta alla soglia di sottotensione o sotto per 1 minuto esegue
+MANTIENI (SBU, "solare + rete", 10A); quando resta 0.5V sopra la soglia per 5
+minuti e le impostazioni di MANTIENI sono ancora quelle, esegue SCARICA (SBU,
+"solo solare"). Controlla anche ogni 10 minuti e all'avvio di Home Assistant.
+Se con MAN spenta imposti a mano SBU + "solare + rete" + 10A, al rientro sopra
+soglia la guardia lo riporta a "solo solare".
 
 Scritture: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,

@@ -305,34 +305,39 @@ Sensori letti:
 | `sensor.heltec_pi30_display_pi30_battery_under_voltage` | PSDV, soglia di sottotensione letta dall'inverter (24.0V se non leggibile) |
 
 `max_manual_current` (default `60`) e `hold_release_margin_v` (default
-`0.3` V) sono semplici variabili dentro l'automazione, **non helper** — per
+`0.5` V) sono semplici variabili dentro l'automazione, **non helper** — per
 cambiarle, apri l'automazione in modalità YAML e modifica direttamente i
 numeri.
 
 **Mantenimento alla soglia di sottotensione.** Quando la tensione della
 batteria PI30 scende a `sensor.heltec_pi30_display_pi30_battery_under_voltage`,
 al posto di SCARICA viene eseguito MANTIENI: SBU, carica "solare + rete",
-corrente da rete fissa a 2A. A quella tensione l'inverter in SBU è già in Line
-mode (i carichi vanno sulla rete), quindi i 2A coprono solo l'autoconsumo
-dell'inverter, circa 50W, che il PI30 non mostra mai nella corrente di
-batteria e che altrimenti scaricherebbe il pacco fino allo stacco del BMS. È
-quello che è successo il 23/09/2026: la priorità di carica è rimasta su "solo
-solare", il PI30 ha segnato 0A per cinque ore e mezza in Line mode mentre il
-pacco scendeva da 25.1V a 22.7V, il BMS l'ha staccato alle 10:00 e l'inverter
-si è spento con tutta l'uscita. MANTIENI non è una ricarica dalla rete: il
-pacco resta intorno alla soglia. Resta attivo finché la tensione non sale di
+corrente da rete fissa a 10A. A quella tensione l'inverter in SBU è già in
+Line mode (i carichi vanno sulla rete), ma il suo autoconsumo, circa 50W, che
+il PI30 non mostra mai nella corrente di batteria, esce comunque dal pacco e
+lo porterebbe fino allo stacco del BMS, che spegne l'inverter con tutta
+l'uscita. È successo il 23/09/2026 alle 10:00 (carica su "solo solare", 0A
+segnati per cinque ore e mezza in Line mode mentre il pacco scendeva da 25.1V
+a 22.7V), il 25/09 alle 22:00 e il 26/09 alle 04:29, sempre a 22.7-22.8V.
+**2A non bastano**: il 26/09 dalle 04:02 alle 04:29 il PI30 segnava +2A mentre
+il pacco scendeva da 23.6V a 22.8V e il BMS l'ha staccato; con 9-10A, dalle
+04:30, è risalito da 23.2V a 25.9V. Con 10A il pacco sale di qualche decimo di
+volt in pochi minuti; MANTIENI resta attivo finché la tensione non è
 `hold_release_margin_v` sopra la soglia, poi torna SCARICA, e MANTIENI riparte
-se la tensione ridiscende alla soglia. La carica vera resta affidata al
+quando la tensione ridiscende alla soglia: dalla rete si preleva solo quello
+che l'inverter consuma, non è una ricarica. **MANTIENI funziona solo se
+l'automazione è attiva**: il 25/09 era disattivata dalle 15:20 alle 01:41 e
+alla soglia non è intervenuto nulla. La carica vera resta affidata al
 surplus (i rami CARICA). Un trigger template (`sotto_tensione`) fa intervenire
 l'automazione entro un minuto dal raggiungimento della soglia, senza
-aspettare il controllo dei 10 minuti. Lo script MANTIENI riporta la corrente
-da rete a 2A anche quando le priorità sono già giuste.
+aspettare il controllo dei 10 minuti. Lo script MANTIENI porta la corrente
+da rete a 10A anche quando le priorità sono già giuste.
 
 Scritture: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
 `script.pi30_batteria_da_caricare` (CARICA), `script.pi30_batteria_da_scaricare`
 (SCARICA), `script.pi30_batteria_da_mantenere` (MANTIENI — usato al posto di
-SCARICA per tenere la batteria PI30 alla soglia di sottotensione con 2A).
+SCARICA per tenere la batteria PI30 alla soglia di sottotensione con 10A).
 
 Step di corrente da rete: `2 10 20 30 40 50 60`.
 
@@ -408,7 +413,7 @@ ALTRIMENTI
 		(MANTIENI attivo = priorità uscita SBU E priorità carica solare + rete)
 	ALLORA
 		MANTIENI = script.pi30_batteria_da_mantenere
-		(SBU, solare + rete, 2A: tiene la batteria alla soglia, non la ricarica dalla rete)
+		(SBU, solare + rete, 10A: tiene la batteria appena sopra la soglia, non la ricarica dalla rete)
 	ALTRIMENTI
 		SCARICA = script.pi30_batteria_da_scaricare
 
@@ -563,8 +568,22 @@ sotto):
   PI30 che finisce davvero immagazzinata nel pacco.
 - `idle_drain_w` = **50 W**, la potenza che il pacco perde e che il PI30 non
   riporta mai: l'autoconsumo dell'inverter, preso dalla batteria ogni volta
-  che il caricatore non è in funzione. Viene sottratto ogni minuto in cui la
-  potenza di carica è 0.
+  che il caricatore non sta caricando davvero. Viene sottratto ogni minuto in
+  cui la potenza di carica è 60 W o meno (`small_charge_w`), tranne in float.
+
+**Carica fantasma.** Una carica riportata di 60 W o meno (1-2A) non viene
+contata come carica: è l'autoconsumo del PI30 o uno scarto della sua lettura
+di corrente. Il 24-26/09/2026 il PI30 ha segnato +1A per 8 ore di notte in
+Battery mode a caricatore spento (il vecchio conteggio saliva dal 61% al 65%,
+la tensione diceva 50%), +1A la sera del 25 in Line mode con la carica su
+"solo solare" al buio mentre il pacco scendeva da 24.5V a 22.7V e il BMS lo
+staccava (il vecchio conteggio passava dal 5% al 6%), e +2A la notte del 26
+in carica da rete a 2A mentre il pacco scendeva da 23.6V a 22.8V. L'unica
+eccezione è il float (tensione >= `full_floor_v`, niente in scarica): lì il
+caricatore tiene il pacco pieno e alimenta l'inverter da sé, quindi non si
+conta nulla e un 100% agganciato resta 100%. Rigiocato minuto per minuto sul
+24-26/09, il nuovo conteggio chiude la notte al 51% invece del 65% e arriva
+allo 0% insieme alla tensione la sera del 25 invece di salire.
 
 L'unità
 dei sensori di potenza è letta dal sensore (W o kW). Il valore è salvato con
@@ -663,10 +682,16 @@ tensione è affidabile, e solo quando è chiaramente in disaccordo:
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | SOC (%) | 0 | 1 | 2 | 4 | 6 | 9 | 20 | 30 | 50 | 65 | 75 | 99 |
 
-- **Affidabile** vuol dire in scarica o a riposo, al massimo 30A, con il
-  caricatore spento da almeno 30 minuti: subito dopo una carica la carica
-  superficiale fa sembrare pieno qualunque pacco, e durante la carica la
-  tensione non dice nulla.
+- **Affidabile** vuol dire in scarica o a riposo (un +1/+2A fantasma vale
+  0A), al massimo 30A, non in float, con il caricatore spento da almeno 60
+  minuti: potenza di carica al massimo 60 W e o 0 W invariati da 60 minuti o
+  entrambi i flag di carica (`binary_sensor.heltec_pi30_display_pi30_ac_charging`
+  e `..._scc_charging`) spenti da 60 minuti. Subito dopo una carica la carica
+  superficiale fa sembrare il pacco più pieno (con 30 minuti, il 26/09 un
+  pacco al 7% circa leggeva 25.8V dopo 1.5 ore di carica e il conteggio veniva
+  tirato all'11%), e durante la carica la tensione non dice nulla. I flag
+  servono perché un +1A fantasma tiene la potenza di carica sopra 0 per ore, e
+  prima spegneva la correzione proprio mentre il pacco si scaricava.
 - **Chiaramente in disaccordo** vuol dire fuori dalla fascia di SOC compatibili
   con la lettura ±0.15V (il PI30 riporta passi da 0.1V). Dentro la fascia
   vince il conteggio; fuori, il conteggio recupera la differenza con una
@@ -722,7 +747,9 @@ conteggio; sotto i 25.5V il ginocchio della curva rende la tensione precisa:
 - **Correzione con la tensione**: `ocv_v` / `ocv_soc` (la tabella),
   `correction_band_v` (0.15V), `correction_tau_min` (5),
   `correction_resistance_ohm` (0.010), `correction_max_current_a` (30),
-  `correction_rest_min` (30).
+  `correction_rest_min` (60).
+- **Carica fantasma**: `small_charge_w` (60 W) e `full_floor_v` (27.2V,
+  ripetuta in `actions` → `variables`: tienila uguale a quella dei trigger).
 - **Costanti degli agganci**: `tail_current_a` (0A),
   `internal_resistance_ohm` (0.0095), `full_margin_v` (0.1V sotto il float
   per il 100%), `full_floor_v` (27.2V, la tensione più bassa che può mai

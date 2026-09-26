@@ -62,23 +62,41 @@ description: >-
   So the counting is:
     SOC += charge_kw * charge_efficiency * hours / capacity_kwh * 100
     SOC -= (discharge_kw + idle_drain_w / 1000) * hours / capacity_kwh * 100
-  where the idle drain is applied whenever charge_kw is 0. Recheck all
+  where the idle drain is applied whenever the pack is not really
+  charging (see PHANTOM CHARGE below). Recheck all
   three if the pack or the inverter changes: the anchors write both
   lifetime energy counters in the Logbook, so a full -> empty -> full
   cycle gives the numbers again. The power sensors' unit is read from the
   sensor (W or kW). The value is stored with 3 decimals: at the 1-2A
   this pack idles at overnight one step is a few hundredths of a
   percent, which a 1-decimal rounding would throw away entirely.
+  PHANTOM CHARGE. A charge power of small_charge_w (60 W, about 2A) or
+  less is NOT counted as charge: it is the PI30's own consumption, or
+  an offset of its current reading, never energy going into the pack.
+  Measured on 24-26 Sep 2026 (Italian time): at night in Battery mode, charger off,
+  13 W of load, the PI30 read +1A for 8 hours (the old count went UP
+  from 61% to 65%, the voltage said 50%); on 25 Sep 18:30-22:00, Line
+  mode, charger on "solar only" in the dark, it read +1A while the
+  pack went from 24.5V to 22.7V and the BMS cut it (the old count went
+  from 5% to 6%); on 26 Sep 04:02-04:29, grid charging at 2A, it read
+  +2A while the pack went from 23.6V to 22.8V and the BMS cut it
+  again. So below that threshold the charge is ignored and the idle
+  drain is applied, as with 0A. The one exception is the float stage
+  (voltage >= full_floor_v, nothing discharging): there the charger
+  holds the full pack and feeds the inverter's consumption itself
+  (the +2A read for hours at 27.5V), so nothing is counted either way
+  and an anchored 100 stays 100.
   Plain counting can never CLAIM a full or empty pack: rising it stops
   at 99, falling it stops at 1. It may however keep going down from an
   anchored 100 (or up from an anchored 0), so once the pack is anchored
   full the first kWh drawn out of it are counted from 100, not from 99.
-  The reverse is NOT allowed: any charge at all moves an anchored 100
-  down to 99, because a pack that is still taking energy is no longer
-  certified full. That costs a 100 <-> 99 flicker while the inverter
-  trickles in float, and it is worth it: a stale 100 (from an earlier
-  wrong anchor, or set by hand) must not sit there while the pack
-  swallows 5A for hours.
+  The reverse is NOT allowed: any counted charge (above
+  small_charge_w) moves an anchored 100 down to 99, because a pack
+  that is still taking energy is no longer certified full: a stale 100
+  (from an earlier wrong anchor, or set by hand) must not sit there
+  while the pack swallows 5A for hours. The 2A float trickle is not a
+  counted charge (PHANTOM CHARGE above), so it no longer flickers the
+  anchored 100 to 99.
   VOLTAGE CORRECTION. The count alone cannot know where it started:
   if it was set wrong (a stale 100, a helper created mid-discharge) it
   would stay wrong until the next full charge. So every minute the
@@ -87,10 +105,17 @@ description: >-
   through a table measured on this pack (ocv_v / ocv_soc below), and
   the count is pulled towards it - but only when the voltage can be
   trusted and only when it clearly disagrees:
-    - trusted: discharging or idle (0 >= current >= -30A), and the
-      charger has been off for at least 30 minutes (charge power 0 and
-      unchanged for 30 min), otherwise surface charge after a charge
-      and the charging overvoltage make any pack look full;
+    - trusted: discharging or idle (current >= -30A, a phantom +1/+2A
+      read as 0A), not at float, and the charger has been off for at
+      least 60 minutes: charge power at most small_charge_w, and either
+      charge power 0 unchanged for 60 min or both charger flags
+      (binary_sensor ..._ac_charging and ..._scc_charging) off for 60
+      min. Otherwise surface charge after a charge and the charging
+      overvoltage make any pack look fuller than it is (with 30 min,
+      on 26 Sep a pack at ~7% read 25.8V after a 1.5h charge and the
+      count was pulled up to 11%). The flags matter because a phantom
+      +1A keeps the charge power above 0 for hours, which used to
+      switch the correction off exactly when the pack was draining;
     - clearly disagrees: the PI30 reports voltage in 0.1V steps, so
       the table is read at voltage_ocv - 0.15V and + 0.15V, giving a
       band of SOCs the voltage is compatible with. Inside the band
@@ -179,7 +204,8 @@ description: >-
   triggers; Home Assistant does not expose them to the actions) and in
   actions > variables (capacity, efficiency, time cap). full_floor_v =
   27.2 (V): change it only for a different chemistry or cell count
-  (3.40V per cell for LiFePO4). tail_current_a = 2 (A), MEASURED: once
+  (3.40V per cell for LiFePO4); it is repeated in actions > variables
+  for the float test of the counting, keep the two equal. tail_current_a = 2 (A), MEASURED: once
   bulk ends (29.0V) this inverter parks the pack at its 27.5V float
   and keeps reporting +2A (536 of the 587 minutes spent above 27.4V
   in the history show exactly 2A, 48 show 1A, one single minute shows
@@ -242,7 +268,9 @@ actions:
       correction_band_v: 0.15
       correction_tau_min: 5
       correction_max_current_a: 30
-      correction_rest_min: 30
+      correction_rest_min: 60
+      small_charge_w: 60
+      full_floor_v: 27.2
       ocv_v: [22.70, 23.40, 24.00, 24.50, 25.00, 25.60, 25.76, 25.96, 26.10, 26.22, 26.30, 26.36, 26.42, 26.47, 26.52, 26.57, 26.63, 26.67, 26.69, 26.71, 26.73, 26.75]
       ocv_soc: [0, 1, 2, 4, 6, 9, 15, 20, 25, 30, 37, 43, 50, 55, 60, 65, 70, 75, 82, 90, 95, 99]
       voltage: >-
@@ -259,6 +287,11 @@ actions:
         {% set p = states('sensor.heltec_pi30_batteria_potenza_scarica') | float(default=none) %}
         {% set unit = state_attr('sensor.heltec_pi30_batteria_potenza_scarica', 'unit_of_measurement') %}
         {{ none if p is none else (p if unit == 'kW' else p / 1000) }}
+      charging: >-
+        {{ charge_kw is not none and charge_kw * 1000 > small_charge_w }}
+      at_float: >-
+        {{ not charging and voltage is not none and voltage >= full_floor_v
+           and discharge_kw is not none and discharge_kw == 0 }}
       soc_now: >-
         {{ states('input_number.pi30_battery_soc_calculated') |
         float(default=50) }}
@@ -267,9 +300,17 @@ actions:
         {% set ts = as_timestamp(last, default=none) if last is not none else none %}
         {{ 0 if ts is none else ([(now().timestamp() - ts) / 3600, max_dt_hours] | min) }}
       charger_off_long_enough: >-
+        {% set rest_s = correction_rest_min * 60 %}
         {% set s = states.sensor.heltec_pi30_batteria_potenza_carica %}
-        {{ s is not none and (s.state | float(default=1)) == 0
-           and (now() - s.last_changed).total_seconds() >= correction_rest_min * 60 }}
+        {% set zero_long = s is not none and (s.state | float(default=1)) == 0
+           and (now() - s.last_changed).total_seconds() >= rest_s %}
+        {% set ac = states.binary_sensor.heltec_pi30_display_pi30_ac_charging %}
+        {% set scc = states.binary_sensor.heltec_pi30_display_pi30_scc_charging %}
+        {% set flags_off_long = ac is not none and scc is not none
+           and ac.state == 'off' and scc.state == 'off'
+           and (now() - ac.last_changed).total_seconds() >= rest_s
+           and (now() - scc.last_changed).total_seconds() >= rest_s %}
+        {{ charge_kw is not none and not charging and (zero_long or flags_off_long) }}
       voltage_band: >-
         {% macro soc_at(v) -%}
           {%- set ns = namespace(r=none) -%}
@@ -285,10 +326,10 @@ actions:
           {{- ns.r -}}
         {%- endmacro %}
         {% if voltage is none or current is none or not charger_off_long_enough
-              or current > 0 or current < -correction_max_current_a %}
+              or at_float or current < -correction_max_current_a %}
           {{ none }}
         {% else %}
-          {% set real_current = current - idle_drain_w / voltage %}
+          {% set real_current = ([current, 0] | min) - idle_drain_w / voltage %}
           {% set v_ocv = voltage - real_current * correction_resistance_ohm %}
           {% set lo = soc_at(v_ocv - correction_band_v) | float %}
           {% set hi = soc_at(v_ocv + correction_band_v) | float %}
@@ -341,8 +382,9 @@ actions:
           entity_id: input_number.pi30_battery_soc_calculated
         data:
           value: >-
-            {% set drain_kw = discharge_kw + (idle_drain_w / 1000 if charge_kw == 0 else 0) %}
-            {% set delta = (charge_kw * charge_efficiency - drain_kw) * dt_hours / capacity_kwh * 100 %}
+            {% set charge_in = charge_kw if charging else 0 %}
+            {% set drain_kw = discharge_kw + (0 if charging or at_float else idle_drain_w / 1000) %}
+            {% set delta = (charge_in * charge_efficiency - drain_kw) * dt_hours / capacity_kwh * 100 %}
             {% if delta > 0 %}
               {% set counted = [soc_now + delta, 99] | min %}
             {% elif delta < 0 %}

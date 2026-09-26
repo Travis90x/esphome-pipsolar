@@ -297,33 +297,38 @@ Sensors read:
 | `sensor.heltec_pi30_display_pi30_battery_under_voltage` | PSDV, battery under-voltage threshold read back from the inverter (24.0V if unreadable) |
 
 `max_manual_current` (default `60`) and `hold_release_margin_v` (default
-`0.3` V) are plain variables inside the automation, **not helpers** — to
+`0.5` V) are plain variables inside the automation, **not helpers** — to
 change them, open the automation in YAML mode and edit the numbers directly.
 
 **Hold at the under-voltage threshold.** When the PI30 battery voltage drops
 to `sensor.heltec_pi30_display_pi30_battery_under_voltage`, KEEP runs instead
-of DISCHARGE: SBU, charger "solar + utility", utility current fixed at 2A. At
-that voltage the inverter in SBU is already in Line mode (the loads run on the
-grid), so the 2A only cover the inverter's own consumption, about 50W, which
-the PI30 never shows in the battery current and which would otherwise drain
-the pack down to the BMS cut. That is what happened on 23 Sep 2026: the
-charger priority stayed on "solar only", the PI30 reported 0A for five and a
-half hours in Line mode while the pack went from 25.1V to 22.7V, the BMS
-disconnected it at 10:00 and the inverter switched off with the whole output.
-KEEP is not a grid recharge: the pack stays around the threshold. It stays
-active until the voltage rises `hold_release_margin_v` above the threshold,
-then DISCHARGE takes over again, and KEEP comes back if the voltage falls to
-the threshold again. Real charging is still left to the surplus (the CHARGE
+of DISCHARGE: SBU, charger "solar + utility", utility current fixed at 10A.
+At that voltage the inverter in SBU is already in Line mode (the loads run on
+the grid), but its own consumption, about 50W, which the PI30 never shows in
+the battery current, still comes out of the pack and would drain it down to
+the BMS cut, which switches the inverter off with the whole output. That
+happened on 23 Sep 2026 at 10:00 (charger on "solar only", 0A reported for
+five and a half hours in Line mode while the pack went from 25.1V to 22.7V),
+on 25 Sep at 22:00 and on 26 Sep at 04:29 (Italian time), always at
+22.7-22.8V. **2A are not enough**: on 26 Sep from 04:02 to 04:29 the PI30
+reported +2A while the pack went from 23.6V to 22.8V and the BMS cut it; with
+9-10A, from 04:30, it went back from 23.2V to 25.9V. With 10A the pack rises a
+few tenths of a volt within minutes; KEEP stays active until the voltage is
+`hold_release_margin_v` above the threshold, then DISCHARGE takes over again,
+and KEEP comes back when the voltage falls to the threshold again: the grid
+only supplies what the inverter consumes, it is not a recharge. **KEEP only
+works while this automation is enabled**: on 25 Sep it was disabled from
+15:20 to 01:41 and nothing happened at the threshold. Real charging is still left to the surplus (the CHARGE
 branches). A template trigger (`sotto_tensione`) makes the automation react
 within a minute of reaching the threshold, instead of waiting for the
-10-minute check. The KEEP script also forces the utility current back to 2A
+10-minute check. The KEEP script also forces the utility current to 10A
 when the priorities are already right.
 
 Writes: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
 `script.pi30_batteria_da_caricare` (CHARGE), `script.pi30_batteria_da_scaricare`
 (DISCHARGE), `script.pi30_batteria_da_mantenere` (KEEP — used instead of
-DISCHARGE to hold the PI30 battery at the under-voltage threshold with 2A).
+DISCHARGE to hold the PI30 battery at the under-voltage threshold with 10A).
 
 Utility current steps: `2 10 20 30 40 50 60`.
 
@@ -399,7 +404,7 @@ OTHERWISE
 		(KEEP active = output priority SBU AND charger priority solar + utility)
 	THEN
 		KEEP = script.pi30_batteria_da_mantenere
-		(SBU, solar + utility, 2A: hold the battery at the threshold, do not recharge it from the grid)
+		(SBU, solar + utility, 10A: hold the battery just above the threshold, do not recharge it from the grid)
 	OTHERWISE
 		DISCHARGE = script.pi30_batteria_da_scaricare
 
@@ -548,8 +553,22 @@ below):
   reports that ends up stored in the pack.
 - `idle_drain_w` = **50 W**, the power the pack loses that the PI30 never
   reports: the inverter's own consumption, taken from the battery whenever
-  the charger is not running. It is subtracted every minute in which the
-  charge power is 0.
+  the charger is not really running. It is subtracted every minute in which
+  the charge power is 60 W or less (`small_charge_w`), except at float.
+
+**Phantom charge.** A reported charge of 60 W or less (1-2A) is not counted
+as charge: it is the PI30's own consumption or an offset of its current
+reading. On 24-26 Sep 2026 the PI30 read +1A for 8 hours at night in Battery
+mode with the charger off (the old count went up from 61% to 65%, the voltage
+said 50%), +1A on 25 Sep evening in Line mode with the charger on "solar
+only" in the dark while the pack went from 24.5V to 22.7V and the BMS cut it
+(the old count went from 5% to 6%), and +2A on 26 Sep night while grid
+charging at 2A and the pack went from 23.6V to 22.8V. The only exception is
+float (voltage >= `full_floor_v`, nothing discharging): there the charger holds
+the full pack and feeds the inverter itself, so nothing is counted and an
+anchored 100% stays 100%. Replayed minute by minute on 24-26 Sep, the new
+count ends the night at 51% instead of 65% and reaches 0% together with the
+voltage on the 25th evening instead of rising.
 
 The power
 sensors' unit is read from the sensor (W or kW). The value is stored with 3
@@ -644,9 +663,16 @@ disagrees:
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | SOC (%) | 0 | 1 | 2 | 4 | 6 | 9 | 20 | 30 | 50 | 65 | 75 | 99 |
 
-- **Trusted** means discharging or idle, at most 30A, with the charger off for at
-  least 30 minutes: right after a charge, surface charge makes any pack look
-  full, and while charging the voltage says nothing.
+- **Trusted** means discharging or idle (a phantom +1/+2A counts as 0A), at
+  most 30A, not at float, with the charger off for at least 60 minutes:
+  charge power at most 60 W and either 0 W unchanged for 60 minutes or both
+  charger flags (`binary_sensor.heltec_pi30_display_pi30_ac_charging` and
+  `..._scc_charging`) off for 60 minutes. Right after a charge, surface charge
+  makes any pack look fuller (with 30 minutes, on 26 Sep a pack at about 7%
+  read 25.8V after a 1.5-hour charge and the count was pulled up to 11%), and
+  while charging the voltage says nothing. The flags matter because a phantom
+  +1A keeps the charge power above 0 for hours, which used to switch the
+  correction off exactly while the pack was draining.
 - **Clearly disagrees** means outside the band of SOCs compatible with the
   reading ±0.15V (the PI30 reports 0.1V steps). Inside the band the count
   wins; outside, the count closes the gap with a 5-minute time constant
@@ -700,7 +726,9 @@ the knee makes the voltage precise:
 - **Voltage correction**: `ocv_v` / `ocv_soc` (the table),
   `correction_band_v` (0.15V), `correction_tau_min` (5),
   `correction_resistance_ohm` (0.010), `correction_max_current_a` (30),
-  `correction_rest_min` (30).
+  `correction_rest_min` (60).
+- **Phantom charge**: `small_charge_w` (60 W) and `full_floor_v` (27.2V,
+  repeated in `actions` → `variables`: keep it equal to the trigger one).
 - **Anchor constants**: `tail_current_a` (0A), `internal_resistance_ohm`
   (0.0095), `full_margin_v` (0.1V below float for 100%), `full_floor_v`
   (27.2V, the lowest voltage that can ever count as full: change it only

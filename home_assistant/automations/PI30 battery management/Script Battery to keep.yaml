@@ -1,12 +1,16 @@
 alias: PI30 batteria da mantenere
 description: >-
   Mantenimento alla soglia di sottotensione: SBU, carica "solare + rete",
-  corrente massima da rete 2A. A quella tensione l'inverter in SBU è già in
-  Line mode, quindi i 2A coprono solo il suo autoconsumo (circa 50W) e la
-  batteria resta intorno alla soglia invece di scendere fino allo stacco
-  del BMS. La corrente viene riportata a 2A anche quando le priorità sono
-  già giuste, così un valore più alto lasciato da un'altra logica non
-  diventa una ricarica dalla rete.
+  corrente massima da rete 10A. A quella tensione l'inverter in SBU è già
+  in Line mode (i carichi vanno sulla rete); i 10A riportano la batteria
+  qualche decimo di volt sopra la soglia, poi l'automazione MAN torna a
+  SCARICA e il ciclo si ripete, invece di scendere fino allo stacco del
+  BMS. 2A NON bastano: il 26/09/2026 02:02-02:29 l'inverter segnava +2A
+  mentre la batteria scendeva da 23.6V a 22.8V, e il BMS l'ha staccata
+  (inverter spento). Con 9-10A, lo stesso giorno 02:30-03:58, è risalita
+  da 23.2V a 25.9V. La corrente viene riportata a 10A anche quando le
+  priorità sono già giuste, così un valore più alto lasciato da un'altra
+  logica non diventa una ricarica piena dalla rete.
 sequence:
   - delay:
       hours: 0
@@ -41,15 +45,16 @@ sequence:
           seconds: 1
           milliseconds: 0
   - if:
-      - condition: numeric_state
-        entity_id: sensor.heltec_pi30_display_pi30_max_utility_charging_current
-        above: 2
+      - condition: template
+        value_template: >-
+          {{ states('sensor.heltec_pi30_display_pi30_max_utility_charging_current')
+             | int(default=0) != 10 }}
     then:
       - action: select.select_option
         target:
           entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
         data:
-          option: '2'
+          option: '10'
   - delay:
       hours: 0
       minutes: 0

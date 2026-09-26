@@ -11,16 +11,21 @@ description: >-
   scende a sensor.heltec_pi30_display_pi30_battery_under_voltage (la
   soglia di sottotensione letta dall'inverter), invece di SCARICA viene
   eseguito MANTIENI (script.pi30_batteria_da_mantenere): SBU, carica
-  "solare + rete" e corrente massima da rete fissa a 2A. In SBU a quella
-  tensione l'inverter è già in Line mode (i carichi vanno sulla rete),
-  quindi i 2A servono solo a coprire l'autoconsumo dell'inverter, circa
-  50W, che altrimenti scaricherebbe la batteria fino allo stacco del BMS
-  (successo il 23/09/2026 alle 10:00: 5 ore e mezza a 0A segnati mentre
-  la tensione scendeva da 25.1V a 22.7V). Non è una ricarica dalla rete:
-  la batteria resta intorno alla soglia. Il mantenimento resta attivo
-  finché la tensione non sale di hold_release_margin_v (0.3V) sopra la
-  soglia; poi torna SCARICA, e riparte se la tensione ridiscende alla
-  soglia. La carica vera resta affidata al surplus, cioè ai rami di
+  "solare + rete" e corrente massima da rete fissa a 10A. In SBU a quella
+  tensione l'inverter è già in Line mode (i carichi vanno sulla rete), ma
+  il suo autoconsumo, circa 50W, esce comunque dalla batteria e la
+  porterebbe fino allo stacco del BMS, che spegne l'inverter (successo il
+  23/09/2026 alle 10:00, il 25/09 alle 22:00 e il 26/09 alle 04:29 ora
+  italiana, sempre a 22.7-22.8V). 2A non bastano: il 26/09 dalle 04:02
+  alle 04:29 l'inverter segnava +2A mentre la batteria scendeva da 23.6V
+  a 22.8V. Con 10A la batteria risale di qualche decimo di volt in pochi
+  minuti; il mantenimento resta attivo finché la tensione non sale di
+  hold_release_margin_v (0.5V) sopra la soglia, poi torna SCARICA, e
+  riparte se la tensione ridiscende alla soglia: dalla rete si preleva
+  solo quello che l'inverter consuma, non una ricarica. ATTENZIONE: il
+  mantenimento funziona solo se questa automazione è ATTIVA; il 25/09
+  era disattivata dalle 15:20 alle 01:41 e alla soglia non è intervenuto
+  nulla. La carica vera resta affidata al surplus, cioè ai rami di
   CARICA qui sopra. Il trigger sotto_tensione fa intervenire
   l'automazione entro un minuto dal raggiungimento della soglia, senza
   aspettare il controllo dei 10 minuti. Se la soglia non è leggibile si
@@ -83,7 +88,7 @@ actions:
       under_voltage: >-
         {{ states('sensor.heltec_pi30_display_pi30_battery_under_voltage') |
         float(default=24.0) }}
-      hold_release_margin_v: 0.3
+      hold_release_margin_v: 0.5
       hold_active: >-
         {{ states('sensor.heltec_pi30_display_pi30_output_source_priority') |
         float(0) == 2.0 and

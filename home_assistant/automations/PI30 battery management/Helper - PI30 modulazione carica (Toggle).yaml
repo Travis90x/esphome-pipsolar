@@ -1,0 +1,19 @@
+# Interruttore della modulazione di carica per
+# "Automation - PI30 Battery Charging Intelligent Modulation.yaml".
+#
+# Acceso (o helper assente): l'automazione fa tutto, modulazione e protezione.
+# Spento: l'automazione fa SOLO la protezione di sottotensione (MANTIENI /
+# SCARICA alla soglia). Usa questo al posto di disattivare l'automazione:
+# un'automazione disattivata non protegge la batteria dallo stacco del BMS.
+#
+# Dalla UI (senza configuration.yaml):
+#   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante > Interruttore
+#   Nome: PI30 modulazione carica
+#   (genera input_boolean.pi30_modulazione_carica; controlla l'ID entità
+#    dopo il salvataggio)
+#
+# Oppure, equivalente, in configuration.yaml (poi riavvia):
+input_boolean:
+  pi30_modulazione_carica:
+    name: PI30 modulazione carica
+    icon: mdi:battery-charging-wireless

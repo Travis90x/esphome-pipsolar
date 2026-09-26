@@ -316,25 +316,23 @@ reported +2A while the pack went from 23.6V to 22.8V and the BMS cut it; with
 few tenths of a volt within minutes; KEEP stays active until the voltage is
 `hold_release_margin_v` above the threshold, then DISCHARGE takes over again,
 and KEEP comes back when the voltage falls to the threshold again: the grid
-only supplies what the inverter consumes, it is not a recharge. When this
-automation is disabled (it was on 25 Sep, and nothing happened at the
-threshold), the separate **Under-voltage Guard** does the same KEEP /
-DISCHARGE cycle: see below. Real charging is still left to the surplus (the CHARGE
+only supplies what the inverter consumes, it is not a recharge. **Do not disable this
+automation**: disabled, it no longer protects the pack (it was disabled on 25
+Sep, nothing happened at the threshold and the BMS switched the inverter off
+at 22:00). Real charging is still left to the surplus (the CHARGE
 branches). A template trigger (`sotto_tensione`) makes the automation react
 within a minute of reaching the threshold, instead of waiting for the
 10-minute check. The KEEP script also forces the utility current to 10A
 when the priorities are already right.
 
-**Under-voltage Guard** (`Automation - PI30 Battery Under-voltage
-Guard.yaml`, same folder). Runs only while the MAN automation
-(`automation.pi30_battery_charging_intelligent_modulation`) is **not** on, so
-the pack is protected even when you switch MAN off. When the PI30 battery
-voltage has been at or below the under-voltage threshold for 1 minute it runs
-KEEP (SBU, "solar + utility", 10A); when the voltage has been 0.5V above the
-threshold for 5 minutes and KEEP's settings are still in place, it runs
-DISCHARGE (SBU, "solar only"). It also checks every 10 minutes and at Home
-Assistant start. If you set SBU + "solar + utility" + 10A by hand with MAN
-off, the guard will put it back to "solar only" once the voltage recovers.
+**Switching the modulation off.** To stop the charge modulation, turn off
+the helper `input_boolean.pi30_modulazione_carica` (`Helper - PI30 modulazione
+carica (Toggle).yaml`, same folder) instead of disabling the automation. With
+the helper off the automation only protects the pack: KEEP (SBU, "solar +
+utility", 10A) at the under-voltage threshold and, once the voltage is
+`hold_release_margin_v` above it with KEEP's settings still in place (SBU +
+"solar + utility" + 10A), DISCHARGE; otherwise it does not touch the inverter.
+If the helper does not exist the modulation stays on, as before.
 
 Writes: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,

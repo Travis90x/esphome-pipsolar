@@ -283,7 +283,7 @@ di una dashboard.
 File: [`home_assistant/automations/PI30 battery management/`](<home_assistant/automations/PI30 battery management/>)
 - `Automation - PI30 Battery Charging Intelligent Modulation.yaml`
 - `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery to keep.yaml`
-- `Automation - PI30 Save charging voltages.yaml`, `Helper - PI30 tensioni di carica (Number).yaml`, `Helper - PI30 Ricarica Batteria (Toggle).yaml`
+- `Helper - PI30 tensioni di carica (Number).yaml`, `Helper - PI30 Ricarica Batteria (Toggle).yaml`
 
 Obiettivo: decidere, ogni 10 minuti (più all'avvio e ai cambi rilevanti dei
 sensori), se il PI30 debba caricare il suo pacco LiFePO4 dalla rete,
@@ -314,8 +314,8 @@ SCARICA.
 **Tensioni di carica.** Bulk e float di carica si impostano come sempre a
 mano dai campi `number.heltec_pi30_display_pi30_set_battery_bulk_voltage` e
 `number.heltec_pi30_display_pi30_set_battery_float_voltage`. Siccome SCARICA
-li porta a 24.0V, l'automazione `Automation - PI30 Save charging voltages.yaml`
-("PI30 salva tensioni di carica") copia ogni valore impostato a mano (diverso
+li porta a 24.0V, l'automazione MAN stessa (primo blocco delle azioni, con un
+trigger sui due campi) copia ogni valore impostato a mano (diverso
 da 24.0V) nei due aiutanti `input_number.pi30_bulk_carica` e
 `input_number.pi30_float_carica` (`Helper - PI30 tensioni di carica (Number).yaml`,
 valori iniziali 29.0 e 27.5V), e CARICA ripristina quelli. Se un aiutante

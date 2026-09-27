@@ -30,6 +30,14 @@ description: >-
   batteria si ricarica con la logica normale. Spento: l'automazione esegue
   sempre SCARICA, cioè il mantenimento a 24V descritto qui sopra, e non
   carica mai la batteria oltre 24V.
+  TENSIONI DI CARICA. Quando imposti a mano bulk o float
+  (number.heltec_pi30_display_pi30_set_battery_bulk_voltage /
+  _set_battery_float_voltage) il valore viene copiato negli aiutanti
+  input_number.pi30_bulk_carica / input_number.pi30_float_carica, che lo
+  script CARICA usa per ripristinarle dopo il 24.0V di SCARICA (il 24.0V
+  stesso viene ignorato). È il primo blocco delle azioni e non tocca
+  l'inverter. Modalità queued: le esecuzioni restano una alla volta, ma un
+  cambio fatto mentre l'automazione sta girando non viene perso.
 triggers:
   - trigger: homeassistant
     id: avvio
@@ -59,7 +67,34 @@ triggers:
   - trigger: state
     id: ricarica_batteria
     entity_id: input_boolean.pi30_ricarica_batteria
+  - trigger: state
+    id: bulk_impostato
+    entity_id: number.heltec_pi30_display_pi30_set_battery_bulk_voltage
+  - trigger: state
+    id: float_impostato
+    entity_id: number.heltec_pi30_display_pi30_set_battery_float_voltage
 actions:
+  # Bulk o float impostati a mano: salva il valore di carica e basta
+  - if:
+      - condition: trigger
+        id:
+          - bulk_impostato
+          - float_impostato
+    then:
+      - if:
+          - condition: template
+            value_template: >-
+              {{ trigger.to_state is not none
+                 and trigger.to_state.state | float(0) > 24.0 }}
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: >-
+                {{ 'input_number.pi30_bulk_carica' if trigger.id == 'bulk_impostato'
+                   else 'input_number.pi30_float_carica' }}
+            data:
+              value: '{{ trigger.to_state.state | float | round(1) }}'
+      - stop: Tensione di carica salvata
   - variables:
       charging_steps:
         - 2
@@ -410,5 +445,6 @@ actions:
                           option: '60'
                         action: select.select_option
                     else: []
-mode: single
+mode: queued
+max: 5
 max_exceeded: silent

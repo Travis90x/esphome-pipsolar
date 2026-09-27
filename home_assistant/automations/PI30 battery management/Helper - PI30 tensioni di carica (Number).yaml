@@ -1,8 +1,9 @@
 # Tensioni di carica normali della PI30, ripristinate dallo script CARICA
 # ("Script Battery to charge.yaml") dopo che SCARICA le ha abbassate a 24.0V.
 #
-# Non serve modificarle qui: l'automazione "PI30 salva tensioni di carica"
-# copia in questi due aiutanti ogni valore che imposti a mano su
+# Non serve modificarle qui: l'automazione "PI30 Battery MAN" (Automation -
+# PI30 Battery Charging Intelligent Modulation.yaml) copia in questi due
+# aiutanti ogni valore che imposti a mano su
 #   number.heltec_pi30_display_pi30_set_battery_bulk_voltage
 #   number.heltec_pi30_display_pi30_set_battery_float_voltage
 # (tranne il 24.0V scritto da SCARICA). Quindi continui a impostare bulk e

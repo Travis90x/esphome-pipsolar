@@ -3,8 +3,8 @@ description: >-
   CARICA. Riporta le tensioni di bulk e float ai valori di carica
   impostati da te, abbassati a 24.0V dallo script SCARICA. I valori
   vengono dagli aiutanti input_number.pi30_bulk_carica e
-  input_number.pi30_float_carica, che l'automazione "PI30 salva tensioni
-  di carica" tiene allineati a quello che imposti a mano sui campi
+  input_number.pi30_float_carica, che l'automazione MAN ("PI30 Battery
+  MAN") tiene allineati a quello che imposti a mano sui campi
   number.heltec_pi30_display_pi30_set_battery_bulk_voltage / _float_voltage.
   Se un aiutante manca o non è valido quella tensione non viene toccata.
   Le scrive solo se diverse, prima il bulk e poi il float, così il float

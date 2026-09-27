@@ -328,6 +328,17 @@ within a minute of reaching the threshold, instead of waiting for the
 10-minute check. The KEEP script also forces the utility current to 10A
 when the priorities are already right.
 
+**Goodwe discharging → PI30 discharging.** If the Goodwe battery delivers at
+least 100W, or the house draws at least 300W from the grid, net of what the
+PI30 itself draws (its grid charging divided by 0.9, plus its output load when
+it is on "utility first"), DISCHARGE runs at once, before all the CHARGE
+branches and whatever the Goodwe SOC or voltage. Before, with the Goodwe stuck
+at 100% while discharging, the `soc > 99` branch kept the PI30 in CHARGE for
+hours (on 27 Sep from 18:00 to 20:48 with the Goodwe delivering over 400W).
+The PI30's own share is subtracted because the modulation already reduces it
+by stepping down: without subtracting it, CHARGE and DISCHARGE would alternate
+on every run.
+
 **Battery charging switch.** Optional helper `input_boolean.pi30_ricarica_batteria`
 (Toggle, name `PI30 Ricarica Batteria`, see
 `Helper - PI30 Ricarica Batteria (Toggle).yaml`). On or missing: the pack
@@ -396,6 +407,16 @@ THEN
 	(SBU, solar + utility, bulk and float = input_number.pi30_keep_battery_live)
 	and STOP
 	(without the input_number helpers, or hold < 24.0V: DISCHARGE = script.pi30_batteria_da_scaricare)
+
+THEN
+IF
+	sensor.goodwe_battery_power - PI30 draw >= 100
+	OR sensor.potenza_contatore - PI30 draw >= 300
+	(PI30 draw = sensor.heltec_pi30_battery_power when > 0, divided by 0.9,
+	 + sensor.heltec_pi30_output_active_power when output priority = utility first)
+THEN
+	DISCHARGE = script.pi30_batteria_da_scaricare
+	and STOP, whatever the Goodwe SOC or voltage
 
 Favorable signal OR nothing known
 IF

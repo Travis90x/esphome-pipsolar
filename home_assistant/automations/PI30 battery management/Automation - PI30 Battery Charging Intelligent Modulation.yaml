@@ -34,6 +34,14 @@ description: >-
   l'automazione entro un minuto dal raggiungimento della soglia, senza
   aspettare il controllo dei 10 minuti. Se la soglia non è leggibile si
   usa 24.0V, per sicurezza.
+  GOODWE IN SCARICA. Se la batteria GoodWe eroga almeno 100W, o la casa
+  preleva almeno 300W dalla rete, oltre a quanto sta prelevando la PI30
+  stessa (la sua carica da rete, divisa per 0.9 di rendimento, più il suo
+  carico in uscita se è in "rete prima"), viene eseguita subito SCARICA,
+  prima di tutti i rami di CARICA e qualunque sia il SOC o la tensione
+  GoodWe: se la GoodWe si scarica, si scarica anche la PI30. La parte
+  dovuta alla PI30 viene tolta perché la modulazione la riduce da sola
+  scendendo di step; senza toglierla CARICA e SCARICA si alternerebbero.
   RICARICA BATTERIA. Con l'aiutante input_boolean.pi30_ricarica_batteria
   ("Helper - PI30 Ricarica Batteria (Toggle).yaml") acceso, o assente, la
   batteria si ricarica con la logica normale. Quando lo spegni
@@ -200,6 +208,14 @@ actions:
         float(0) == 2.0 and
         states('sensor.heltec_pi30_display_pi30_charger_source_priority') |
         float(0) == 2.0 }}
+      pi30_grid_draw: >-
+        {{ ([states('sensor.heltec_pi30_battery_power') | float(0), 0] | max) / 0.9
+           + (states('sensor.heltec_pi30_output_active_power') | float(0)
+              if states('sensor.heltec_pi30_display_pi30_output_source_priority') | float(-1) == 0.0
+              else 0) }}
+      goodwe_deficit: >-
+        {{ power_known and
+           (battery_power - pi30_grid_draw >= 100 or grid_power - pi30_grid_draw >= 300) }}
       hold_needed: >-
         {{ pi30_voltage is not none and (pi30_voltage <= under_voltage or
         (hold_active and pi30_voltage < under_voltage + hold_release_margin_v)) }}
@@ -234,6 +250,16 @@ actions:
           entity_id: script.pi30_batteria_da_scaricare
         action: script.turn_on
       - stop: Ricarica disattivata, scarica
+  # GoodWe in scarica (o casa in prelievo dalla rete) anche senza la PI30:
+  # SCARICA subito, qualunque sia il SOC o la tensione GoodWe
+  - if:
+      - condition: template
+        value_template: '{{ goodwe_deficit }}'
+    then:
+      - target:
+          entity_id: script.pi30_batteria_da_scaricare
+        action: script.turn_on
+      - stop: GoodWe in scarica, PI30 in scarica
   - if:
       - condition: template
         value_template: '{{ soc_known and soc > 99 }}'

@@ -337,6 +337,17 @@ l'automazione entro un minuto dal raggiungimento della soglia, senza
 aspettare il controllo dei 10 minuti. Lo script MANTIENI porta la corrente
 da rete a 10A anche quando le priorità sono già giuste.
 
+**GoodWe in scarica → PI30 in scarica.** Se la batteria GoodWe eroga almeno
+100W, o la casa preleva almeno 300W dalla rete, al netto di quanto preleva la
+PI30 stessa (la sua carica da rete divisa per 0.9, più il suo carico in uscita
+se è in "rete prima"), viene eseguita subito SCARICA, prima di tutti i rami di
+CARICA e qualunque sia il SOC o la tensione GoodWe. Prima, con il GoodWe fermo
+al 100% mentre si scaricava, il ramo `soc > 99` teneva la PI30 in CARICA per
+ore (il 27/09 dalle 18 alle 20:48 con il GoodWe che erogava oltre 400W). La
+parte dovuta alla PI30 viene tolta perché la modulazione la riduce da sola
+scendendo di step: senza toglierla CARICA e SCARICA si alternerebbero a ogni
+esecuzione.
+
 **Ricarica batteria.** Aiutante facoltativo `input_boolean.pi30_ricarica_batteria`
 (Interruttore, nome `PI30 Ricarica Batteria`, vedi
 `Helper - PI30 Ricarica Batteria (Toggle).yaml`). Acceso o assente: la
@@ -405,6 +416,16 @@ ALLORA
 	(SBU, solare + rete, bulk e float = input_number.pi30_keep_battery_live)
 	e STOP
 	(senza gli input_number, o mantenimento < 24.0V: SCARICA = script.pi30_batteria_da_scaricare)
+
+POI
+SE
+	sensor.goodwe_battery_power - prelievo PI30 >= 100
+	OPPURE sensor.potenza_contatore - prelievo PI30 >= 300
+	(prelievo PI30 = sensor.heltec_pi30_battery_power se > 0, diviso 0.9,
+	 + sensor.heltec_pi30_output_active_power se priorità uscita = rete prima)
+ALLORA
+	SCARICA = script.pi30_batteria_da_scaricare
+	e STOP, qualunque sia SOC o tensione GoodWe
 
 Segnale favorevole OR nulla noto
 SE

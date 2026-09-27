@@ -1,8 +1,20 @@
 alias: PI30 batteria da scaricare
 description: >-
-  Set PI30 to Solo solare, SBU, disable utility charging, and allow battery
-  discharge
+  SCARICA con mantenimento a 24V. Uscita SBU, carica "solare + rete",
+  tensioni di bulk e float a 24.0V (il minimo accettato dal PI30),
+  corrente massima da rete almeno 40A. Sopra 24V il caricabatterie non
+  eroga nulla (la batteria è già oltre la sua tensione obiettivo) e la
+  batteria alimenta i carichi. Quando in SBU l'inverter passa alla rete
+  (tensione di recharge), il caricabatterie porta la batteria a 24.0V e
+  la tiene lì, prelevando dalla rete solo l'autoconsumo dell'inverter:
+  niente stacco del BMS e niente ricarica. Con bulk e float a 24.0V
+  anche il solare non carica la batteria oltre 24V. Le tensioni vengono
+  scritte solo se diverse, prima il float e poi il bulk, così il float
+  non supera mai il bulk. Script CARICA le riporta ai valori normali.
 sequence:
+  - variables:
+      hold_voltage: 24.0
+      hold_current: 40
   - delay:
       hours: 0
       minutes: 0
@@ -14,12 +26,12 @@ sequence:
           {{ not (
             states('sensor.heltec_pi30_display_pi30_output_source_priority') | float(0) == 2.0
             and
-            states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(0) == 3.0
+            states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(0) == 2.0
           ) }}
     then:
       - action: button.press
         target:
-          entity_id: button.heltec_pi30_display_pi30_charger_solar_only
+          entity_id: button.heltec_pi30_display_pi30_charger_solar_utility
         data: {}
       - delay:
           hours: 0
@@ -29,6 +41,55 @@ sequence:
       - action: switch.turn_on
         target:
           entity_id: switch.heltec_pi30_display_pi30_output_priority_sbu
+      - delay:
+          hours: 0
+          minutes: 0
+          seconds: 1
+          milliseconds: 0
+  # In discesa prima il float, poi il bulk
+  - if:
+      - condition: template
+        value_template: >-
+          {{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage')
+             | float(0) | round(1) != hold_voltage }}
+    then:
+      - action: number.set_value
+        target:
+          entity_id: number.heltec_pi30_display_pi30_set_battery_float_voltage
+        data:
+          value: "{{ hold_voltage }}"
+      - delay:
+          hours: 0
+          minutes: 0
+          seconds: 2
+          milliseconds: 0
+  - if:
+      - condition: template
+        value_template: >-
+          {{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage')
+             | float(0) | round(1) != hold_voltage }}
+    then:
+      - action: number.set_value
+        target:
+          entity_id: number.heltec_pi30_display_pi30_set_battery_bulk_voltage
+        data:
+          value: "{{ hold_voltage }}"
+      - delay:
+          hours: 0
+          minutes: 0
+          seconds: 2
+          milliseconds: 0
+  - if:
+      - condition: template
+        value_template: >-
+          {{ states('sensor.heltec_pi30_display_pi30_max_utility_charging_current')
+             | int(default=0) < hold_current }}
+    then:
+      - action: select.select_option
+        target:
+          entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+        data:
+          option: "{{ hold_current | string }}"
   - delay:
       hours: 0
       minutes: 0

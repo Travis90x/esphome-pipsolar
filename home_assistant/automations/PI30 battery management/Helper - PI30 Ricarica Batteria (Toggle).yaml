@@ -4,11 +4,10 @@
 # Acceso (o helper assente): la batteria si ricarica, l'automazione fa tutto
 # come sempre (MANTIENI alla soglia, poi CARICA / SCARICA secondo la logica
 # GoodWe).
-# Spento: nessuna carica da rete. L'automazione esegue SEMPRE SCARICA
-# (solo solare + SBU), tranne quando la batteria PI30 arriva a
-# sensor.heltec_pi30_display_pi30_battery_under_voltage: lì esegue comunque
-# MANTIENI (SBU, solare + rete, 10A) finché la tensione non risale di
-# hold_release_margin_v, così il BMS non stacca e l'inverter non si spegne.
+# Spento: nessuna carica oltre i 24V. L'automazione esegue SEMPRE SCARICA,
+# che mette SBU, carica "solare + rete" e bulk/float a 24.0V: la batteria
+# alimenta i carichi e, quando l'inverter passa alla rete, il caricabatterie
+# la tiene a 24.0V, così il BMS non stacca e l'inverter non si spegne.
 # Non disattivare l'automazione al posto di questo interruttore: disattivata
 # non protegge la batteria.
 #

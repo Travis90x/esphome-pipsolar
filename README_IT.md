@@ -304,52 +304,58 @@ Sensori letti:
 | `sensor.heltec_pi30_battery_voltage` | Tensione batteria PI30 |
 | `sensor.heltec_pi30_display_pi30_battery_under_voltage` | PSDV, soglia di sottotensione letta dall'inverter (24.0V se non leggibile) |
 
-`max_manual_current` (default `60`) e `hold_release_margin_v` (default
-`0.5` V) sono semplici variabili dentro l'automazione, **non helper** — per
-cambiarle, apri l'automazione in modalità YAML e modifica direttamente i
-numeri.
+`max_manual_current` (default `60`) è una semplice variabile dentro
+l'automazione, **non un helper** — per cambiarla, apri l'automazione in
+modalità YAML e modifica direttamente il numero. Allo stesso modo
+`normal_bulk_v` / `normal_float_v` (default `29.0` / `27.5` V) nello script
+CARICA e `hold_voltage` / `hold_current` (default `24.0` V / `40` A) nello
+script SCARICA.
 
-**Mantenimento alla soglia di sottotensione.** Quando la tensione della
-batteria PI30 scende a `sensor.heltec_pi30_display_pi30_battery_under_voltage`,
-al posto di SCARICA viene eseguito MANTIENI: SBU, carica "solare + rete",
-corrente da rete fissa a 10A. A quella tensione l'inverter in SBU è già in
-Line mode (i carichi vanno sulla rete), ma il suo autoconsumo, circa 50W, che
-il PI30 non mostra mai nella corrente di batteria, esce comunque dal pacco e
-lo porterebbe fino allo stacco del BMS, che spegne l'inverter con tutta
-l'uscita. È successo il 23/09/2026 alle 10:00 (carica su "solo solare", 0A
-segnati per cinque ore e mezza in Line mode mentre il pacco scendeva da 25.1V
-a 22.7V), il 25/09 alle 22:00 e il 26/09 alle 04:29, sempre a 22.7-22.8V.
-**2A non bastano**: il 26/09 dalle 04:02 alle 04:29 il PI30 segnava +2A mentre
-il pacco scendeva da 23.6V a 22.8V e il BMS l'ha staccato; con 9-10A, dalle
-04:30, è risalito da 23.2V a 25.9V. Con 10A il pacco sale di qualche decimo di
-volt in pochi minuti; MANTIENI resta attivo finché la tensione non è
-`hold_release_margin_v` sopra la soglia, poi torna SCARICA, e MANTIENI riparte
-quando la tensione ridiscende alla soglia: dalla rete si preleva solo quello
-che l'inverter consuma, non è una ricarica. MANTIENI è il **primo controllo** di ogni esecuzione e vince
-su tutti i rami CARICA e SCARICA, quindi anche una carica a 2A (che non basta)
-viene sostituita da MANTIENI quando il pacco è alla soglia. L'automazione fa
-tutto da sola e deve restare sempre attiva: disattivata non protegge più il pacco (il 25/09 era
-disattivata, alla soglia non è intervenuto nulla e il BMS ha spento
-l'inverter alle 22:00). La carica vera resta affidata al
-surplus (i rami CARICA). Un trigger template (`sotto_tensione`) fa intervenire
-l'automazione entro un minuto dal raggiungimento della soglia, senza
-aspettare il controllo dei 10 minuti. Lo script MANTIENI porta la corrente
-da rete a 10A anche quando le priorità sono già giuste.
+**Mantenimento a 24V.** In SCARICA (e in MANTIENI, che fa la stessa cosa)
+il PI30 va in SBU con carica "solare + rete", tensioni di **bulk e float a
+24.0V** (il minimo accettato: `PCVV`/`PBFT` 24.0-29.2V) e corrente da rete
+almeno 40A. Sopra 24V il caricabatterie non eroga nulla, perché la batteria è
+già oltre la sua tensione obiettivo, e il pacco alimenta i carichi. Quando in
+SBU l'inverter passa alla rete (tensione di recharge), il caricabatterie porta
+il pacco a 24.0V e lo tiene lì: la corrente scende da sola fino all'autoconsumo
+dell'inverter, circa 50W, che il PI30 non mostra mai nella corrente di
+batteria. Senza questo, quell'autoconsumo esce dal pacco e lo porta fino allo
+stacco del BMS, che spegne l'inverter con tutta l'uscita. È successo il
+23/09/2026 alle 10:00 (carica su "solo solare", 0A segnati per cinque ore e
+mezza in Line mode mentre il pacco scendeva da 25.1V a 22.7V), il 25/09 alle
+22:00 e il 26/09 alle 04:29, sempre a 22.7-22.8V; il 26/09 anche 2A non sono
+bastati (+2A segnati, pacco da 23.6V a 22.8V). Con la tensione obiettivo a
+24.0V decide l'inverter quanta corrente serve, fino al limite impostato.
+Il prezzo: finché bulk e float sono a 24.0V anche il solare non carica il
+pacco oltre 24V. CARICA li riporta ai valori normali (prima il bulk, poi il
+float; in discesa SCARICA scrive prima il float e poi il bulk, così il float
+non supera mai il bulk). Le tensioni vengono scritte solo se diverse da quelle
+lette dall'inverter, cioè a ogni passaggio tra CARICA e SCARICA.
+
+Il **primo controllo** di ogni esecuzione resta la soglia di sottotensione:
+se la batteria PI30 è a `sensor.heltec_pi30_display_pi30_battery_under_voltage`
+o sotto viene eseguito MANTIENI al posto di qualsiasi altro ramo, anche di una
+CARICA a 2A che non basta. Un trigger template (`sotto_tensione`) fa
+intervenire l'automazione entro un minuto dal raggiungimento della soglia,
+senza aspettare il controllo dei 10 minuti. L'automazione fa tutto da sola e
+deve restare sempre attiva: disattivata non protegge più il pacco (il 25/09
+era disattivata e il BMS ha spento l'inverter alle 22:00).
 
 **Ricarica batteria.** Aiutante facoltativo `input_boolean.pi30_ricarica_batteria`
 (Interruttore, nome `PI30 Ricarica Batteria`, vedi
 `Helper - PI30 Ricarica Batteria (Toggle).yaml`). Acceso o assente: la
 batteria si ricarica con la logica normale. Spento: l'automazione non carica
-mai dalla rete ed esegue sempre SCARICA (solo solare + SBU), tranne alla
-soglia di sottotensione, dove MANTIENI (primo controllo) resta attivo e tiene
-il pacco sopra `sensor.heltec_pi30_display_pi30_battery_under_voltage`, così
-l'inverter non si spegne. Cambiarlo fa ripartire subito l'automazione.
+mai dalla rete oltre i 24V ed esegue sempre SCARICA (mantenimento a 24V),
+quindi il pacco non scende sotto i 24V e l'inverter non si spegne. Cambiarlo fa ripartire subito l'automazione.
 
 Scritture: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
 `script.pi30_batteria_da_caricare` (CARICA), `script.pi30_batteria_da_scaricare`
-(SCARICA), `script.pi30_batteria_da_mantenere` (MANTIENI — usato al posto di
-SCARICA per tenere la batteria PI30 alla soglia di sottotensione con 10A).
+(SCARICA, con mantenimento a 24V), `script.pi30_batteria_da_mantenere`
+(MANTIENI — identico a SCARICA, usato alla soglia di sottotensione al posto di
+qualsiasi altro ramo),
+`number.heltec_pi30_display_pi30_set_battery_bulk_voltage` e
+`number.heltec_pi30_display_pi30_set_battery_float_voltage` (dagli script).
 
 Step di corrente da rete: `2 10 20 30 40 50 60`.
 
@@ -360,11 +366,9 @@ Step di corrente da rete: `2 10 20 30 40 50 60`.
 PRIMA DI TUTTO
 SE
 	sensor.heltec_pi30_battery_voltage <= sensor.heltec_pi30_display_pi30_battery_under_voltage
-	OPPURE (MANTIENI già attivo E tensione < sottotensione + hold_release_margin_v)
-	(MANTIENI attivo = priorità uscita SBU E priorità carica solare + rete)
 ALLORA
 	MANTIENI = script.pi30_batteria_da_mantenere
-	(SBU, solare + rete, 10A: tiene la batteria appena sopra la soglia, non la ricarica dalla rete)
+	(identico a SCARICA: SBU, solare + rete, bulk e float 24.0V, almeno 40A: il PI30 tiene la batteria a 24.0V)
 	e STOP: nessuno dei rami sotto viene eseguito
 
 POI

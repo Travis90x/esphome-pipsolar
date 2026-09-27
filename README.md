@@ -296,51 +296,58 @@ Sensors read:
 | `sensor.heltec_pi30_battery_voltage` | PI30 battery voltage |
 | `sensor.heltec_pi30_display_pi30_battery_under_voltage` | PSDV, battery under-voltage threshold read back from the inverter (24.0V if unreadable) |
 
-`max_manual_current` (default `60`) and `hold_release_margin_v` (default
-`0.5` V) are plain variables inside the automation, **not helpers** — to
-change them, open the automation in YAML mode and edit the numbers directly.
+`max_manual_current` (default `60`) is a plain variable inside the
+automation, **not a helper** — to change it, open the automation in YAML mode
+and edit the number directly. The same goes for `normal_bulk_v` /
+`normal_float_v` (default `29.0` / `27.5` V) in the CHARGE script and
+`hold_voltage` / `hold_current` (default `24.0` V / `40` A) in the DISCHARGE
+script.
 
-**Hold at the under-voltage threshold.** When the PI30 battery voltage drops
-to `sensor.heltec_pi30_display_pi30_battery_under_voltage`, KEEP runs instead
-of DISCHARGE: SBU, charger "solar + utility", utility current fixed at 10A.
-At that voltage the inverter in SBU is already in Line mode (the loads run on
-the grid), but its own consumption, about 50W, which the PI30 never shows in
-the battery current, still comes out of the pack and would drain it down to
-the BMS cut, which switches the inverter off with the whole output. That
-happened on 23 Sep 2026 at 10:00 (charger on "solar only", 0A reported for
-five and a half hours in Line mode while the pack went from 25.1V to 22.7V),
-on 25 Sep at 22:00 and on 26 Sep at 04:29 (Italian time), always at
-22.7-22.8V. **2A are not enough**: on 26 Sep from 04:02 to 04:29 the PI30
-reported +2A while the pack went from 23.6V to 22.8V and the BMS cut it; with
-9-10A, from 04:30, it went back from 23.2V to 25.9V. With 10A the pack rises a
-few tenths of a volt within minutes; KEEP stays active until the voltage is
-`hold_release_margin_v` above the threshold, then DISCHARGE takes over again,
-and KEEP comes back when the voltage falls to the threshold again: the grid
-only supplies what the inverter consumes, it is not a recharge. KEEP is the **first check** of every run and wins over all
-the CHARGE and DISCHARGE branches, so even a 2A charge (not enough) is
-replaced by KEEP when the pack is at the threshold. The automation does
-everything on its own and must stay enabled: disabled, it no longer protects the pack (it was disabled on 25
-Sep, nothing happened at the threshold and the BMS switched the inverter off
-at 22:00). Real charging is still left to the surplus (the CHARGE
-branches). A template trigger (`sotto_tensione`) makes the automation react
-within a minute of reaching the threshold, instead of waiting for the
-10-minute check. The KEEP script also forces the utility current to 10A
-when the priorities are already right.
+**Hold at 24V.** In DISCHARGE (and in KEEP, which does the same) the PI30
+goes to SBU with charger "solar + utility", **bulk and float voltage at
+24.0V** (the lowest accepted: `PCVV`/`PBFT` 24.0-29.2V) and a utility current
+of at least 40A. Above 24V the charger delivers nothing, because the pack is
+already above its target voltage, and the pack powers the loads. When the
+inverter in SBU switches to the grid (recharge voltage), the charger brings
+the pack to 24.0V and holds it there: the current drops by itself to the
+inverter's own consumption, about 50W, which the PI30 never shows in the
+battery current. Without this, that consumption comes out of the pack and
+drains it down to the BMS cut, which switches the inverter off with the whole
+output. That happened on 23 Sep 2026 at 10:00 (charger on "solar only", 0A
+reported for five and a half hours in Line mode while the pack went from
+25.1V to 22.7V), on 25 Sep at 22:00 and on 26 Sep at 04:29 (Italian time),
+always at 22.7-22.8V; on 26 Sep even 2A were not enough (+2A reported, pack
+from 23.6V to 22.8V). With the target voltage at 24.0V the inverter decides
+how much current is needed, up to the configured limit. The price: while bulk
+and float are at 24.0V, solar does not charge the pack above 24V either.
+CHARGE puts them back to the normal values (bulk first, then float; going
+down DISCHARGE writes float first, then bulk, so float never exceeds bulk).
+The voltages are only written when they differ from what the inverter reports,
+i.e. on every switch between CHARGE and DISCHARGE.
+
+The **first check** of every run is still the under-voltage threshold: if the
+PI30 battery is at `sensor.heltec_pi30_display_pi30_battery_under_voltage` or
+below, KEEP runs instead of any other branch, even a 2A CHARGE (not enough). A
+template trigger (`sotto_tensione`) makes the automation react within a minute
+of reaching the threshold, instead of waiting for the 10-minute check. The
+automation does everything on its own and must stay enabled: disabled, it no
+longer protects the pack (it was disabled on 25 Sep and the BMS switched the
+inverter off at 22:00).
 
 **Battery charging switch.** Optional helper `input_boolean.pi30_ricarica_batteria`
 (Toggle, name `PI30 Ricarica Batteria`, see
 `Helper - PI30 Ricarica Batteria (Toggle).yaml`). On or missing: the pack
 charges with the normal logic. Off: the automation never charges from the
-grid and always runs DISCHARGE (solar only + SBU), except at the under-voltage
-threshold, where KEEP (the first check) stays active and holds the pack above
-`sensor.heltec_pi30_display_pi30_battery_under_voltage`, so the inverter does
-not shut down. Toggling it re-runs the automation immediately.
+grid above 24V and always runs DISCHARGE (hold at 24V), so the pack does not
+go below 24V and the inverter does not shut down. Toggling it re-runs the automation immediately.
 
 Writes: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
 `script.pi30_batteria_da_caricare` (CHARGE), `script.pi30_batteria_da_scaricare`
-(DISCHARGE), `script.pi30_batteria_da_mantenere` (KEEP — used instead of
-DISCHARGE to hold the PI30 battery at the under-voltage threshold with 10A).
+(DISCHARGE, with the 24V hold), `script.pi30_batteria_da_mantenere` (KEEP —
+same as DISCHARGE, used at the under-voltage threshold instead of any other
+branch), `number.heltec_pi30_display_pi30_set_battery_bulk_voltage` and
+`number.heltec_pi30_display_pi30_set_battery_float_voltage` (from the scripts).
 
 Utility current steps: `2 10 20 30 40 50 60`.
 
@@ -351,11 +358,9 @@ Utility current steps: `2 10 20 30 40 50 60`.
 FIRST, BEFORE ANYTHING ELSE
 IF
 	sensor.heltec_pi30_battery_voltage <= sensor.heltec_pi30_display_pi30_battery_under_voltage
-	OR (KEEP already active AND voltage < under-voltage + hold_release_margin_v)
-	(KEEP active = output priority SBU AND charger priority solar + utility)
 THEN
 	KEEP = script.pi30_batteria_da_mantenere
-	(SBU, solar + utility, 10A: hold the battery just above the threshold, do not recharge it from the grid)
+	(same as DISCHARGE: SBU, solar + utility, bulk and float 24.0V, at least 40A: the PI30 holds the battery at 24.0V)
 	and STOP: none of the branches below runs
 
 THEN

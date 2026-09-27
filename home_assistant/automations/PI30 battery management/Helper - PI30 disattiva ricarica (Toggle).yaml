@@ -1,0 +1,24 @@
+# Interruttore "Disattiva ricarica" per
+# "Automation - PI30 Battery Charging Intelligent Modulation.yaml".
+#
+# Spento (o helper assente): l'automazione fa tutto come sempre
+# (MANTIENI alla soglia, poi CARICA / SCARICA secondo la logica GoodWe).
+# Acceso: nessuna carica da rete. L'automazione esegue SEMPRE SCARICA
+# (solo solare + SBU), tranne quando la batteria PI30 arriva a
+# sensor.heltec_pi30_display_pi30_battery_under_voltage: lì esegue comunque
+# MANTIENI (SBU, solare + rete, 10A) finché la tensione non risale di
+# hold_release_margin_v, così il BMS non stacca e l'inverter non si spegne.
+# Non disattivare l'automazione al posto di questo interruttore: disattivata
+# non protegge la batteria.
+#
+# Dalla UI (senza configuration.yaml):
+#   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante > Interruttore
+#   Nome: PI30 disattiva ricarica
+#   (genera input_boolean.pi30_disattiva_ricarica; controlla l'ID entità
+#    dopo il salvataggio)
+#
+# Oppure, equivalente, in configuration.yaml (poi riavvia):
+input_boolean:
+  pi30_disattiva_ricarica:
+    name: PI30 disattiva ricarica
+    icon: mdi:battery-off-outline

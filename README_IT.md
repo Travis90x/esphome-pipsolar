@@ -336,6 +336,15 @@ l'automazione entro un minuto dal raggiungimento della soglia, senza
 aspettare il controllo dei 10 minuti. Lo script MANTIENI porta la corrente
 da rete a 10A anche quando le priorità sono già giuste.
 
+**Disattiva ricarica.** Aiutante facoltativo `input_boolean.pi30_disattiva_ricarica`
+(Interruttore, nome `PI30 disattiva ricarica`, vedi
+`Helper - PI30 disattiva ricarica (Toggle).yaml`). Acceso: l'automazione non
+carica mai dalla rete ed esegue sempre SCARICA (solo solare + SBU), tranne
+alla soglia di sottotensione, dove MANTIENI (primo controllo) resta attivo e
+tiene il pacco sopra `sensor.heltec_pi30_display_pi30_battery_under_voltage`,
+così l'inverter non si spegne. Spento o assente: logica normale. Cambiarlo fa
+ripartire subito l'automazione.
+
 Scritture: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
 `script.pi30_batteria_da_caricare` (CARICA), `script.pi30_batteria_da_scaricare`
@@ -357,6 +366,13 @@ ALLORA
 	MANTIENI = script.pi30_batteria_da_mantenere
 	(SBU, solare + rete, 10A: tiene la batteria appena sopra la soglia, non la ricarica dalla rete)
 	e STOP: nessuno dei rami sotto viene eseguito
+
+POI
+SE
+	input_boolean.pi30_disattiva_ricarica = on
+ALLORA
+	SCARICA = script.pi30_batteria_da_scaricare
+	e STOP: nessuna carica da rete (la protezione resta il MANTIENI qui sopra)
 
 Segnale favorevole OR nulla noto
 SE

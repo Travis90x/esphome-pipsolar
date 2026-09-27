@@ -1,24 +1,48 @@
-# Interruttore "PI30 Ricarica Batteria" per
-# "Automation - PI30 Battery Charging Intelligent Modulation.yaml".
+# Aiutanti per "Automation - PI30 Battery Charging Intelligent Modulation.yaml".
 #
-# Acceso (o helper assente): la batteria si ricarica, l'automazione fa tutto
-# come sempre (MANTIENI alla soglia, poi CARICA / SCARICA secondo la logica
-# GoodWe).
-# Spento: nessuna carica oltre i 24V. L'automazione esegue SEMPRE SCARICA,
-# che mette SBU, carica "solare + rete" e bulk/float a 24.0V: la batteria
-# alimenta i carichi e, quando l'inverter passa alla rete, il caricabatterie
-# la tiene a 24.0V, così il BMS non stacca e l'inverter non si spegne.
-# Non disattivare l'automazione al posto di questo interruttore: disattivata
-# non protegge la batteria.
+# 1) Interruttore "PI30 Ricarica Batteria" (input_boolean.pi30_ricarica_batteria)
+#    Acceso (o assente): la batteria si ricarica, logica normale.
+#    Spento: l'automazione memorizza bulk e float attuali della PI30 nei due
+#    numeri qui sotto, poi abbassa bulk e float a 24.0V (SBU, "solare + rete"):
+#    la batteria non viene ricaricata, ma quando l'inverter passa alla rete il
+#    caricabatterie la tiene a 24V, così il BMS non stacca. Quando torna acceso,
+#    l'automazione rimette in bulk e float i valori dei due numeri, anche se nel
+#    frattempo li hai modificati.
+#    Non disattivare l'automazione al posto di questo interruttore.
+#
+# 2) Numeri "PI30 bulk carica" e "PI30 float carica"
+#    (input_number.pi30_bulk_carica, input_number.pi30_float_carica)
+#    Memoria temporanea di bulk e float mentre l'interruttore è spento. Senza
+#    questi due numeri, da spento l'automazione esegue SCARICA (solo solare)
+#    e non tocca bulk e float.
 #
 # Dalla UI (senza configuration.yaml):
-#   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante > Interruttore
-#   Nome: PI30 Ricarica Batteria
-#   (genera input_boolean.pi30_ricarica_batteria; controlla l'ID entità
-#    dopo il salvataggio)
+#   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante
+#   - Interruttore: Nome "PI30 Ricarica Batteria"
+#   - Numero: Nome "PI30 bulk carica", min 24.0, max 29.2, passo 0.1, V,
+#     modalità Campo di inserimento
+#   - Numero: Nome "PI30 float carica", min 24.0, max 29.0, passo 0.1, V,
+#     modalità Campo di inserimento
+#   Controlla gli ID entità dopo il salvataggio.
 #
 # Oppure, equivalente, in configuration.yaml (poi riavvia):
 input_boolean:
   pi30_ricarica_batteria:
     name: PI30 Ricarica Batteria
     icon: mdi:battery-charging
+
+input_number:
+  pi30_bulk_carica:
+    name: PI30 bulk carica
+    min: 24.0
+    max: 29.2
+    step: 0.1
+    unit_of_measurement: V
+    mode: box
+  pi30_float_carica:
+    name: PI30 float carica
+    min: 24.0
+    max: 29.0
+    step: 0.1
+    unit_of_measurement: V
+    mode: box

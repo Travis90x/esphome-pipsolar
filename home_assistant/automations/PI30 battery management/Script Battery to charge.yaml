@@ -1,57 +1,13 @@
 alias: PI30 batteria da caricare
 description: >-
-  CARICA. Riporta le tensioni di bulk e float ai valori di carica
-  impostati da te, abbassati a 24.0V dallo script SCARICA. I valori
-  vengono dagli aiutanti input_number.pi30_bulk_carica e
-  input_number.pi30_float_carica, che l'automazione MAN ("PI30 Battery
-  MAN") tiene allineati a quello che imposti a mano sui campi
-  number.heltec_pi30_display_pi30_set_battery_bulk_voltage / _float_voltage.
-  Se un aiutante manca o non è valido quella tensione non viene toccata.
-  Le scrive solo se diverse, prima il bulk e poi il float, così il float
-  non supera mai il bulk. Poi priorità di uscita "rete prima" (Utility) e
-  carica "solare + rete". La corrente da rete la modula l'automazione MAN.
+  CARICA. Priorità di uscita "rete prima" (Utility) e carica "solare +
+  rete". La corrente da rete la modula l'automazione MAN.
 sequence:
-  - variables:
-      normal_bulk_v: "{{ states('input_number.pi30_bulk_carica') | float(0) | round(1) }}"
-      normal_float_v: "{{ states('input_number.pi30_float_carica') | float(0) | round(1) }}"
   - delay:
       hours: 0
       minutes: 0
       seconds: 2
       milliseconds: 0
-  # In salita prima il bulk, poi il float
-  - if:
-      - condition: template
-        value_template: >-
-          {{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage')
-             | float(0) | round(1) != normal_bulk_v and normal_bulk_v > 24.0 }}
-    then:
-      - action: number.set_value
-        target:
-          entity_id: number.heltec_pi30_display_pi30_set_battery_bulk_voltage
-        data:
-          value: "{{ normal_bulk_v }}"
-      - delay:
-          hours: 0
-          minutes: 0
-          seconds: 2
-          milliseconds: 0
-  - if:
-      - condition: template
-        value_template: >-
-          {{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage')
-             | float(0) | round(1) != normal_float_v and normal_float_v > 24.0 }}
-    then:
-      - action: number.set_value
-        target:
-          entity_id: number.heltec_pi30_display_pi30_set_battery_float_voltage
-        data:
-          value: "{{ normal_float_v }}"
-      - delay:
-          hours: 0
-          minutes: 0
-          seconds: 2
-          milliseconds: 0
   - if:
       - condition: template
         value_template: |-

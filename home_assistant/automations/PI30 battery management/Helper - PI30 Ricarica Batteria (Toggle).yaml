@@ -2,19 +2,28 @@
 #
 # 1) Interruttore "PI30 Ricarica Batteria" (input_boolean.pi30_ricarica_batteria)
 #    Acceso (o assente): la batteria si ricarica, logica normale.
-#    Spento: l'automazione memorizza bulk e float attuali della PI30 nei due
-#    numeri qui sotto, poi abbassa bulk e float a 24.0V (SBU, "solare + rete"):
+#    Spento: quando lo spegni l'automazione memorizza bulk e float attuali
+#    della PI30 in "PI30 bulk carica" / "PI30 float carica", poi porta bulk e
+#    float alla tensione di "PI30 keep battery live" (SBU, "solare + rete"):
 #    la batteria non viene ricaricata, ma quando l'inverter passa alla rete il
-#    caricabatterie la tiene a 24V, così il BMS non stacca. Quando torna acceso,
-#    l'automazione rimette in bulk e float i valori dei due numeri, anche se nel
-#    frattempo li hai modificati.
+#    caricabatterie la tiene a quella tensione, così il BMS non stacca. Quando
+#    torna acceso, l'automazione rimette in bulk e float i valori di
+#    "PI30 bulk carica" / "PI30 float carica", anche se nel frattempo li hai
+#    modificati.
 #    Non disattivare l'automazione al posto di questo interruttore.
 #
 # 2) Numeri "PI30 bulk carica" e "PI30 float carica"
 #    (input_number.pi30_bulk_carica, input_number.pi30_float_carica)
-#    Memoria temporanea di bulk e float mentre l'interruttore è spento. Senza
-#    questi due numeri, da spento l'automazione esegue SCARICA (solo solare)
-#    e non tocca bulk e float.
+#    Memoria temporanea di bulk e float mentre l'interruttore è spento.
+#
+# 3) Numero "PI30 keep battery live" (input_number.pi30_keep_battery_live)
+#    Tensione di mantenimento usata da spento: bulk e float vengono portati a
+#    questo valore. Minimo 24.0V (il PI30 non accetta di meno), per esempio
+#    24.0. Cambiarlo con l'interruttore spento lo applica subito.
+#
+# Senza uno dei tre numeri (o con la tensione di mantenimento sotto 24.0V),
+# da spento l'automazione esegue SCARICA (solo solare) e non tocca bulk e
+# float.
 #
 # Dalla UI (senza configuration.yaml):
 #   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante
@@ -23,6 +32,8 @@
 #     modalità Campo di inserimento
 #   - Numero: Nome "PI30 float carica", min 24.0, max 29.0, passo 0.1, V,
 #     modalità Campo di inserimento
+#   - Numero: Nome "PI30 keep battery live", min 24.0, max 29.0, passo 0.1, V,
+#     modalità Campo di inserimento, valore per esempio 24.0
 #   Controlla gli ID entità dopo il salvataggio.
 #
 # Oppure, equivalente, in configuration.yaml (poi riavvia):
@@ -41,6 +52,13 @@ input_number:
     mode: box
   pi30_float_carica:
     name: PI30 float carica
+    min: 24.0
+    max: 29.0
+    step: 0.1
+    unit_of_measurement: V
+    mode: box
+  pi30_keep_battery_live:
+    name: PI30 keep battery live
     min: 24.0
     max: 29.0
     step: 0.1

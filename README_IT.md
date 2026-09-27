@@ -282,7 +282,7 @@ di una dashboard.
 
 File: [`home_assistant/automations/PI30 battery management/`](<home_assistant/automations/PI30 battery management/>)
 - `Automation - PI30 Battery Charging Intelligent Modulation.yaml`
-- `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery to keep.yaml`, `Script Battery hold 24V.yaml`
+- `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery to keep.yaml`, `Script Battery keep live.yaml`
 - `Helper - PI30 Ricarica Batteria (Toggle).yaml`
 
 Obiettivo: decidere, ogni 10 minuti (più all'avvio e ai cambi rilevanti dei
@@ -343,20 +343,26 @@ da rete a 10A anche quando le priorità sono già giuste.
 batteria si ricarica con la logica normale. Spento: l'automazione memorizza
 bulk e float attuali (`sensor.heltec_pi30_display_pi30_battery_bulk_voltage` /
 `_float_voltage`) nei due aiutanti `input_number.pi30_bulk_carica` /
-`input_number.pi30_float_carica`, poi esegue sempre
-`script.pi30_batteria_mantieni_a_24v`: SBU, carica "solare + rete", **bulk e
-float a 24.0V** (il minimo accettato: `PCVV`/`PBFT` 24.0-29.2V), almeno 40A da
-rete. Sopra 24V il caricabatterie non eroga nulla e il pacco alimenta i carichi;
-quando l'inverter passa alla rete il caricabatterie lo tiene a 24.0V, coprendo
-solo l'autoconsumo dell'inverter, e il BMS non stacca. Anche il solare non
-carica oltre 24V. Quando l'interruttore torna acceso l'automazione rimette in
-bulk e float (`number.heltec_pi30_display_pi30_set_battery_bulk_voltage` /
-`_float_voltage`) i valori dei due `input_number`, anche se nel frattempo li hai
-modificati; lo rifà anche più tardi se bulk o float risultano ancora a 24.0V.
-Ordine delle scritture: in discesa prima il float, in salita prima il bulk,
-così il float non supera mai il bulk. Senza i due `input_number`, da spento
-l'automazione esegue SCARICA (solo solare) senza toccare bulk e float.
-Cambiare l'interruttore fa ripartire subito l'automazione.
+`input_number.pi30_float_carica` (solo nel momento in cui lo spegni), poi
+finché resta spento esegue sempre `script.pi30_keep_battery_live`: SBU, carica
+"solare + rete", **bulk e float alla tensione di mantenimento**
+`input_number.pi30_keep_battery_live` (aiutante "PI30 keep battery live", da
+24.0V, il minimo accettato: `PCVV`/`PBFT` 24.0-29.2V), almeno 40A da rete. Sopra
+quella tensione il caricabatterie non eroga nulla e il pacco alimenta i
+carichi; quando l'inverter passa alla rete il caricabatterie lo tiene alla
+tensione di mantenimento, coprendo solo l'autoconsumo dell'inverter, e il BMS
+non stacca. Anche il solare non carica oltre quella tensione. Cambiare la
+tensione di mantenimento a interruttore spento la applica subito. Quando
+l'interruttore torna acceso l'automazione rimette in bulk e float
+(`number.heltec_pi30_display_pi30_set_battery_bulk_voltage` / `_float_voltage`)
+i valori dei due `input_number` di carica, anche se nel frattempo li hai
+modificati; lo rifà anche più tardi se bulk o float risultano ancora alla
+tensione di mantenimento. Ordine delle scritture: in discesa prima il float, in salita prima il bulk,
+così il float non supera mai il bulk. Senza uno dei tre `input_number`, o con
+la tensione di mantenimento sotto 24.0V, da spento l'automazione esegue
+SCARICA (solo solare) senza toccare bulk e float. Cambiare l'interruttore fa
+ripartire subito l'automazione, che è in modalità `queued` perché il cambio non
+venga perso mentre sta girando.
 
 Scritture: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
@@ -371,8 +377,13 @@ Step di corrente da rete: `2 10 20 30 40 50 60`.
 
 ```
 PRIMA DI TUTTO
+SE input_boolean.pi30_ricarica_batteria appena spento
+ALLORA
+	memorizza bulk/float attuali in input_number.pi30_bulk_carica / pi30_float_carica
+	(se non sono già alla tensione di mantenimento)
+
 SE input_boolean.pi30_ricarica_batteria = on
-	E (appena tornato on OPPURE bulk/float ancora a 24.0V)
+	E (appena tornato on OPPURE bulk/float ancora alla tensione di mantenimento)
 ALLORA
 	bulk = input_number.pi30_bulk_carica, poi float = input_number.pi30_float_carica
 
@@ -390,10 +401,10 @@ POI
 SE
 	input_boolean.pi30_ricarica_batteria = off
 ALLORA
-	SE bulk/float attuali > 24.0V: memorizzali in input_number.pi30_bulk_carica / pi30_float_carica
-	MANTIENI A 24V = script.pi30_batteria_mantieni_a_24v (SBU, solare + rete, bulk e float 24.0V)
+	KEEP BATTERY LIVE = script.pi30_keep_battery_live
+	(SBU, solare + rete, bulk e float = input_number.pi30_keep_battery_live)
 	e STOP
-	(senza gli input_number: SCARICA = script.pi30_batteria_da_scaricare)
+	(senza gli input_number, o mantenimento < 24.0V: SCARICA = script.pi30_batteria_da_scaricare)
 
 Segnale favorevole OR nulla noto
 SE

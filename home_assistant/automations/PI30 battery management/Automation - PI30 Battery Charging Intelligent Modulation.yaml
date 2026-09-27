@@ -36,17 +36,22 @@ description: >-
   usa 24.0V, per sicurezza.
   RICARICA BATTERIA. Con l'aiutante input_boolean.pi30_ricarica_batteria
   ("Helper - PI30 Ricarica Batteria (Toggle).yaml") acceso, o assente, la
-  batteria si ricarica con la logica normale. Spento: l'automazione
-  memorizza bulk e float attuali (sensor ..._battery_bulk_voltage /
-  ..._battery_float_voltage) in input_number.pi30_bulk_carica /
-  input_number.pi30_float_carica ("Helper - PI30 Ricarica Batteria
-  (Toggle).yaml"), poi esegue sempre script.pi30_batteria_mantieni_a_24v:
-  SBU, "solare + rete", bulk e float a 24.0V, così la batteria non viene
-  ricaricata ma l'inverter la tiene a 24V e non si spegne. Quando
-  l'interruttore torna ON rimette in bulk e float i valori di
-  input_number.pi30_bulk_carica / _float_carica, anche se nel frattempo li
-  hai modificati. Se gli aiutanti input_number mancano, da spento esegue
-  SCARICA (solo solare) senza toccare bulk e float.
+  batteria si ricarica con la logica normale. Quando lo spegni
+  l'automazione memorizza bulk e float attuali (sensor
+  ..._battery_bulk_voltage / ..._battery_float_voltage) in
+  input_number.pi30_bulk_carica / input_number.pi30_float_carica, poi
+  finché resta spento esegue sempre script.pi30_keep_battery_live: SBU,
+  "solare + rete", bulk e float alla tensione di mantenimento
+  input_number.pi30_keep_battery_live ("PI30 keep battery live", da 24.0V),
+  così la batteria non viene ricaricata ma l'inverter la tiene a quella
+  tensione e non si spegne. Cambiare la tensione di mantenimento la applica
+  subito. Quando l'interruttore torna ON rimette in bulk e float i valori
+  di input_number.pi30_bulk_carica / _float_carica, anche se nel frattempo
+  li hai modificati, e lo rifà più tardi se bulk o float sono ancora alla
+  tensione di mantenimento. Se uno dei tre aiutanti input_number manca o
+  la tensione di mantenimento è sotto 24.0V, da spento esegue SCARICA
+  (solo solare) senza toccare bulk e float. Modalità queued: le esecuzioni
+  restano una alla volta, ma il cambio dell'interruttore non viene perso.
 triggers:
   - trigger: homeassistant
     id: avvio
@@ -76,10 +81,50 @@ triggers:
   - trigger: state
     id: ricarica_batteria
     entity_id: input_boolean.pi30_ricarica_batteria
+  - trigger: state
+    id: keep_battery_live
+    entity_id: input_number.pi30_keep_battery_live
 actions:
+  # Ricarica batteria appena spenta: memorizza bulk e float di carica, prima
+  # che vengano portati alla tensione di mantenimento (se sono già lì, no)
+  - if:
+      - condition: state
+        entity_id: input_boolean.pi30_ricarica_batteria
+        state: 'off'
+      - condition: template
+        value_template: >-
+          {{ trigger is defined and trigger.id == 'ricarica_batteria'
+             and states('input_number.pi30_bulk_carica') not in ['unknown', 'unavailable']
+             and states('input_number.pi30_float_carica') not in ['unknown', 'unavailable'] }}
+    then:
+      - if:
+          - condition: template
+            value_template: >-
+              {{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(0) >= 24.0 and
+                 states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(0) | round(1) !=
+                 states('input_number.pi30_keep_battery_live') | float(0) | round(1) }}
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pi30_bulk_carica
+            data:
+              value: "{{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float | round(1) }}"
+      - if:
+          - condition: template
+            value_template: >-
+              {{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float(0) >= 24.0 and
+                 states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float(0) | round(1) !=
+                 states('input_number.pi30_keep_battery_live') | float(0) | round(1) }}
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pi30_float_carica
+            data:
+              value: "{{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float | round(1) }}"
   # Ricarica batteria tornata ON: rimetti bulk e float memorizzati. Anche
-  # senza il trigger, se bulk o float sono ancora a 24.0V (ripristino
-  # perso). Prima il bulk, poi il float: il float non supera mai il bulk.
+  # senza il trigger, se bulk o float sono ancora alla tensione di
+  # mantenimento (ripristino perso). Prima il bulk, poi il float: il float
+  # non supera mai il bulk.
   - if:
       - condition: state
         entity_id: input_boolean.pi30_ricarica_batteria
@@ -87,8 +132,10 @@ actions:
       - condition: template
         value_template: >-
           {{ (trigger is defined and trigger.id == 'ricarica_batteria')
-             or states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(99) <= 24.0
-             or states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float(99) <= 24.0 }}
+             or states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(99) | round(1) ==
+                states('input_number.pi30_keep_battery_live') | float(0) | round(1)
+             or states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float(99) | round(1) ==
+                states('input_number.pi30_keep_battery_live') | float(0) | round(1) }}
     then:
       - if:
           - condition: template
@@ -174,35 +221,15 @@ actions:
           - condition: template
             value_template: >-
               {{ states('input_number.pi30_bulk_carica') not in ['unknown', 'unavailable']
-                 and states('input_number.pi30_float_carica') not in ['unknown', 'unavailable'] }}
+                 and states('input_number.pi30_float_carica') not in ['unknown', 'unavailable']
+                 and states('input_number.pi30_keep_battery_live') | float(0) >= 24.0 }}
         then:
-          # Memorizza bulk e float di carica prima di abbassarli (solo se non sono già a 24.0V)
-          - if:
-              - condition: template
-                value_template: >-
-                  {{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(0) > 24.0 }}
-            then:
-              - action: input_number.set_value
-                target:
-                  entity_id: input_number.pi30_bulk_carica
-                data:
-                  value: "{{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float | round(1) }}"
-          - if:
-              - condition: template
-                value_template: >-
-                  {{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float(0) > 24.0 }}
-            then:
-              - action: input_number.set_value
-                target:
-                  entity_id: input_number.pi30_float_carica
-                data:
-                  value: "{{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float | round(1) }}"
-          # Ricarica disattivata: mantieni a 24V (bulk e float a 24.0V)
+          # Ricarica disattivata: bulk e float alla tensione di mantenimento
           - target:
-              entity_id: script.pi30_batteria_mantieni_a_24v
+              entity_id: script.pi30_keep_battery_live
             action: script.turn_on
-          - stop: Ricarica disattivata, mantenimento a 24V
-      # Aiutanti input_number assenti: SCARICA senza toccare bulk e float
+          - stop: Ricarica disattivata, mantenimento
+      # Aiutanti input_number assenti o non validi: SCARICA senza toccare bulk e float
       - target:
           entity_id: script.pi30_batteria_da_scaricare
         action: script.turn_on
@@ -506,5 +533,6 @@ actions:
                           option: '60'
                         action: select.select_option
                     else: []
-mode: single
+mode: queued
+max: 5
 max_exceeded: silent

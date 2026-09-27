@@ -274,7 +274,7 @@ Paste them into a dashboard's YAML mode.
 
 Files: [`home_assistant/automations/PI30 battery management/`](<home_assistant/automations/PI30 battery management/>)
 - `Automation - PI30 Battery Charging Intelligent Modulation.yaml`
-- `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery to keep.yaml`, `Script Battery hold 24V.yaml`
+- `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery to keep.yaml`, `Script Battery keep live.yaml`
 - `Helper - PI30 Ricarica Batteria (Toggle).yaml`
 
 Goal: decide, every 10 minutes (plus on startup and on relevant sensor
@@ -334,21 +334,26 @@ when the priorities are already right.
 charges with the normal logic. Off: the automation stores the current bulk and
 float voltages (`sensor.heltec_pi30_display_pi30_battery_bulk_voltage` /
 `_float_voltage`) in the helpers `input_number.pi30_bulk_carica` /
-`input_number.pi30_float_carica`, then always runs
-`script.pi30_batteria_mantieni_a_24v`: SBU, charger "solar + utility", **bulk
-and float at 24.0V** (the lowest accepted: `PCVV`/`PBFT` 24.0-29.2V), at least
-40A from the grid. Above 24V the charger delivers nothing and the pack feeds
-the loads; once the inverter falls back to the grid the charger holds it at
-24.0V, covering only the inverter's own consumption, and the BMS does not cut
-it. Solar does not charge above 24V either. When the switch is turned back on,
-the automation writes the values of the two `input_number` helpers back into
-bulk and float (`number.heltec_pi30_display_pi30_set_battery_bulk_voltage` /
-`_float_voltage`), including any change you made meanwhile; it does it again
-later if bulk or float still read 24.0V. Write order: float first going down,
-bulk first going up, so float never exceeds bulk. Without the two
-`input_number` helpers, when off the automation runs DISCHARGE (solar only)
-and leaves bulk and float alone. Toggling the switch re-runs the automation
-immediately.
+`input_number.pi30_float_carica` (only at the moment it is turned off), then,
+while it stays off, always runs `script.pi30_keep_battery_live`: SBU, charger
+"solar + utility", **bulk and float at the hold voltage**
+`input_number.pi30_keep_battery_live` (helper "PI30 keep battery live", from
+24.0V, the lowest accepted: `PCVV`/`PBFT` 24.0-29.2V), at least 40A from the
+grid. Above that voltage the charger delivers nothing and the pack feeds the
+loads; once the inverter falls back to the grid the charger holds it at the
+hold voltage, covering only the inverter's own consumption, and the BMS does
+not cut it. Solar does not charge above that voltage either. Changing the hold
+voltage while the switch is off applies it at once. When the switch is turned
+back on, the automation writes the values of the two charging `input_number`
+helpers back into bulk and float
+(`number.heltec_pi30_display_pi30_set_battery_bulk_voltage` / `_float_voltage`),
+including any change you made meanwhile; it does it again later if bulk or
+float still read the hold voltage. Write order: float first going down,
+bulk first going up, so float never exceeds bulk. Without one of the three
+`input_number` helpers, or with a hold voltage below 24.0V, when off the
+automation runs DISCHARGE (solar only) and leaves bulk and float alone.
+Toggling the switch re-runs the automation immediately; it runs in `queued`
+mode so the change is not lost while a run is in progress.
 
 Writes: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
@@ -363,8 +368,13 @@ Utility current steps: `2 10 20 30 40 50 60`.
 
 ```
 FIRST, BEFORE ANYTHING ELSE
+IF input_boolean.pi30_ricarica_batteria just turned off
+THEN
+	store current bulk/float in input_number.pi30_bulk_carica / pi30_float_carica
+	(unless they are already at the hold voltage)
+
 IF input_boolean.pi30_ricarica_batteria = on
-	AND (just turned on OR bulk/float still at 24.0V)
+	AND (just turned on OR bulk/float still at the hold voltage)
 THEN
 	bulk = input_number.pi30_bulk_carica, then float = input_number.pi30_float_carica
 
@@ -382,10 +392,10 @@ THEN
 IF
 	input_boolean.pi30_ricarica_batteria = off
 THEN
-	IF current bulk/float > 24.0V: store them in input_number.pi30_bulk_carica / pi30_float_carica
-	HOLD AT 24V = script.pi30_batteria_mantieni_a_24v (SBU, solar + utility, bulk and float 24.0V)
+	KEEP BATTERY LIVE = script.pi30_keep_battery_live
+	(SBU, solar + utility, bulk and float = input_number.pi30_keep_battery_live)
 	and STOP
-	(without the input_number helpers: DISCHARGE = script.pi30_batteria_da_scaricare)
+	(without the input_number helpers, or hold < 24.0V: DISCHARGE = script.pi30_batteria_da_scaricare)
 
 Favorable signal OR nothing known
 IF

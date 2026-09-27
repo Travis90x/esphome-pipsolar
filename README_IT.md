@@ -283,6 +283,7 @@ di una dashboard.
 File: [`home_assistant/automations/PI30 battery management/`](<home_assistant/automations/PI30 battery management/>)
 - `Automation - PI30 Battery Charging Intelligent Modulation.yaml`
 - `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery to keep.yaml`
+- `Automation - PI30 Save charging voltages.yaml`, `Helper - PI30 tensioni di carica (Number).yaml`, `Helper - PI30 Ricarica Batteria (Toggle).yaml`
 
 Obiettivo: decidere, ogni 10 minuti (più all'avvio e ai cambi rilevanti dei
 sensori), se il PI30 debba caricare il suo pacco LiFePO4 dalla rete,
@@ -307,9 +308,18 @@ Sensori letti:
 `max_manual_current` (default `60`) è una semplice variabile dentro
 l'automazione, **non un helper** — per cambiarla, apri l'automazione in
 modalità YAML e modifica direttamente il numero. Allo stesso modo
-`normal_bulk_v` / `normal_float_v` (default `29.0` / `27.5` V) nello script
-CARICA e `hold_voltage` / `hold_current` (default `24.0` V / `40` A) nello
-script SCARICA.
+`hold_voltage` / `hold_current` (default `24.0` V / `40` A) nello script
+SCARICA.
+
+**Tensioni di carica.** Bulk e float di carica si impostano come sempre a
+mano dai campi `number.heltec_pi30_display_pi30_set_battery_bulk_voltage` e
+`number.heltec_pi30_display_pi30_set_battery_float_voltage`. Siccome SCARICA
+li porta a 24.0V, l'automazione `Automation - PI30 Save charging voltages.yaml`
+("PI30 salva tensioni di carica") copia ogni valore impostato a mano (diverso
+da 24.0V) nei due aiutanti `input_number.pi30_bulk_carica` e
+`input_number.pi30_float_carica` (`Helper - PI30 tensioni di carica (Number).yaml`,
+valori iniziali 29.0 e 27.5V), e CARICA ripristina quelli. Se un aiutante
+manca, quella tensione non viene toccata.
 
 **Mantenimento a 24V.** In SCARICA (e in MANTIENI, che fa la stessa cosa)
 il PI30 va in SBU con carica "solare + rete", tensioni di **bulk e float a
@@ -327,7 +337,7 @@ mezza in Line mode mentre il pacco scendeva da 25.1V a 22.7V), il 25/09 alle
 bastati (+2A segnati, pacco da 23.6V a 22.8V). Con la tensione obiettivo a
 24.0V decide l'inverter quanta corrente serve, fino al limite impostato.
 Il prezzo: finché bulk e float sono a 24.0V anche il solare non carica il
-pacco oltre 24V. CARICA li riporta ai valori normali (prima il bulk, poi il
+pacco oltre 24V. CARICA li riporta ai valori di carica (prima il bulk, poi il
 float; in discesa SCARICA scrive prima il float e poi il bulk, così il float
 non supera mai il bulk). Le tensioni vengono scritte solo se diverse da quelle
 lette dall'inverter, cioè a ogni passaggio tra CARICA e SCARICA.

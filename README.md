@@ -275,6 +275,7 @@ Paste them into a dashboard's YAML mode.
 Files: [`home_assistant/automations/PI30 battery management/`](<home_assistant/automations/PI30 battery management/>)
 - `Automation - PI30 Battery Charging Intelligent Modulation.yaml`
 - `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery to keep.yaml`
+- `Automation - PI30 Save charging voltages.yaml`, `Helper - PI30 tensioni di carica (Number).yaml`, `Helper - PI30 Ricarica Batteria (Toggle).yaml`
 
 Goal: decide, every 10 minutes (plus on startup and on relevant sensor
 changes), whether the PI30 should be charging its LiFePO4 pack from the grid,
@@ -298,10 +299,18 @@ Sensors read:
 
 `max_manual_current` (default `60`) is a plain variable inside the
 automation, **not a helper** — to change it, open the automation in YAML mode
-and edit the number directly. The same goes for `normal_bulk_v` /
-`normal_float_v` (default `29.0` / `27.5` V) in the CHARGE script and
-`hold_voltage` / `hold_current` (default `24.0` V / `40` A) in the DISCHARGE
-script.
+and edit the number directly. The same goes for `hold_voltage` /
+`hold_current` (default `24.0` V / `40` A) in the DISCHARGE script.
+
+**Charging voltages.** Charging bulk and float are set by hand as usual from
+`number.heltec_pi30_display_pi30_set_battery_bulk_voltage` and
+`number.heltec_pi30_display_pi30_set_battery_float_voltage`. Since DISCHARGE
+lowers them to 24.0V, `Automation - PI30 Save charging voltages.yaml` ("PI30
+salva tensioni di carica") copies every value set by hand (other than 24.0V)
+into the helpers `input_number.pi30_bulk_carica` and
+`input_number.pi30_float_carica` (`Helper - PI30 tensioni di carica (Number).yaml`,
+initial values 29.0 and 27.5V), and CHARGE restores those. If a helper is
+missing, that voltage is left alone.
 
 **Hold at 24V.** In DISCHARGE (and in KEEP, which does the same) the PI30
 goes to SBU with charger "solar + utility", **bulk and float voltage at
@@ -320,7 +329,7 @@ always at 22.7-22.8V; on 26 Sep even 2A were not enough (+2A reported, pack
 from 23.6V to 22.8V). With the target voltage at 24.0V the inverter decides
 how much current is needed, up to the configured limit. The price: while bulk
 and float are at 24.0V, solar does not charge the pack above 24V either.
-CHARGE puts them back to the normal values (bulk first, then float; going
+CHARGE puts them back to the charging values (bulk first, then float; going
 down DISCHARGE writes float first, then bulk, so float never exceeds bulk).
 The voltages are only written when they differ from what the inverter reports,
 i.e. on every switch between CHARGE and DISCHARGE.

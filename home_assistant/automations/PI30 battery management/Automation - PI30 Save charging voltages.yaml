@@ -1,0 +1,30 @@
+alias: PI30 salva tensioni di carica
+description: >-
+  Quando imposti a mano bulk o float della PI30
+  (number.heltec_pi30_display_pi30_set_battery_bulk_voltage /
+  _set_battery_float_voltage), copia il valore negli aiutanti
+  input_number.pi30_bulk_carica / input_number.pi30_float_carica, che lo
+  script CARICA usa per ripristinare le tensioni di carica. Il 24.0V
+  scritto dallo script SCARICA (mantenimento a 24V) viene ignorato.
+triggers:
+  - trigger: state
+    entity_id: number.heltec_pi30_display_pi30_set_battery_bulk_voltage
+    id: bulk
+  - trigger: state
+    entity_id: number.heltec_pi30_display_pi30_set_battery_float_voltage
+    id: float
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.to_state is not none
+         and trigger.to_state.state | float(0) > 24.0 }}
+actions:
+  - action: input_number.set_value
+    target:
+      entity_id: >-
+        {{ 'input_number.pi30_bulk_carica' if trigger.id == 'bulk'
+           else 'input_number.pi30_float_carica' }}
+    data:
+      value: '{{ trigger.to_state.state | float | round(1) }}'
+mode: queued
+max: 10

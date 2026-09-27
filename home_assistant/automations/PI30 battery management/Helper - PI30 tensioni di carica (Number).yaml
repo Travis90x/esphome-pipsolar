@@ -1,0 +1,36 @@
+# Tensioni di carica normali della PI30, ripristinate dallo script CARICA
+# ("Script Battery to charge.yaml") dopo che SCARICA le ha abbassate a 24.0V.
+#
+# Non serve modificarle qui: l'automazione "PI30 salva tensioni di carica"
+# copia in questi due aiutanti ogni valore che imposti a mano su
+#   number.heltec_pi30_display_pi30_set_battery_bulk_voltage
+#   number.heltec_pi30_display_pi30_set_battery_float_voltage
+# (tranne il 24.0V scritto da SCARICA). Quindi continui a impostare bulk e
+# float dai soliti due campi.
+#
+# Dalla UI (senza configuration.yaml), due volte:
+#   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante > Numero
+#   1) Nome: PI30 bulk carica, min 24.0, max 29.2, passo 0.1, unità V,
+#      modalità Campo di inserimento  -> input_number.pi30_bulk_carica
+#   2) Nome: PI30 float carica, min 24.0, max 29.0, passo 0.1, unità V,
+#      modalità Campo di inserimento  -> input_number.pi30_float_carica
+#   Poi imposta i valori iniziali (29.0 e 27.5) e controlla gli ID entità.
+#
+# Oppure, equivalente, in configuration.yaml (poi riavvia):
+input_number:
+  pi30_bulk_carica:
+    name: PI30 bulk carica
+    min: 24.0
+    max: 29.2
+    step: 0.1
+    unit_of_measurement: V
+    mode: box
+    initial: 29.0
+  pi30_float_carica:
+    name: PI30 float carica
+    min: 24.0
+    max: 29.0
+    step: 0.1
+    unit_of_measurement: V
+    mode: box
+    initial: 27.5

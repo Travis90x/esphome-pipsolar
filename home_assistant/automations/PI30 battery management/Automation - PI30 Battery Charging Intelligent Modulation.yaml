@@ -34,11 +34,12 @@ description: >-
   l'automazione entro un minuto dal raggiungimento della soglia, senza
   aspettare il controllo dei 10 minuti. Se la soglia non è leggibile si
   usa 24.0V, per sicurezza.
-  DISATTIVA RICARICA. Con l'aiutante input_boolean.pi30_disattiva_ricarica
-  acceso ("Helper - PI30 disattiva ricarica (Toggle).yaml") l'automazione
-  non carica mai dalla rete: esegue sempre SCARICA, tranne alla soglia di
+  RICARICA BATTERIA. Con l'aiutante input_boolean.pi30_ricarica_batteria
+  ("Helper - PI30 Ricarica Batteria (Toggle).yaml") acceso, o assente, la
+  batteria si ricarica con la logica normale. Spento: l'automazione non
+  carica mai dalla rete ed esegue sempre SCARICA, tranne alla soglia di
   sottotensione, dove il MANTIENI qui sopra (primo controllo) resta attivo
-  per non far spegnere l'inverter. Spento o assente: logica normale.
+  per non far spegnere l'inverter.
 triggers:
   - trigger: homeassistant
     id: avvio
@@ -66,8 +67,8 @@ triggers:
     for:
       minutes: 1
   - trigger: state
-    id: disattiva_ricarica
-    entity_id: input_boolean.pi30_disattiva_ricarica
+    id: ricarica_batteria
+    entity_id: input_boolean.pi30_ricarica_batteria
 actions:
   - variables:
       charging_steps:
@@ -120,8 +121,8 @@ actions:
       - stop: Batteria PI30 alla soglia di sottotensione, mantenimento
   - if:
       - condition: state
-        entity_id: input_boolean.pi30_disattiva_ricarica
-        state: 'on'
+        entity_id: input_boolean.pi30_ricarica_batteria
+        state: 'off'
     then:
       # Ricarica disattivata: sempre SCARICA, la protezione resta il MANTIENI qui sopra
       - target:

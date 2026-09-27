@@ -327,14 +327,14 @@ within a minute of reaching the threshold, instead of waiting for the
 10-minute check. The KEEP script also forces the utility current to 10A
 when the priorities are already right.
 
-**Disable charging.** Optional helper `input_boolean.pi30_disattiva_ricarica`
-(Toggle, name `PI30 disattiva ricarica`, see
-`Helper - PI30 disattiva ricarica (Toggle).yaml`). On: the automation never
-charges from the grid and always runs DISCHARGE (solar only + SBU), except at
-the under-voltage threshold, where KEEP (the first check) stays active and
-holds the pack above `sensor.heltec_pi30_display_pi30_battery_under_voltage`,
-so the inverter does not shut down. Off or missing: normal logic. Toggling it
-re-runs the automation immediately.
+**Battery charging switch.** Optional helper `input_boolean.pi30_ricarica_batteria`
+(Toggle, name `PI30 Ricarica Batteria`, see
+`Helper - PI30 Ricarica Batteria (Toggle).yaml`). On or missing: the pack
+charges with the normal logic. Off: the automation never charges from the
+grid and always runs DISCHARGE (solar only + SBU), except at the under-voltage
+threshold, where KEEP (the first check) stays active and holds the pack above
+`sensor.heltec_pi30_display_pi30_battery_under_voltage`, so the inverter does
+not shut down. Toggling it re-runs the automation immediately.
 
 Writes: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
@@ -360,7 +360,7 @@ THEN
 
 THEN
 IF
-	input_boolean.pi30_disattiva_ricarica = on
+	input_boolean.pi30_ricarica_batteria = off
 THEN
 	DISCHARGE = script.pi30_batteria_da_scaricare
 	and STOP: no grid charging (protection is still the KEEP above)

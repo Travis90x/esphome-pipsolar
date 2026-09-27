@@ -397,6 +397,15 @@ THEN
 	and STOP
 	(without the input_number helpers, or hold < 24.0V: DISCHARGE = script.pi30_batteria_da_scaricare)
 
+THEN ("WHICH MEANS", applied to every branch, even Goodwe at 100% or >= 55V)
+IF
+	sensor.heltec_pi30_display_pi30_max_utility_charging_current = 2A
+	AND
+	sensor.potenza_contatore >= 500 OR sensor.goodwe_battery_power >= 200
+THEN
+	DISCHARGE = script.pi30_batteria_da_scaricare
+	and STOP
+
 Favorable signal OR nothing known
 IF
 	Goodwe SOC or VOLT known (at least one of the two) and favorable (goodwe battery full AND charging power at minimum + goodwe NOT drawing much + NOT drawing much from the grid) =

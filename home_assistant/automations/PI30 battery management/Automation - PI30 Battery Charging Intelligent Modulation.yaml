@@ -34,6 +34,12 @@ description: >-
   l'automazione entro un minuto dal raggiungimento della soglia, senza
   aspettare il controllo dei 10 minuti. Se la soglia non è leggibile si
   usa 24.0V, per sicurezza.
+  CARICA AL MINIMO MA NON BASTA. Se la corrente da rete è già a 2A e il
+  contatore preleva almeno 500W o la batteria GoodWe eroga almeno 200W,
+  viene eseguita SCARICA prima di tutti i rami di CARICA, quindi anche con
+  la GoodWe al 100% o sopra 55V (il "VUOL DIRE CHE" della logica umana nel
+  README). Prima valeva solo nell'ultimo ramo: il 27/09 dalle 18 alle
+  20:48 la GoodWe al 100% erogava oltre 400W e la PI30 è rimasta in CARICA.
   RICARICA BATTERIA. Con l'aiutante input_boolean.pi30_ricarica_batteria
   ("Helper - PI30 Ricarica Batteria (Toggle).yaml") acceso, o assente, la
   batteria si ricarica con la logica normale. Quando lo spegni
@@ -234,6 +240,20 @@ actions:
           entity_id: script.pi30_batteria_da_scaricare
         action: script.turn_on
       - stop: Ricarica disattivata, scarica
+  # "VUOL DIRE CHE" della logica umana: carica già al minimo (2A) ma il
+  # contatore preleva >= 500W o la GoodWe eroga >= 200W -> SCARICA, anche con
+  # GoodWe al 100% (SOC > 99) o tensione GoodWe >= 55V. Sopra 2A decide la
+  # modulazione qui sotto, che scende di uno step a ogni esecuzione.
+  - if:
+      - condition: template
+        value_template: >-
+          {{ current_utility == 2 and power_known and
+             not (grid_power < 500 and battery_power < 200) }}
+    then:
+      - target:
+          entity_id: script.pi30_batteria_da_scaricare
+        action: script.turn_on
+      - stop: Carica al minimo ma GoodWe in scarica o prelievo dalla rete, scarica
   - if:
       - condition: template
         value_template: '{{ soc_known and soc > 99 }}'

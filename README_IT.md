@@ -406,6 +406,15 @@ ALLORA
 	e STOP
 	(senza gli input_number, o mantenimento < 24.0V: SCARICA = script.pi30_batteria_da_scaricare)
 
+POI ("VUOL DIRE CHE", applicato a tutti i rami, anche GoodWe al 100% o >= 55V)
+SE
+	sensor.heltec_pi30_display_pi30_max_utility_charging_current = 2A
+	E
+	sensor.potenza_contatore >= 500 OR sensor.goodwe_battery_power >= 200
+ALLORA
+	SCARICA = script.pi30_batteria_da_scaricare
+	e STOP
+
 Segnale favorevole OR nulla noto
 SE
 	SOC or VOLT goodwe noti (almeno 1 dei due) e favorevole (batteria goodwe carica E potenza di carica al minimo + NON consuma tanto la goodwe + NON preleva tanto dalla rete) =

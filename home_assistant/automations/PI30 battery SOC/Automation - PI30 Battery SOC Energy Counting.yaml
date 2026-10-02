@@ -59,14 +59,39 @@ description: >-
   of the next charge). Ignoring the idle drain is what made the charge
   side look "twice" the discharge side in an earlier calibration: the
   missing 50W x 11-18 hours is 0.6-0.9 kWh per night.
+  RECHECKED on seven more days (27 Sep - 3 Oct 2026, five full -> empty
+  and five empty -> full cycles, the pack really full each time: the
+  charger held 29.0V and the current tapered from 39A to 2A, really
+  empty each time: 23.5-23.6V at 0A, the under-voltage hold). Replayed
+  minute by minute, the old constants were short on both sides: every
+  charge arrived at the true full with the count at 94-96 (the three
+  charges took 4.23, 4.26 and 4.33 kWh from 0% to 100%, so
+  charge_efficiency = 0.91 with 3.9 kWh, not 0.87), and the discharges
+  ended with +6, -5, -5, -3 and -6 points left: the hidden drain is not
+  a constant. Compared with the inverter's own AC output power, the
+  reported battery power is about 60-65 W short at light load (the
+  2-3A nights, 90 W of load: the inverter reports 55-70 W for a 90 W
+  load plus its own consumption) and only 10-20 W short above about
+  150 W of load (there the reported power is close to the AC output).
+  So the drain is now two values, chosen on the reported discharge
+  power: idle_drain_light_w = 65 W when the reported discharge is at
+  most light_load_w (150 W, 0A included), idle_drain_heavy_w = 15 W
+  above. With these the same five discharges end within +-2 points of
+  the true empty and the five charges arrive at 99-101 at the true
+  full (the 2-3 Oct cycle, not used for the fit, ends at -0.3 and
+  99.5); the anchors then confirm the count instead of correcting it.
+  The same cycles measure the pack: 3.95-4.0 kWh and about 152 Ah
+  delivered from 100% to the 23.5V hold, 4.3 kWh and about 159 Ah
+  taken in to refill it, so the nominal 155 Ah x 25.6 V = 3.97 kWh is
+  what the pack really holds and capacity_kwh stays 3.9.
   So the counting is:
     SOC += charge_kw * charge_efficiency * hours / capacity_kwh * 100
     SOC -= (discharge_kw + idle_drain_w / 1000) * hours / capacity_kwh * 100
-  where the idle drain is applied whenever the pack is not really
-  charging (see PHANTOM CHARGE below). Recheck all
-  three if the pack or the inverter changes: the anchors write both
-  lifetime energy counters in the Logbook, so a full -> empty -> full
-  cycle gives the numbers again. The power sensors' unit is read from the
+  where idle_drain_w is the light or the heavy value and is applied
+  whenever the pack is not really charging (see PHANTOM CHARGE below).
+  Recheck all of them if the pack or the inverter changes: the anchors
+  write both lifetime energy counters in the Logbook, so a full ->
+  empty -> full cycle gives the numbers again. The power sensors' unit is read from the
   sensor (W or kW). The value is stored with 3 decimals: at the 1-2A
   this pack idles at overnight one step is a few hundredths of a
   percent, which a 1-decimal rounding would throw away entirely.
@@ -261,10 +286,12 @@ conditions: []
 actions:
   - variables:
       capacity_kwh: 3.9
-      charge_efficiency: 0.87
+      charge_efficiency: 0.91
       max_dt_hours: "{{ 5 / 60 }}"
       correction_resistance_ohm: 0.010
-      idle_drain_w: 50
+      idle_drain_light_w: 65
+      idle_drain_heavy_w: 15
+      light_load_w: 150
       correction_band_v: 0.15
       correction_tau_min: 5
       correction_max_current_a: 30
@@ -287,6 +314,9 @@ actions:
         {% set p = states('sensor.heltec_pi30_batteria_potenza_scarica') | float(default=none) %}
         {% set unit = state_attr('sensor.heltec_pi30_batteria_potenza_scarica', 'unit_of_measurement') %}
         {{ none if p is none else (p if unit == 'kW' else p / 1000) }}
+      idle_drain_w: >-
+        {{ idle_drain_light_w if discharge_kw is none or discharge_kw * 1000 <= light_load_w
+           else idle_drain_heavy_w }}
       charging: >-
         {{ charge_kw is not none and charge_kw * 1000 > small_charge_w }}
       at_float: >-

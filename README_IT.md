@@ -415,6 +415,27 @@ ALLORA
 	SCARICA = script.pi30_batteria_da_scaricare
 	e STOP
 
+POI (ANTI-OSCILLAZIONE: aspetta solo il ritorno in CARICA, SCARICA e MANTIENI restano immediati)
+SE
+	la PI30 è in SCARICA (uscita SBU E carica solo solare)
+	E ci è passata da meno di charge_dwell_s (600 s = 10 minuti)
+ALLORA
+	STOP: nessun ritorno in CARICA per ora
+	(le condizioni di CARICA e SCARICA a 2A sono complementari e il trigger scatta a ogni
+	lettura GoodWe: con un surplus al limite la PI30 passava CARICA <-> SCARICA ogni
+	20-40 secondi, 20-34 volte al giorno nello storico 27/09-02/10/2026, perché in CARICA
+	i suoi carichi più i 2A finiscono sulla rete: il contatore resta vicino allo zero,
+	è sensor.goodwe_battery_power che supera i 200 W per qualche secondo a ogni trasferimento)
+
+POI (BATTERIA PIENA: niente bulk a 29V su una batteria piena)
+SE
+	la PI30 è in SCARICA
+	E sensor.heltec_pi30_display_pi30_battery_soc_calculated >= full_resume_soc (95)
+ALLORA
+	STOP: nessun ritorno in CARICA finché il SOC non scende sotto il 95%
+	(ogni ritorno in CARICA fa ripartire la fase bulk del caricabatterie: 29.0V in un
+	minuto a 15-30A su un pacco al 100%, cinque volte il 29/09/2026 tra le 17:15 e le 17:58)
+
 Segnale favorevole OR nulla noto
 SE
 	SOC or VOLT goodwe noti (almeno 1 dei due) e favorevole (batteria goodwe carica E potenza di carica al minimo + NON consuma tanto la goodwe + NON preleva tanto dalla rete) =
@@ -620,18 +641,26 @@ SOC -= (kW_scarica + consumo_nascosto) × ore / capacity_kwh × 100
 `ore` è il tempo **misurato** dall'esecuzione precedente (dal
 `last_triggered` dell'automazione stessa), limitato a 5 minuti perché un
 lungo fermo non integri la potenza letta al riavvio su ore di storia
-sconosciuta. Le tre costanti sono **misurate su questo impianto** su un ciclo
-completo pieno → vuoto → pieno (vedi "Cosa dicono tre giorni di storico" più
-sotto):
+sconosciuta. Le costanti sono **misurate su questo impianto** su un ciclo
+completo pieno → vuoto → pieno e ricontrollate su altri dieci mezzi cicli
+(vedi "Cosa dicono tre giorni di storico" e "Cosa dicono altri sette giorni"
+più sotto):
 
 - `capacity_kwh` = **3.9 kWh**, l'energia che il pacco eroga dal 100% allo 0%
   (la nominale 155Ah × 25.6V è 3.97 kWh).
-- `charge_efficiency` = **0.87**, la quota di ogni kWh di carica riportato dal
-  PI30 che finisce davvero immagazzinata nel pacco.
-- `idle_drain_w` = **50 W**, la potenza che il pacco perde e che il PI30 non
-  riporta mai: l'autoconsumo dell'inverter, preso dalla batteria ogni volta
-  che il caricatore non sta caricando davvero. Viene sottratto ogni minuto in
-  cui la potenza di carica è 60 W o meno (`small_charge_w`), tranne in float.
+- `charge_efficiency` = **0.91**, la quota di ogni kWh di carica riportato dal
+  PI30 che finisce davvero immagazzinata nel pacco (tre cariche complete
+  hanno preso 4.23, 4.26 e 4.33 kWh dallo 0% al 100%).
+- `idle_drain_light_w` = **65 W** e `idle_drain_heavy_w` = **15 W**, la
+  potenza che il pacco perde e che il PI30 non riporta mai: l'autoconsumo
+  dell'inverter più quello che la sua lettura di corrente non vede, preso
+  dalla batteria ogni volta che il caricatore non sta caricando davvero. Il
+  valore leggero vale quando la scarica riportata è al massimo `light_load_w`
+  (150 W, 0A compreso), quello pesante sopra: rispetto alla potenza AC in
+  uscita dell'inverter, la potenza di batteria riportata è 60-65 W in meno
+  a carico leggero e solo 10-20 W in meno sopra i 150 W circa. Viene
+  sottratto ogni minuto in cui la potenza di carica è 60 W o meno
+  (`small_charge_w`), tranne in float.
 
 **Carica fantasma.** Una carica riportata di 60 W o meno (1-2A) non viene
 contata come carica: è l'autoconsumo del PI30 o uno scarto della sua lettura
@@ -795,9 +824,9 @@ conteggio; sotto i 25.5V il ginocchio della curva rende la tensione precisa:
 | 26.7 | 99% | 99% | 99% | 99% | 92% |
 
 **Taratura:**
-- **Modello del pacco**: `capacity_kwh` (3.9), `charge_efficiency` (0.87) e
-  `idle_drain_w` (50) nell'automazione (`actions` → `variables`), tutti e tre
-  misurati (vedi sotto). Ogni riga di aggancio nel Registro riporta entrambi
+- **Modello del pacco**: `capacity_kwh` (3.9), `charge_efficiency` (0.91),
+  `idle_drain_light_w` (65), `idle_drain_heavy_w` (15) e `light_load_w` (150)
+  nell'automazione (`actions` → `variables`), tutti misurati (vedi sotto). Ogni riga di aggancio nel Registro riporta entrambi
   i contatori di energia totale, quindi un nuovo ciclo pieno → vuoto → pieno
   li restituisce di nuovo.
 - **Cadenza**: 1 minuto (trigger `cadence`). Si può cambiare liberamente: il
@@ -849,6 +878,50 @@ Assistant).**
 - **L'inverter mantiene a 27.5V con +2A, per ore.** Dei minuti passati sopra
   27.4V quasi tutti leggono esattamente +2A e uno solo legge 0A. Con
   `tail_current_a = 0` l'aggancio al 100% non scattava mai; ora è 2A.
+
+**Cosa dicono altri sette giorni (27 set - 3 ott 2026: cinque cicli pieno →
+vuoto e cinque vuoto → pieno, rigiocati minuto per minuto contro
+l'automazione).**
+
+- **Gli estremi sono veri.** Ogni carica è finita con il caricabatterie a
+  29.0V e la corrente che cala da 39A a 2A in una decina di minuti (una vera
+  coda CV), ogni scarica a 23.5-23.6V con 0A, dove interviene il
+  mantenimento alla sottotensione. I momenti di vero pieno e vero vuoto sono
+  quindi noti, e il conteggio si può confrontare con loro.
+- **Le vecchie costanti erano corte da entrambi i lati.** Il conteggio
+  arrivava al vero pieno a 94-97 (l'aggancio al 100% aggiungeva 3-6 punti
+  ogni giorno) e al vero vuoto con +6, -5, -5, -3 e -6 punti avanzati (la
+  correzione in tensione sotto i 25V li assorbiva). A metà ciclo il SOC
+  mostrato era quindi sbagliato fino a 5 punti circa, proprio agli estremi.
+- **Il consumo nascosto dipende dal carico.** Rispetto alla potenza AC in
+  uscita dell'inverter, la potenza di batteria riportata è 60-65 W in meno
+  nelle notti a 2-3A (90 W di carico riportati come 55-70 W) e solo 10-20 W
+  in meno sopra i 150 W circa di carico. Un unico 50 W faceva finire la
+  scarica a carico leggero (25 ore a 2-3A) a +6 e quelle pesanti a -5. Con
+  65 W fino a 150 W di scarica riportata e 15 W sopra, le stesse cinque
+  scariche finiscono entro ±2 punti dal vero vuoto (il ciclo del 2-3
+  ottobre, non usato per la taratura, finisce a -0.3).
+- **Il rendimento di carica è 0.91, non 0.87.** Le tre cariche complete
+  hanno preso 4.23, 4.26 e 4.33 kWh (0% → 100%): 3.9 / 4.27 = 0.91. Con
+  questo il conteggio arriva a 99 al vero pieno e l'aggancio lo conferma
+  invece di correggerlo (la carica del 3 ottobre, non usata per la
+  taratura, finisce a 99.5).
+- **Il pacco è quello di targa.** Dal 100% al mantenimento a 23.5V eroga
+  3.95-4.0 kWh e circa 152 Ah (riportati più nascosti), cinque cicli entro
+  0.1 kWh l'uno dall'altro; per riempirlo servono 4.3 kWh e circa 159 Ah di
+  carica riportata (la differenza sono le perdite di carica più l'offset di
+  corrente del PI30). I 155 Ah × 25.6 V = 3.97 kWh nominali sono confermati
+  e `capacity_kwh` resta 3.9. Il 28 settembre senza nessuna carica (il
+  pacco è sceso dal 52% al 32% con la GoodWe piena) era l'interruttore di
+  ricarica spento a mano dalle 07:25 alle 00:29 del giorno dopo, non
+  l'automazione.
+- **L'automazione di carica oscillava.** Ogni mattina (e la sera del 29) la
+  PI30 passava CARICA ↔ SCARICA ogni 20-40 secondi per una decina di minuti,
+  20-34 commutazioni al giorno, e ogni ritorno in CARICA a batteria piena
+  faceva ripartire il bulk a 29.0V. Il conteggio del SOC non ne risente
+  (vede la potenza reale in ogni caso), il pacco e l'inverter sì: vedi le
+  regole anti-oscillazione e batteria piena dell'automazione di carica più
+  sopra.
 
 **Valore di partenza.** Non serve più: con la correzione in tensione un
 valore di partenza sbagliato si corregge entro 15-20 minuti di scarica

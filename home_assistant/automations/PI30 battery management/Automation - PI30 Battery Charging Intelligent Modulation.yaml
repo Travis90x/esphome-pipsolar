@@ -40,6 +40,37 @@ description: >-
   la GoodWe al 100% o sopra 55V (il "VUOL DIRE CHE" della logica umana nel
   README). Prima valeva solo nell'ultimo ramo: il 27/09 dalle 18 alle
   20:48 la GoodWe al 100% erogava oltre 400W e la PI30 è rimasta in CARICA.
+  ANTI-OSCILLAZIONE. Le condizioni di CARICA a 2A (contatore < 500W e
+  GoodWe < 200W) e di SCARICA (il contrario) sono complementari, e il
+  trigger batteria_stabile scatta a ogni variazione dei sensori GoodWe:
+  quando il surplus è al limite (mattina presto, sera) l'automazione
+  passava CARICA -> SCARICA -> CARICA ogni 20-40 secondi, perché in
+  CARICA i carichi della PI30 (100-500W) più i 2A finiscono sulla rete
+  e fanno scattare la soglia, in SCARICA tornano sulla batteria e la
+  soglia rientra (dai sensori GoodWe: il contatore resta vicino allo
+  zero durante l'oscillazione, è la potenza della batteria GoodWe che
+  supera i 200W per qualche secondo a ogni trasferimento dei carichi).
+  Nello storico 27/09-02/10/2026: 20-34 commutazioni a
+  meno di 5 minuti l'una dall'altra OGNI giorno (circa 10 minuti di
+  oscillazione ogni mattina, più la sera del 29/09), ognuna con due
+  scritture di priorità sull'inverter e il trasferimento dei carichi.
+  Quindi, appena passata a SCARICA (SBU + solo solare), la PI30 non
+  torna in CARICA prima di charge_dwell_s (600 s = 10 minuti) dal
+  cambio: il controllo sta subito dopo il "VUOL DIRE CHE", così
+  SCARICA e MANTIENI restano immediati e solo il ritorno in CARICA
+  aspetta. Costo: la carica parte al massimo 10 minuti dopo.
+  BATTERIA PIENA. Ogni ritorno in CARICA con la batteria PI30 piena fa
+  ripartire la fase bulk del caricabatterie: 29.0V raggiunti in un
+  minuto a 15-30A su un pacco al 100% (il 29/09 cinque volte tra le
+  17:15 e le 17:58, l'01/10 alle 17:41), cioè 3.63V per cella con le
+  celle sbilanciate che arrivano alla protezione di sovraccarica del
+  BMS. Per questo, se la PI30 è in SCARICA e il SOC calcolato
+  (sensor.heltec_pi30_display_pi30_battery_soc_calculated) è almeno
+  full_resume_soc (95%), non torna in CARICA: resta sui propri carichi
+  finché il SOC non scende sotto 95%, poi riprende la logica normale
+  (un solo bulk, non uno ogni 10 minuti). Finché resta in CARICA al
+  float niente cambia: il controllo riguarda solo il ritorno. Se il
+  sensore del SOC manca, il controllo non si applica.
   RICARICA BATTERIA. Con l'aiutante input_boolean.pi30_ricarica_batteria
   ("Helper - PI30 Ricarica Batteria (Toggle).yaml") acceso, o assente, la
   batteria si ricarica con la logica normale. Quando lo spegni
@@ -209,6 +240,21 @@ actions:
       hold_needed: >-
         {{ pi30_voltage is not none and (pi30_voltage <= under_voltage or
         (hold_active and pi30_voltage < under_voltage + hold_release_margin_v)) }}
+      in_discharge: >-
+        {{ states('sensor.heltec_pi30_display_pi30_output_source_priority') |
+        float(0) == 2.0 and
+        states('sensor.heltec_pi30_display_pi30_charger_source_priority') |
+        float(0) == 3.0 }}
+      discharge_age_s: >-
+        {% set o = states.sensor.heltec_pi30_display_pi30_output_source_priority %}
+        {% set c = states.sensor.heltec_pi30_display_pi30_charger_source_priority %}
+        {{ ([(now() - o.last_changed).total_seconds(), (now() - c.last_changed).total_seconds()] | min)
+           if o is not none and c is not none else 999999 }}
+      charge_dwell_s: 600
+      pi30_soc: >-
+        {{ states('sensor.heltec_pi30_display_pi30_battery_soc_calculated') |
+        float(default=none) }}
+      full_resume_soc: 95
   - if:
       - condition: template
         value_template: '{{ hold_needed }}'
@@ -254,6 +300,21 @@ actions:
           entity_id: script.pi30_batteria_da_scaricare
         action: script.turn_on
       - stop: Carica al minimo ma GoodWe in scarica o prelievo dalla rete, scarica
+  # ANTI-OSCILLAZIONE: passata a SCARICA da meno di charge_dwell_s, la PI30
+  # non torna in CARICA (tutti i rami sotto, tranne l'ultimo, sono CARICA).
+  - if:
+      - condition: template
+        value_template: '{{ in_discharge and discharge_age_s < charge_dwell_s }}'
+    then:
+      - stop: In scarica da meno di 10 minuti, nessun ritorno in carica
+  # BATTERIA PIENA: in SCARICA con il SOC calcolato >= full_resume_soc, nessun
+  # ritorno in CARICA (ogni ritorno fa ripartire il bulk a 29V su un pacco pieno).
+  - if:
+      - condition: template
+        value_template: >-
+          {{ in_discharge and pi30_soc is not none and pi30_soc >= full_resume_soc }}
+    then:
+      - stop: Batteria PI30 piena e in scarica, nessun ritorno in carica
   - if:
       - condition: template
         value_template: '{{ soc_known and soc > 99 }}'

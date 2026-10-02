@@ -406,6 +406,27 @@ THEN
 	DISCHARGE = script.pi30_batteria_da_scaricare
 	and STOP
 
+THEN (ANTI-OSCILLATION: only the return to CHARGE waits, DISCHARGE and KEEP stay immediate)
+IF
+	the PI30 is in DISCHARGE (output SBU AND charger solar only)
+	AND it switched there less than charge_dwell_s (600 s = 10 minutes) ago
+THEN
+	STOP: no return to CHARGE yet
+	(the CHARGE and DISCHARGE conditions at 2A are complementary and the trigger fires
+	on every Goodwe reading: with a marginal surplus the PI30 flipped CHARGE <-> DISCHARGE
+	every 20-40 seconds, 20-34 times a day in the 27 Sep - 2 Oct 2026 history,
+	because in CHARGE its own loads plus 2A land on the grid: the meter stays near zero,
+	it is sensor.goodwe_battery_power that passes 200 W for a few seconds at every transfer)
+
+THEN (FULL PACK: no bulk restart at 29V on a full battery)
+IF
+	the PI30 is in DISCHARGE
+	AND sensor.heltec_pi30_display_pi30_battery_soc_calculated >= full_resume_soc (95)
+THEN
+	STOP: no return to CHARGE until the SOC is below 95%
+	(every return to CHARGE restarts the charger's bulk stage: 29.0V in one minute at
+	15-30A into a 100% pack, five times on 29 Sep 2026 between 17:15 and 17:58)
+
 Favorable signal OR nothing known
 IF
 	Goodwe SOC or VOLT known (at least one of the two) and favorable (goodwe battery full AND charging power at minimum + goodwe NOT drawing much + NOT drawing much from the grid) =
@@ -605,18 +626,24 @@ SOC -= (discharge_kW + idle_drain) × hours / capacity_kwh × 100
 `hours` is the **measured** time since the previous run (from the
 automation's own `last_triggered`), capped at 5 minutes so that a long
 outage does not integrate the power read at boot over hours of unknown
-history. The three constants are **measured on this system** over a
-complete full → empty → full cycle (see "What three days of history say"
-below):
+history. The constants are **measured on this system** over a complete
+full → empty → full cycle and rechecked on ten more half cycles (see
+"What three days of history say" and "What seven more days say" below):
 
 - `capacity_kwh` = **3.9 kWh**, the energy the pack delivers from 100% to 0%
   (the nominal 155Ah × 25.6V is 3.97 kWh).
-- `charge_efficiency` = **0.87**, the share of each charged kWh the PI30
-  reports that ends up stored in the pack.
-- `idle_drain_w` = **50 W**, the power the pack loses that the PI30 never
-  reports: the inverter's own consumption, taken from the battery whenever
-  the charger is not really running. It is subtracted every minute in which
-  the charge power is 60 W or less (`small_charge_w`), except at float.
+- `charge_efficiency` = **0.91**, the share of each charged kWh the PI30
+  reports that ends up stored in the pack (three full charges took 4.23,
+  4.26 and 4.33 kWh from 0% to 100%).
+- `idle_drain_light_w` = **65 W** and `idle_drain_heavy_w` = **15 W**, the
+  power the pack loses that the PI30 never reports: the inverter's own
+  consumption plus what its current reading misses, taken from the battery
+  whenever the charger is not really running. The light value applies when
+  the reported discharge is at most `light_load_w` (150 W, 0A included),
+  the heavy one above: compared with the inverter's AC output power, the
+  reported battery power is 60-65 W short at light load and only 10-20 W
+  short above about 150 W. It is subtracted every minute in which the
+  charge power is 60 W or less (`small_charge_w`), except at float.
 
 **Phantom charge.** A reported charge of 60 W or less (1-2A) is not counted
 as charge: it is the PI30's own consumption or an offset of its current
@@ -775,9 +802,10 @@ the knee makes the voltage precise:
 | 26.7 | 99% | 99% | 99% | 99% | 92% |
 
 **Tuning:**
-- **Pack model**: `capacity_kwh` (3.9), `charge_efficiency` (0.87) and
-  `idle_drain_w` (50) in the automation (`actions` → `variables`), all three
-  measured (see below). Each anchor's Logbook line carries both lifetime
+- **Pack model**: `capacity_kwh` (3.9), `charge_efficiency` (0.91),
+  `idle_drain_light_w` (65), `idle_drain_heavy_w` (15) and `light_load_w`
+  (150) in the automation (`actions` → `variables`), all measured (see
+  below). Each anchor's Logbook line carries both lifetime
   energy counters, so a new full → empty → full cycle gives them again.
 - **Cadence**: 1 minute (`cadence` trigger). It can be changed freely: the
   elapsed time is measured, nothing else depends on it. The cap on a single
@@ -825,6 +853,47 @@ power, inverter mode and priorities exported from Home Assistant).**
 - **The inverter floats at 27.5V with +2A, for hours.** Of the minutes spent
   above 27.4V, almost all read exactly +2A and only one read 0A. With
   `tail_current_a = 0` the 100% anchor never fired; it is now 2A.
+
+**What seven more days say (27 Sep - 3 Oct 2026: five full → empty and five
+empty → full cycles, replayed minute by minute against the automation).**
+
+- **The ends are real.** Every charge ended with the charger holding 29.0V
+  and the current tapering from 39A to 2A in about ten minutes (a true CV
+  tail), every discharge ended at 23.5-23.6V with 0A, where the
+  under-voltage hold takes over. So the moments of true full and true empty
+  are known, and the count can be checked against them.
+- **The old constants were short on both sides.** The count arrived at the
+  true full at 94-97 (the 100% anchor then added 3-6 points each day) and at
+  the true empty with +6, -5, -5, -3 and -6 points left (the voltage correction
+  below 25V mopped that up). Mid-cycle the displayed SOC was therefore off by
+  up to about 5 points, right at the ends.
+- **The hidden drain depends on the load.** Against the inverter's own AC
+  output power, the reported battery power is about 60-65 W short on the
+  2-3A nights (90 W of load reported as 55-70 W) and only 10-20 W short
+  above about 150 W of load. A single 50 W made the light-load discharge
+  (25 hours at 2-3A) end at +6 and the heavy ones at -5. With 65 W up to
+  150 W of reported discharge and 15 W above, the same five discharges end
+  within ±2 points of the true empty (the 2-3 Oct cycle, not used for the
+  fit, ends at -0.3).
+- **Charge efficiency is 0.91, not 0.87.** The three full charges took
+  4.23, 4.26 and 4.33 kWh (0% → 100%): 3.9 / 4.27 = 0.91. With it the count
+  reaches 99 at the true full and the anchor confirms it instead of
+  correcting it (the 3 Oct charge, not used for the fit, ends at 99.5).
+- **The pack is what the label says.** From 100% to the 23.5V hold it
+  delivers 3.95-4.0 kWh and about 152 Ah (reported plus hidden), five
+  cycles within 0.1 kWh of each other; refilling it takes 4.3 kWh and about
+  159 Ah of reported charge (the difference is charge losses plus the PI30's
+  current offset). The nominal 155 Ah × 25.6 V = 3.97 kWh is confirmed, and
+  `capacity_kwh` stays 3.9. The 28 Sep day with no charge at all (the pack
+  went from 52% to 32% under a full Goodwe) was the charging helper switched
+  off by hand from 07:25 to 00:29 the next day, not the automation.
+- **The charging automation oscillated.** Every morning (and on the 29th
+  evening) the PI30 flipped CHARGE ↔ DISCHARGE every 20-40 seconds for
+  about ten minutes, 20-34 switches a day, and each return to CHARGE with a
+  full pack restarted the bulk stage at 29.0V. The SOC count is not
+  affected (it sees the real power either way), the pack and the inverter
+  are; see the anti-oscillation and full-pack rules of the charging
+  automation above.
 
 **Starting value.** Not needed any more: with the voltage correction, a
 wrong starting value is fixed within about 15-20 minutes of discharge

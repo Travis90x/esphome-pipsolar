@@ -274,7 +274,7 @@ Paste them into a dashboard's YAML mode.
 
 Files: [`home_assistant/automations/PI30 battery management/`](<home_assistant/automations/PI30 battery management/>)
 - `Automation - PI30 Battery Charging Intelligent Modulation.yaml`
-- `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery to keep.yaml`, `Script Battery keep live.yaml`
+- `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery full.yaml`, `Script Battery to keep.yaml`, `Script Battery keep live.yaml`
 - `Helper - PI30 Ricarica Batteria (Toggle).yaml`
 
 Goal: decide, every 10 minutes (plus on startup and on relevant sensor
@@ -358,7 +358,9 @@ mode so the change is not lost while a run is in progress.
 Writes: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
 `script.pi30_batteria_da_caricare` (CHARGE), `script.pi30_batteria_da_scaricare`
-(DISCHARGE), `script.pi30_batteria_da_mantenere` (KEEP — used instead of
+(DISCHARGE, also resets the utility current to 2A), `script.pi30_batteria_piena`
+(FULL: output "utility first" with charger "solar only", for a pack at 95% or
+more with surplus), `script.pi30_batteria_da_mantenere` (KEEP — used instead of
 DISCHARGE to hold the PI30 battery at the under-voltage threshold with 10A).
 
 Utility current steps: `2 10 20 30 40 50 60`.
@@ -397,16 +399,27 @@ THEN
 	and STOP
 	(without the input_number helpers, or hold < 24.0V: DISCHARGE = script.pi30_batteria_da_scaricare)
 
+THEN (GOODWE GLITCH)
+IF
+	one of the four Goodwe sensors is "unavailable"/"unknown" since less than goodwe_glitch_s (600 s)
+THEN
+	STOP: nothing decided
+	(16 gaps of a few seconds of the Goodwe integration on 4-5 Oct 2026 caused 11 mode
+	changes, 4 of them at night: the "safety net" branch below charged at 2A from the grid)
+
 THEN ("WHICH MEANS", applied to every branch, even Goodwe at 100% or >= 55V)
 IF
-	sensor.heltec_pi30_display_pi30_max_utility_charging_current = 2A
-	AND
-	sensor.potenza_contatore >= 500 OR sensor.goodwe_battery_power >= 200
+	the PI30 is in CHARGE
+	AND sensor.heltec_pi30_display_pi30_max_utility_charging_current = 2A
+	AND (sensor.potenza_contatore >= 500 OR sensor.goodwe_battery_power >= 200)
+	for at least discharge_confirm_s (60 s)
 THEN
 	DISCHARGE = script.pi30_batteria_da_scaricare
 	and STOP
+	(shorter than 60 s it is the transfer of the loads: the Goodwe battery passes 200 W
+	for a few seconds, 194 W on 5 Oct 2026 at 10:11)
 
-THEN (ANTI-OSCILLATION: only the return to CHARGE waits, DISCHARGE and KEEP stay immediate)
+THEN (ANTI-OSCILLATION: only the return to CHARGE or FULL waits, DISCHARGE and KEEP stay immediate)
 IF
 	the PI30 is in DISCHARGE (output SBU AND charger solar only)
 	AND it switched there less than charge_dwell_s (600 s = 10 minutes) ago
@@ -418,14 +431,41 @@ THEN
 	because in CHARGE its own loads plus 2A land on the grid: the meter stays near zero,
 	it is sensor.goodwe_battery_power that passes 200 W for a few seconds at every transfer)
 
-THEN (FULL PACK: no bulk restart at 29V on a full battery)
+THEN (FULL PACK: sensor.heltec_pi30_display_pi30_battery_soc_calculated >= full_resume_soc (95))
 IF
-	the PI30 is in DISCHARGE
-	AND sensor.heltec_pi30_display_pi30_battery_soc_calculated >= full_resume_soc (95)
+	the PI30 is in FULL (output Utility AND charger solar only)
 THEN
-	STOP: no return to CHARGE until the SOC is below 95%
-	(every return to CHARGE restarts the charger's bulk stage: 29.0V in one minute at
-	15-30A into a 100% pack, five times on 29 Sep 2026 between 17:15 and 17:58)
+	IF sensor.potenza_contatore >= 500 OR sensor.goodwe_battery_power >= 200 for 60 s
+		DISCHARGE and STOP
+	OTHERWISE STOP: stay in FULL
+IF
+	the PI30 is not in CHARGE
+THEN
+	IF the visible surplus is enough (see below): FULL = script.pi30_batteria_piena and STOP
+		(output "utility first" and charger "solar only": the PI30 loads go onto the
+		curtailed PV, the charger stays off, no bulk restart at 29V on a full pack:
+		every return to CHARGE restarted it, 29.0V in one minute at 15-30A into a 100%
+		pack, five times on 29 Sep 2026 between 17:15 and 17:58; and leaving it in
+		DISCHARGE spent the pack instead, 500 W for an hour on 4 Oct 2026 16:09-17:10
+		with the meter at -300 W)
+	OTHERWISE DISCHARGE and STOP
+	(in CHARGE at float nothing changes; below 95% the normal logic resumes)
+
+THEN (VISIBLE SURPLUS: the grid export is capped at export_cap_w = 300 W, above it the Goodwe
+curtails the PV and the real surplus cannot be seen)
+IF
+	the PI30 is not in CHARGE
+	AND sensor.potenza_contatore and sensor.goodwe_battery_power are known
+	AND NOT (sensor.goodwe_battery_power < 200
+	         AND export (-sensor.potenza_contatore) >= MIN(export_cap_w - export_margin_w (50),
+	                                                      sensor.heltec_pi30_output_active_power + entry_charge_w (60)))
+THEN
+	DISCHARGE and STOP
+	(an export of 250 W means the curtailment is on and the surplus is at least that; below
+	the cap the surplus is all visible, and if it does not cover the PI30 loads plus 2A,
+	charging means importing: on 4 Oct 2026 evening six CHARGE attempts with 500 W of
+	loads and 120-240 W of export, each sent back to DISCHARGE after 20-50 s; on 5 Oct
+	morning four attempts between 10:00 and 10:34 with the meter at zero)
 
 Favorable signal OR nothing known
 IF
@@ -488,8 +528,18 @@ OTHERWISE
 		CHARGE with "safety net" = 2A power
 		SET select.heltec_pi30_display_pi30_set_max_utility_charging_current = 2
 
-OTHERWISE
-	DISCHARGE = script.pi30_batteria_da_scaricare
+OTHERWISE (Goodwe below 100%, even a 99 for a moment, power known, current above 2A)
+	IF the PI30 is in CHARGE
+		stay in CHARGE; STEP DOWN only if sensor.potenza_contatore >= 300 OR sensor.goodwe_battery_power >= 200
+		(the meter pinned at -290/-320 W all day with the Goodwe full is the surplus
+		signal, not the Goodwe SOC, which hovers between 99 and 100: on 4 Oct 2026 at
+		16:09 a momentary 99 sent a PI30 at float into DISCHARGE with the meter at -311 W)
+	OTHERWISE (not in CHARGE: the visible surplus was already checked above)
+		CHARGE = script.pi30_batteria_da_caricare at 2A, even with the Goodwe below 100%: it is curtailed PV
+
+DISCHARGE also sets the utility charging current back to 2A, so every CHARGE starts at
+the minimum and climbs one step at a time (on 5 Oct 2026 at 10:10 it re-entered straight
+at 39A, the step had stayed at 40 from the day before: 1 kW dropped on the grid at once).
 
 WHICH MEANS
 IF

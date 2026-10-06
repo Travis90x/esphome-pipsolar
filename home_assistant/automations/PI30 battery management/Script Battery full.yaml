@@ -1,0 +1,47 @@
+alias: PI30 batteria piena
+description: >-
+  PIENA. Usato dall'automazione MAN quando il SOC calcolato della PI30 è
+  almeno full_resume_soc (95%) e c'è surplus: priorità di uscita "rete
+  prima" (Utility) e carica "solo solare". I carichi della PI30 vanno sulla
+  rete, cioè sul fotovoltaico che la GoodWe sta tagliando, e il
+  caricabatterie resta spento: niente nuova fase bulk a 29V su un pacco
+  pieno (il 29/09/2026 cinque volte in 40 minuti, il 02/10 alle 13:50). La
+  batteria perde solo l'autoconsumo dell'inverter, circa 50W; sotto il 95%
+  la MAN torna alla CARICA normale. Senza fotovoltaico sulla PI30 "solo
+  solare" vuol dire nessuna carica (il 25/09/2026 dalle 18:30 alle 22:00, in
+  questa combinazione, la batteria è scesa da 24.5V a 22.7V: nessuna
+  corrente dalla rete).
+sequence:
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 2
+      milliseconds: 0
+  - if:
+      - condition: template
+        value_template: |-
+          {{ not (
+            states('sensor.heltec_pi30_display_pi30_output_source_priority') | float(0) == 0.0
+            and
+            states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(0) == 3.0
+          ) }}
+    then:
+      - action: button.press
+        target:
+          entity_id: button.heltec_pi30_display_pi30_charger_solar_only
+        data: {}
+      - delay:
+          hours: 0
+          minutes: 0
+          seconds: 1
+          milliseconds: 0
+      - action: switch.turn_on
+        target:
+          entity_id: switch.heltec_pi30_display_pi30_output_priority_utility
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 2
+      milliseconds: 0
+mode: queued
+max: 10

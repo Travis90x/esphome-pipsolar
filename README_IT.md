@@ -282,7 +282,7 @@ di una dashboard.
 
 File: [`home_assistant/automations/PI30 battery management/`](<home_assistant/automations/PI30 battery management/>)
 - `Automation - PI30 Battery Charging Intelligent Modulation.yaml`
-- `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery to keep.yaml`, `Script Battery keep live.yaml`
+- `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery full.yaml`, `Script Battery to keep.yaml`, `Script Battery keep live.yaml`
 - `Helper - PI30 Ricarica Batteria (Toggle).yaml`
 
 Obiettivo: decidere, ogni 10 minuti (più all'avvio e ai cambi rilevanti dei
@@ -367,7 +367,9 @@ venga perso mentre sta girando.
 Scritture: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 `select.heltec_pi30_display_pi30_set_max_total_charging_current`,
 `script.pi30_batteria_da_caricare` (CARICA), `script.pi30_batteria_da_scaricare`
-(SCARICA), `script.pi30_batteria_da_mantenere` (MANTIENI — usato al posto di
+(SCARICA, riporta anche la corrente da rete a 2A), `script.pi30_batteria_piena`
+(PIENA: uscita "rete prima" con carica "solo solare", per un pacco al 95% o più
+con surplus), `script.pi30_batteria_da_mantenere` (MANTIENI — usato al posto di
 SCARICA per tenere la batteria PI30 alla soglia di sottotensione con 10A).
 
 Step di corrente da rete: `2 10 20 30 40 50 60`.
@@ -406,16 +408,27 @@ ALLORA
 	e STOP
 	(senza gli input_number, o mantenimento < 24.0V: SCARICA = script.pi30_batteria_da_scaricare)
 
+POI (GLITCH GOODWE)
+SE
+	uno dei quattro sensori GoodWe è "unavailable"/"unknown" da meno di goodwe_glitch_s (600 s)
+ALLORA
+	STOP: nessuna decisione
+	(il 04-05/10/2026 sedici buchi di pochi secondi dell'integrazione GoodWe hanno causato
+	undici cambi di modalità, quattro di notte: il ramo "paracadute" qui sotto caricava a 2A dalla rete)
+
 POI ("VUOL DIRE CHE", applicato a tutti i rami, anche GoodWe al 100% o >= 55V)
 SE
-	sensor.heltec_pi30_display_pi30_max_utility_charging_current = 2A
-	E
-	sensor.potenza_contatore >= 500 OR sensor.goodwe_battery_power >= 200
+	la PI30 è in CARICA
+	E sensor.heltec_pi30_display_pi30_max_utility_charging_current = 2A
+	E (sensor.potenza_contatore >= 500 OR sensor.goodwe_battery_power >= 200)
+	per almeno discharge_confirm_s (60 s)
 ALLORA
 	SCARICA = script.pi30_batteria_da_scaricare
 	e STOP
+	(sotto i 60 s è il trasferimento dei carichi: la batteria GoodWe supera i 200 W per
+	qualche secondo, 194 W il 05/10/2026 alle 10:11)
 
-POI (ANTI-OSCILLAZIONE: aspetta solo il ritorno in CARICA, SCARICA e MANTIENI restano immediati)
+POI (ANTI-OSCILLAZIONE: aspetta solo il ritorno in CARICA o PIENA, SCARICA e MANTIENI restano immediati)
 SE
 	la PI30 è in SCARICA (uscita SBU E carica solo solare)
 	E ci è passata da meno di charge_dwell_s (600 s = 10 minuti)
@@ -427,14 +440,41 @@ ALLORA
 	i suoi carichi più i 2A finiscono sulla rete: il contatore resta vicino allo zero,
 	è sensor.goodwe_battery_power che supera i 200 W per qualche secondo a ogni trasferimento)
 
-POI (BATTERIA PIENA: niente bulk a 29V su una batteria piena)
+POI (BATTERIA PIENA: sensor.heltec_pi30_display_pi30_battery_soc_calculated >= full_resume_soc (95))
 SE
-	la PI30 è in SCARICA
-	E sensor.heltec_pi30_display_pi30_battery_soc_calculated >= full_resume_soc (95)
+	la PI30 è in PIENA (uscita Utility E carica solo solare)
 ALLORA
-	STOP: nessun ritorno in CARICA finché il SOC non scende sotto il 95%
-	(ogni ritorno in CARICA fa ripartire la fase bulk del caricabatterie: 29.0V in un
-	minuto a 15-30A su un pacco al 100%, cinque volte il 29/09/2026 tra le 17:15 e le 17:58)
+	SE sensor.potenza_contatore >= 500 OR sensor.goodwe_battery_power >= 200 per 60 s
+		SCARICA e STOP
+	ALTRIMENTI STOP: resta in PIENA
+SE
+	la PI30 non è in CARICA
+ALLORA
+	SE il surplus visibile basta (vedi sotto): PIENA = script.pi30_batteria_piena e STOP
+		(uscita "rete prima" e carica "solo solare": i carichi della PI30 vanno sul
+		fotovoltaico tagliato, il caricabatterie resta spento, niente bulk a 29V su un
+		pacco pieno: ogni ritorno in CARICA lo faceva ripartire, 29.0V in un minuto a
+		15-30A su un pacco al 100%, cinque volte il 29/09/2026 tra le 17:15 e le 17:58;
+		e lasciarla in SCARICA spendeva il pacco, 500 W per un'ora il 04/10/2026
+		dalle 16:09 alle 17:10 con il contatore a -300 W)
+	ALTRIMENTI SCARICA e STOP
+	(in CARICA al float niente cambia; sotto il 95% riprende la logica normale)
+
+POI (SURPLUS VISIBILE: l'immissione in rete è limitata a export_cap_w = 300 W, oltre la GoodWe
+taglia il fotovoltaico e il surplus vero non si vede)
+SE
+	la PI30 non è in CARICA
+	E sensor.potenza_contatore e sensor.goodwe_battery_power sono noti
+	E NON (sensor.goodwe_battery_power < 200
+	       E immissione (-sensor.potenza_contatore) >= MIN(export_cap_w - export_margin_w (50),
+	                                                       sensor.heltec_pi30_output_active_power + entry_charge_w (60)))
+ALLORA
+	SCARICA e STOP
+	(250 W di immissione vuol dire taglio in corso e surplus almeno pari; sotto il limite
+	il surplus è tutto visibile, e se non copre i carichi della PI30 più i 2A caricare
+	vuol dire prelevare: la sera del 04/10/2026 sei tentativi di CARICA con 500 W di
+	carichi e 120-240 W di immissione, ogni volta rimandata in SCARICA dopo 20-50 s; la
+	mattina del 05/10 quattro tentativi tra le 10:00 e le 10:34 con il contatore a zero)
 
 Segnale favorevole OR nulla noto
 SE
@@ -497,8 +537,18 @@ ALTRIMENTI
 		CARICA con "paracadute" = potenza 2A
 		MODIFICA select.heltec_pi30_display_pi30_set_max_utility_charging_current = 2
 
-ALTRIMENTI
-	SCARICA = script.pi30_batteria_da_scaricare
+ALTRIMENTI (GoodWe sotto il 100%, anche un 99 di un attimo, potenze note, corrente sopra 2A)
+	SE la PI30 è in CARICA
+		resta in CARICA; STEP GIÙ solo se sensor.potenza_contatore >= 300 OR sensor.goodwe_battery_power >= 200
+		(il contatore inchiodato a -290/-320 W tutto il giorno con la GoodWe piena è il
+		segnale di surplus, non il SOC GoodWe, che oscilla tra 99 e 100: il 04/10/2026 alle
+		16:09 un 99 di un attimo ha mandato in SCARICA una PI30 al float con il contatore a -311 W)
+	ALTRIMENTI (non in CARICA: il surplus visibile è già stato verificato sopra)
+		CARICA = script.pi30_batteria_da_caricare a 2A, anche con la GoodWe sotto il 100%: è fotovoltaico tagliato
+
+SCARICA riporta anche la corrente di carica da rete a 2A, così ogni CARICA riparte dal
+minimo e sale uno step alla volta (il 05/10/2026 alle 10:10 è rientrata direttamente a
+39A, lo step era rimasto a 40 dal giorno prima: 1 kW piazzato sulla rete in un colpo).
 
 VUOL DIRE CHE
 SE

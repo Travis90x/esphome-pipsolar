@@ -1,7 +1,11 @@
 alias: PI30 batteria da scaricare
 description: >-
-  Set PI30 to Solo solare, SBU, disable utility charging, and allow battery
-  discharge
+  SCARICA. Solo solare, SBU: carica da rete disabilitata, la batteria
+  alimenta i carichi. Riporta anche la corrente massima da rete a 2A, così
+  la CARICA successiva riparte dal minimo e sale uno step alla volta: senza
+  questo, il 05/10/2026 alle 10:10 la PI30 è rientrata in CARICA direttamente
+  a 39A (lo step era rimasto a 40 dal giorno prima), 1 kW piazzato sulla rete
+  in un colpo, e 70 secondi dopo era di nuovo in SCARICA.
 sequence:
   - delay:
       hours: 0
@@ -29,6 +33,17 @@ sequence:
       - action: switch.turn_on
         target:
           entity_id: switch.heltec_pi30_display_pi30_output_priority_sbu
+  - if:
+      - condition: template
+        value_template: >-
+          {{ states('sensor.heltec_pi30_display_pi30_max_utility_charging_current')
+             | int(default=0) != 2 }}
+    then:
+      - action: select.select_option
+        target:
+          entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+        data:
+          option: '2'
   - delay:
       hours: 0
       minutes: 0

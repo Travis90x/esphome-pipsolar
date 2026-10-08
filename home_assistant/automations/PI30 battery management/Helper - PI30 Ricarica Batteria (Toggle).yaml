@@ -18,8 +18,17 @@
 #
 # 3) Numero "PI30 keep battery live" (input_number.pi30_keep_battery_live)
 #    Tensione di mantenimento usata da spento: bulk e float vengono portati a
-#    questo valore. Minimo 24.0V (il PI30 non accetta di meno), per esempio
-#    24.0. Cambiarlo con l'interruttore spento lo applica subito.
+#    questo valore. Minimo 24.0V (il PI30 non accetta di meno). Consigliato
+#    25.8V, non 24.0: a 24.0V il pacco è al 2% e la curva LiFePO4 è ripida,
+#    ogni impulso del caricabatterie (circa 14 Wh) lo porta a 24.4V e
+#    l'autoconsumo lo riporta a 23.9V in 20 minuti, un dente di sega di
+#    0.5V ogni 25 minuti per tutto il giorno (storico 7-8/10/2026). A
+#    25.8V (15%) la curva è piatta: lo stesso impulso sposta la tensione
+#    di pochi centesimi e serve ogni qualche ora. Deve restare SOTTO la
+#    tensione di ritorno a batteria dell'inverter (sensor
+#    ..._battery_redischarge_voltage), altrimenti in SBU la PI30 torna a
+#    scaricare e il caricabatterie la ricarica dalla rete a ogni ciclo.
+#    Cambiarlo con l'interruttore spento lo applica subito.
 #
 # Senza uno dei tre numeri (o con la tensione di mantenimento sotto 24.0V),
 # da spento l'automazione esegue SCARICA (solo solare) e non tocca bulk e
@@ -33,7 +42,7 @@
 #   - Numero: Nome "PI30 float carica", min 24.0, max 29.0, passo 0.1, V,
 #     modalità Campo di inserimento
 #   - Numero: Nome "PI30 keep battery live", min 24.0, max 29.0, passo 0.1, V,
-#     modalità Campo di inserimento, valore per esempio 24.0
+#     modalità Campo di inserimento, valore consigliato 25.8
 #   Controlla gli ID entità dopo il salvataggio.
 #
 # Oppure, equivalente, in configuration.yaml (poi riavvia):

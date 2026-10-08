@@ -4,12 +4,26 @@ description: >-
   OFF. Uscita SBU, carica "solare + rete", tensioni di bulk e float uguali
   alla tensione di mantenimento input_number.pi30_keep_battery_live
   (aiutante "PI30 keep battery live", da 24.0V, il minimo accettato dal
-  PI30), corrente massima da rete almeno 40A. Sopra quella tensione il
-  caricabatterie non eroga nulla e la batteria alimenta i carichi. Quando
-  in SBU l'inverter passa alla rete (tensione di recharge), il
-  caricabatterie porta la batteria alla tensione di mantenimento e la
-  tiene lì, prelevando dalla rete solo l'autoconsumo dell'inverter: niente
-  stacco del BMS e niente ricarica. Anche il solare non carica la batteria
+  PI30; consigliato 25.8V, vedi sotto), corrente massima da rete almeno
+  40A. Sopra quella tensione il caricabatterie non eroga nulla e la
+  batteria alimenta i carichi. Quando in SBU l'inverter passa alla rete
+  (tensione di recharge), il caricabatterie porta la batteria alla
+  tensione di mantenimento e la tiene lì, prelevando dalla rete solo
+  l'autoconsumo dell'inverter: niente stacco del BMS e niente ricarica.
+  Il mantenimento non è una linea piatta: il caricabatterie del PI30 è
+  acceso/spento attorno al setpoint, non regola la corrente. A 24.0V
+  (storico 7-8/10/2026, 40 ore) la tensione fa un dente di sega
+  23.9-24.4V ogni 25 minuti: un impulso di circa 14 Wh in 3-4 minuti,
+  poi l'autoconsumo (50W) la riporta giù in 20 minuti, perché al 2% la
+  curva LiFePO4 è ripida (0.6V per 1% di SOC). Sempre sopra 23.9V, quindi
+  il BMS non stacca: la tenuta c'è, l'oscillazione è del pacco. A 25.8V
+  (15%, tratto piatto: 0.16V per 6% di SOC) lo stesso impulso sposta la
+  tensione di pochi centesimi e il caricabatterie interviene ogni qualche
+  ora. La tensione di mantenimento deve restare sotto la tensione di
+  ritorno a batteria dell'inverter
+  (sensor.heltec_pi30_display_pi30_battery_redischarge_voltage): se la
+  supera, in SBU la PI30 torna a scaricare fino alla soglia e il
+  caricabatterie la ricarica dalla rete a ogni ciclo. Anche il solare non carica la batteria
   oltre quella tensione. Le tensioni vengono scritte solo se diverse. In
   discesa prima il float e poi il bulk, in salita (tensione di
   mantenimento alzata) prima il bulk e poi il float, così il float non

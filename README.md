@@ -338,12 +338,25 @@ float voltages (`sensor.heltec_pi30_display_pi30_battery_bulk_voltage` /
 while it stays off, always runs `script.pi30_keep_battery_live`: SBU, charger
 "solar + utility", **bulk and float at the hold voltage**
 `input_number.pi30_keep_battery_live` (helper "PI30 keep battery live", from
-24.0V, the lowest accepted: `PCVV`/`PBFT` 24.0-29.2V), at least 40A from the
+24.0V, the lowest accepted: `PCVV`/`PBFT` 24.0-29.2V; 25.8V recommended, see
+below), at least 40A from the
 grid. Above that voltage the charger delivers nothing and the pack feeds the
 loads; once the inverter falls back to the grid the charger holds it at the
 hold voltage, covering only the inverter's own consumption, and the BMS does
 not cut it. Solar does not charge above that voltage either. Changing the hold
-voltage while the switch is off applies it at once. When the switch is turned
+voltage while the switch is off applies it at once. The hold is not a flat
+line: the PI30 charger switches on and off around its setpoint, it does not
+regulate the current. At 24.0V (7-8 Oct 2026, 40 hours of history) the voltage
+is a sawtooth between 23.9V and 24.4V every 25 minutes: a pulse of about 14 Wh
+in 3-4 minutes, then the inverter's 50 W bring it back down in 20 minutes,
+because at 2% the LiFePO4 curve is steep (0.6V per 1% of SOC). It never went
+below 23.9V, so the hold works; the swing is the pack's. At 25.8V (15%, the
+flat part: 0.16V per 6% of SOC) the same pulse moves the voltage by a few
+hundredths and the charger steps in every few hours. The hold voltage must
+stay below the inverter's back-to-battery voltage
+(`sensor.heltec_pi30_display_pi30_battery_redischarge_voltage`): above it, in
+SBU the PI30 discharges again down to the threshold and the charger refills
+it from the grid at every cycle. When the switch is turned
 back on, the automation writes the values of the two charging `input_number`
 helpers back into bulk and float
 (`number.heltec_pi30_display_pi30_set_battery_bulk_voltage` / `_float_voltage`),

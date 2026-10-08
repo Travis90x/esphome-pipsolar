@@ -347,12 +347,25 @@ bulk e float attuali (`sensor.heltec_pi30_display_pi30_battery_bulk_voltage` /
 finché resta spento esegue sempre `script.pi30_keep_battery_live`: SBU, carica
 "solare + rete", **bulk e float alla tensione di mantenimento**
 `input_number.pi30_keep_battery_live` (aiutante "PI30 keep battery live", da
-24.0V, il minimo accettato: `PCVV`/`PBFT` 24.0-29.2V), almeno 40A da rete. Sopra
+24.0V, il minimo accettato: `PCVV`/`PBFT` 24.0-29.2V; consigliato 25.8V, vedi
+sotto), almeno 40A da rete. Sopra
 quella tensione il caricabatterie non eroga nulla e il pacco alimenta i
 carichi; quando l'inverter passa alla rete il caricabatterie lo tiene alla
 tensione di mantenimento, coprendo solo l'autoconsumo dell'inverter, e il BMS
 non stacca. Anche il solare non carica oltre quella tensione. Cambiare la
-tensione di mantenimento a interruttore spento la applica subito. Quando
+tensione di mantenimento a interruttore spento la applica subito. Il
+mantenimento non è una linea piatta: il caricabatterie del PI30 è acceso/spento
+attorno al setpoint, non regola la corrente. A 24.0V (7-8 ottobre 2026, 40 ore
+di storico) la tensione fa un dente di sega tra 23.9V e 24.4V ogni 25 minuti:
+un impulso di circa 14 Wh in 3-4 minuti, poi i 50 W dell'inverter la riportano
+giù in 20 minuti, perché al 2% la curva LiFePO4 è ripida (0.6V per 1% di SOC).
+Non è mai scesa sotto 23.9V, quindi la tenuta c'è; l'oscillazione è del pacco.
+A 25.8V (15%, tratto piatto: 0.16V per 6% di SOC) lo stesso impulso sposta la
+tensione di pochi centesimi e il caricabatterie interviene ogni qualche ora. La
+tensione di mantenimento deve restare sotto la tensione di ritorno a batteria
+dell'inverter (`sensor.heltec_pi30_display_pi30_battery_redischarge_voltage`):
+se la supera, in SBU la PI30 torna a scaricare fino alla soglia e il
+caricabatterie la ricarica dalla rete a ogni ciclo. Quando
 l'interruttore torna acceso l'automazione rimette in bulk e float
 (`number.heltec_pi30_display_pi30_set_battery_bulk_voltage` / `_float_voltage`)
 i valori dei due `input_number` di carica, anche se nel frattempo li hai

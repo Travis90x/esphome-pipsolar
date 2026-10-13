@@ -164,6 +164,14 @@ description: >-
   2A). A 2A alla soglia di sottotensione il pacco può scendere (2A non
   bastano contro l'autoconsumo), ma a 2A il dissipatore si raffredda e
   sotto il limite meno l'isteresi si torna a 10A.
+  CARICA DALLA GOODWE. In CARICA sopra 2A, appena la batteria GoodWe
+  (sensor.goodwe_battery_power) eroga più di goodwe_drain_w (250W), la
+  corrente da rete va subito a 2A, senza scendere uno step alla volta: la
+  PI30 si starebbe caricando con l'energia che esce dalla batteria GoodWe.
+  Il trigger goodwe_in_scarica interviene appena si superano i 250W, senza
+  i 10 secondi di batteria_stabile. A 2A, se la GoodWe eroga ancora almeno
+  200W per 60 s, il "VUOL DIRE CHE" passa a SCARICA. Non vale per MANTIENI
+  né per keep battery live: lì la corrente serve a non far staccare il BMS.
 triggers:
   - trigger: homeassistant
     id: avvio
@@ -171,6 +179,10 @@ triggers:
   - trigger: time_pattern
     id: controllo_10_minuti
     minutes: /10
+  - trigger: numeric_state
+    id: goodwe_in_scarica
+    entity_id: sensor.goodwe_battery_power
+    above: 250
   - trigger: state
     id: batteria_stabile
     entity_id:
@@ -319,6 +331,7 @@ actions:
         {{ power_known and battery_power < 200 and
            (0 - grid_power) >= ([export_cap_w - export_margin_w, pi30_load_w + entry_charge_w] | min) }}
       discharge_confirm_s: 60
+      goodwe_drain_w: 250
       goodwe_glitch_s: 600
       goodwe_glitch: >-
         {% set bad = expand(['sensor.goodwe_battery_state_of_charge', 'sensor.goodwe_battery_voltage',
@@ -485,6 +498,24 @@ actions:
           entity_id: script.pi30_batteria_da_scaricare
         action: script.turn_on
       - stop: Ricarica disattivata, scarica
+  # CARICA DALLA GOODWE: in CARICA sopra 2A con la batteria GoodWe che eroga
+  # più di goodwe_drain_w, la PI30 si sta caricando con l'energia della
+  # GoodWe: corrente da rete subito a 2A, senza aspettare gli step. Da lì,
+  # se la GoodWe continua a erogare, decide il "VUOL DIRE CHE" (SCARICA dopo
+  # discharge_confirm_s).
+  - if:
+      - condition: template
+        value_template: >-
+          {{ in_charge and current_utility > 2 and
+             states('sensor.goodwe_battery_power') | float(0) > goodwe_drain_w }}
+    then:
+      - action: select.select_option
+        target:
+          entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+        data:
+          option: '2'
+      - delay: '00:00:10'
+      - stop: GoodWe in scarica durante la CARICA, corrente da rete al minimo
   # GLITCH GOODWE: un sensore GoodWe non disponibile da meno di goodwe_glitch_s
   # non decide nulla (buchi di pochi secondi dell'integrazione).
   - if:

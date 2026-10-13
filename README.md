@@ -442,6 +442,15 @@ THEN
 	and STOP
 	(without the input_number helpers, or hold < 24.0V: DISCHARGE = script.pi30_batteria_da_scaricare)
 
+THEN (CHARGING FROM THE GOODWE)
+IF
+	the PI30 is in CHARGE above 2A
+	AND sensor.goodwe_battery_power > goodwe_drain_w (250 W)
+THEN
+	utility current STRAIGHT to 2A (not one step at a time), and STOP
+	(the PI30 would be charging with the energy of the GoodWe battery;
+	 the goodwe_in_scarica trigger reacts as soon as 250 W are exceeded)
+
 THEN (GOODWE GLITCH)
 IF
 	one of the four Goodwe sensors is "unavailable"/"unknown" since less than goodwe_glitch_s (600 s)
@@ -595,6 +604,17 @@ THEN
 	DESPITE "charging power at minimum" AND "goodwe not drawing much" AND "not drawing much from the grid"
 	that is not enough, so DISCHARGE
 ```
+
+**Charging from the GoodWe.** In CHARGE above 2A, as soon as the GoodWe
+battery (`sensor.goodwe_battery_power`) delivers more than `goodwe_drain_w`
+(250 W, a variable inside the automation), the utility current goes straight
+to 2A instead of stepping down one step at a time: otherwise the PI30 charges
+with the energy coming out of the GoodWe battery. A `numeric_state` trigger
+(`goodwe_in_scarica`) reacts as soon as 250 W are exceeded, without waiting
+for the 10 seconds of the other GoodWe triggers. At 2A, if the GoodWe still
+delivers at least 200 W for 60 s, the "WHICH MEANS" rule switches to
+DISCHARGE. It does not apply to KEEP or keep battery live, where the current
+is needed to stop the BMS from cutting the pack.
 
 **MAX MANUAL CURRENT.** Helper `input_number.pi30_max_manual_current`
 (Settings → Devices & services → Helpers → Create helper → Number, name

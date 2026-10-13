@@ -450,6 +450,15 @@ ALLORA
 	e STOP
 	(senza gli input_number, o mantenimento < 24.0V: SCARICA = script.pi30_batteria_da_scaricare)
 
+POI (CARICA DALLA GOODWE)
+SE
+	la PI30 è in CARICA sopra 2A
+	E sensor.goodwe_battery_power > goodwe_drain_w (250 W)
+ALLORA
+	corrente da rete SUBITO a 2A (non uno step alla volta), e STOP
+	(la PI30 si starebbe caricando con l'energia della batteria GoodWe;
+	 il trigger goodwe_in_scarica interviene appena si superano i 250 W)
+
 POI (GLITCH GOODWE)
 SE
 	uno dei quattro sensori GoodWe è "unavailable"/"unknown" da meno di goodwe_glitch_s (600 s)
@@ -603,6 +612,16 @@ ALLORA
 	NONOSTANTE "Potenza carica al minimo" E "NON consuma tanto la goodwe" E "NON preleva tanto dalla rete"
 	questo non basta, quindi SCARICA
 ```
+
+**Carica dalla GoodWe.** In CARICA sopra 2A, appena la batteria GoodWe
+(`sensor.goodwe_battery_power`) eroga più di `goodwe_drain_w` (250 W, variabile
+nell'automazione), la corrente da rete va subito a 2A invece di scendere uno
+step alla volta: altrimenti la PI30 si carica con l'energia che esce dalla
+batteria GoodWe. Un trigger `numeric_state` (`goodwe_in_scarica`) interviene
+appena si superano i 250 W, senza aspettare i 10 secondi degli altri trigger
+GoodWe. A 2A, se la GoodWe eroga ancora almeno 200 W per 60 s, il "VUOL DIRE
+CHE" passa a SCARICA. Non vale per MANTIENI né per keep battery live, dove la
+corrente serve a non far staccare il BMS.
 
 **MAX MANUAL CURRENT.** Aiutante `input_number.pi30_max_manual_current`
 (Impostazioni → Dispositivi e servizi → Aiutanti → Crea aiutante → Numero,

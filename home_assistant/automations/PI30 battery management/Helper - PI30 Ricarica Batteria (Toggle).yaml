@@ -1,6 +1,6 @@
 # Aiutanti per "Automation - PI30 Battery Charging Intelligent Modulation.yaml".
 #
-# 1) Interruttore "PI30 Ricarica Batteria" (input_boolean.pi30_ricarica_batteria)
+# 1) Commutatore "PI30 Ricarica Batteria" (input_boolean.pi30_ricarica_batteria)
 #    Acceso (o assente): la batteria si ricarica, logica normale.
 #    Spento: quando lo spegni l'automazione memorizza bulk e float attuali
 #    della PI30 in "PI30 bulk carica" / "PI30 float carica", poi porta bulk e
@@ -51,7 +51,7 @@
 #
 # Dalla UI (senza configuration.yaml):
 #   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante
-#   - Interruttore: Nome "PI30 Ricarica Batteria"
+#   - Commutatore: Nome "PI30 Ricarica Batteria"
 #   - Numero: Nome "PI30 bulk carica", min 24.0, max 29.2, passo 0.1, V,
 #     modalità Campo di inserimento
 #   - Numero: Nome "PI30 float carica", min 24.0, max 29.0, passo 0.1, V,

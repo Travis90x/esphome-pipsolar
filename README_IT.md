@@ -353,7 +353,7 @@ aspettare il controllo dei 10 minuti. Lo script MANTIENI porta la corrente
 da rete a 10A anche quando le priorità sono già giuste.
 
 **Ricarica batteria.** Aiutante facoltativo `input_boolean.pi30_ricarica_batteria`
-(Interruttore, nome `PI30 Ricarica Batteria`, vedi
+(Commutatore, nome `PI30 Ricarica Batteria`, vedi
 `Helper - PI30 Ricarica Batteria (Toggle).yaml`). Acceso o assente: la
 batteria si ricarica con la logica normale. Spento: l'automazione memorizza
 bulk e float attuali (`sensor.heltec_pi30_display_pi30_battery_bulk_voltage` /

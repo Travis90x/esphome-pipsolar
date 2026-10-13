@@ -532,6 +532,7 @@ SE
 	SOC or VOLT goodwe noti (almeno 1 dei due) e favorevole (batteria goodwe carica E potenza di carica al minimo + NON consuma tanto la goodwe + NON preleva tanto dalla rete) =
 	    SE SOC è ignoto, VOLT dev essere favorevole e viceversa.
 		sensor.goodwe_battery_state_of_charge = 100 (>99, non ci sono decimali e Home assistant non accetta =100, ma solo above e below) (goodwe carica al 100%)
+		OPPURE = 99 con |sensor.goodwe_battery_power| < 100 W (GoodWe ferma a 99 per scelta del suo BMS)
 		OR
 		sensor.goodwe_battery_voltage |float >= 54 (goodwe sicuramente carica al 100%)
 		OR
@@ -612,6 +613,13 @@ ALLORA
 	NONOSTANTE "Potenza carica al minimo" E "NON consuma tanto la goodwe" E "NON preleva tanto dalla rete"
 	questo non basta, quindi SCARICA
 ```
+
+**GoodWe ferma a 99%.** Il BMS della GoodWe può fermare la carica a 99% e
+restarci per ore. Con la sola regola "SOC > 99" la PI30 restava nel ramo
+"GoodWe sotto il 100%", dove la corrente da rete può solo scendere. Ora conta
+come piena (`goodwe_full`) anche la GoodWe al 99% con la batteria ferma
+(`sensor.goodwe_battery_power` tra -100 e +100 W, `goodwe_idle_w`); al 99% ma
+ancora in carica la GoodWe ha la precedenza come prima.
 
 **Attesa prima di salire.** In CARICA uno step in su arriva solo se la
 corrente da rete non è cambiata da almeno `step_up_wait_s` (20 s, variabile

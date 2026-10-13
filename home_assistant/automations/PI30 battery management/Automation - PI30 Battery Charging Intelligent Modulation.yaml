@@ -178,6 +178,13 @@ description: >-
   a ogni esecuzione (ogni 10 s) prima che la GoodWe mostrasse l'effetto
   dello step precedente. Le discese (e il salto a 2A sopra 250W) restano
   immediate.
+  GOODWE FERMA A 99%. Il BMS della GoodWe può fermare la carica a 99% e
+  restarci per ore: con la regola "SOC > 99" la PI30 restava nel ramo
+  "GoodWe sotto il 100%", dove la corrente può solo scendere, e non
+  saliva mai oltre lo step a cui era. Ora conta come piena (goodwe_full)
+  anche la GoodWe al 99% con la batteria ferma, |sensor.goodwe_battery_power|
+  sotto goodwe_idle_w (100W). Al 99% ma ancora in carica, la GoodWe ha la
+  precedenza come prima.
 triggers:
   - trigger: homeassistant
     id: avvio
@@ -339,6 +346,12 @@ actions:
       discharge_confirm_s: 60
       goodwe_drain_w: 250
       step_up_wait_s: 20
+      # GoodWe piena: 100%, oppure 99% con la batteria GoodWe ferma (il suo
+      # BMS può fermare la carica a 99 e restarci per ore)
+      goodwe_idle_w: 100
+      goodwe_full: >-
+        {{ soc_known and (soc > 99 or (soc >= 99 and power_known and
+           battery_power | abs < goodwe_idle_w)) }}
       current_age_s: >-
         {% set ch = states.sensor.heltec_pi30_display_pi30_max_utility_charging_current %}
         {{ (now() - ch.last_changed).total_seconds() if ch is not none else 999999 }}
@@ -637,7 +650,7 @@ actions:
       - stop: Corrente cambiata da meno di 20 s, nessuno step in su
   - if:
       - condition: template
-        value_template: '{{ soc_known and soc > 99 }}'
+        value_template: '{{ goodwe_full }}'
     then:
       - target:
           entity_id: script.pi30_batteria_da_caricare

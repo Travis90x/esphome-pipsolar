@@ -524,6 +524,7 @@ IF
 	Goodwe SOC or VOLT known (at least one of the two) and favorable (goodwe battery full AND charging power at minimum + goodwe NOT drawing much + NOT drawing much from the grid) =
 	    IF SOC is unknown, VOLT must be favorable and vice versa.
 		sensor.goodwe_battery_state_of_charge = 100 (>99, there are no decimals and Home Assistant does not accept =100, only above/below) (goodwe fully charged)
+		OR = 99 with |sensor.goodwe_battery_power| < 100 W (GoodWe stuck at 99 by its own BMS)
 		OR
 		sensor.goodwe_battery_voltage |float >= 54 (goodwe definitely fully charged)
 		OR
@@ -604,6 +605,13 @@ THEN
 	DESPITE "charging power at minimum" AND "goodwe not drawing much" AND "not drawing much from the grid"
 	that is not enough, so DISCHARGE
 ```
+
+**GoodWe stuck at 99%.** The GoodWe BMS may stop charging at 99% and stay
+there for hours. With the plain "SOC > 99" rule the PI30 stayed in the
+"GoodWe below 100%" branch, where the utility current can only go down. Now
+the GoodWe also counts as full (`goodwe_full`) at 99% with its battery idle
+(`sensor.goodwe_battery_power` between -100 and +100 W, `goodwe_idle_w`); at
+99% and still charging, the GoodWe keeps priority as before.
 
 **Wait before stepping up.** In CHARGE a step up comes only if the utility
 current has not changed for at least `step_up_wait_s` (20 s, a variable inside

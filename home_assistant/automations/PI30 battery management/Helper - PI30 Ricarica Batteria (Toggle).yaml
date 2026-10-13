@@ -45,6 +45,13 @@
 #    Dopo averlo creato impostalo a 70: da configuration.yaml parte dal
 #    minimo (40), poi Home Assistant ricorda il valore ai riavvii.
 #
+# 5) Numero "PI30 Max Manual Current" (input_number.pi30_max_manual_current)
+#    Corrente massima da rete che la modulazione può raggiungere, in A
+#    (MAX MANUAL CURRENT). Gli step sono 2, 10, 20, 30, 40, 50, 60: un valore
+#    in mezzo vale come lo step inferiore (35 = 30). Cambiarlo lo applica
+#    subito, anche abbassando una corrente già più alta. Vale anche per
+#    "keep battery live" a ricarica spenta. Senza questo aiutante: 40A.
+#
 # Senza uno dei tre numeri (o con la tensione di mantenimento sotto 24.0V),
 # da spento l'automazione esegue SCARICA (solo solare) e non tocca bulk e
 # float.
@@ -60,6 +67,8 @@
 #     modalità Campo di inserimento, valore consigliato 25.8
 #   - Numero: Nome "PI30 Charging Max Temperature", min 40, max 90, passo 1,
 #     °C, modalità Campo di inserimento, valore 70
+#   - Numero: Nome "PI30 Max Manual Current", min 2, max 60, passo 1, A,
+#     modalità Campo di inserimento, valore 40
 #   Controlla gli ID entità dopo il salvataggio.
 #
 # Oppure, equivalente, in configuration.yaml (poi riavvia):
@@ -97,4 +106,12 @@ input_number:
     max: 90
     step: 1
     unit_of_measurement: "°C"
+    mode: box
+  pi30_max_manual_current:
+    name: PI30 Max Manual Current
+    icon: mdi:current-dc
+    min: 2
+    max: 60
+    step: 1
+    unit_of_measurement: A
     mode: box

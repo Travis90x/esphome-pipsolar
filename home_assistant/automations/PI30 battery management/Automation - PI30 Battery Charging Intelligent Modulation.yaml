@@ -2,11 +2,12 @@ alias: PI30 Battery MAN
 description: >-
   Logica umana completa: vedi il README.md principale del repository,
   sezione "Modulazione dinamica della carica da rete" (README_IT.md per
-  la versione italiana). Per limitare manualmente lo step massimo
-  raggiungibile dalla
-  modulazione, modifica il valore di MAX_MANUAL_CURRENT nella variabile
-  max_manual_current qui sotto (riga "action > variables") e salva
-  l'automazione.
+  la versione italiana). Lo step massimo raggiungibile dalla modulazione
+  (MAX MANUAL CURRENT, variabile max_manual_current) si imposta con
+  l'aiutante input_number.pi30_max_manual_current ("PI30 Max Manual
+  Current", in A): un valore fuori dagli step 2-10-20-30-40-50-60 vale
+  come lo step inferiore (35 = 30). Senza l'aiutante: 40A. Cambiarlo lo
+  applica subito, anche abbassando una corrente già più alta.
   MANTENIMENTO ALLA SOTTOTENSIONE. Quando la tensione della batteria PI30
   scende a sensor.heltec_pi30_display_pi30_battery_under_voltage (la
   soglia di sottotensione letta dall'inverter), invece di SCARICA viene
@@ -198,6 +199,9 @@ triggers:
     id: ricarica_batteria
     entity_id: input_boolean.pi30_ricarica_batteria
   - trigger: state
+    id: max_manual_current
+    entity_id: input_number.pi30_max_manual_current
+  - trigger: state
     id: keep_battery_live
     entity_id: input_number.pi30_keep_battery_live
 actions:
@@ -246,7 +250,8 @@ actions:
         - 40
         - 50
         - 60
-      max_manual_current: 40
+      max_manual_current: >-
+        {{ [states('input_number.pi30_max_manual_current') | int(40), 2] | max }}
       soc: >-
         {{ states('sensor.goodwe_battery_state_of_charge') | float(default=none)
         }}

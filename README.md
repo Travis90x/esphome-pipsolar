@@ -297,9 +297,11 @@ Sensors read:
 | `sensor.heltec_pi30_battery_voltage` | PI30 battery voltage |
 | `sensor.heltec_pi30_display_pi30_battery_under_voltage` | PSDV, battery under-voltage threshold read back from the inverter (24.0V if unreadable) |
 
-`max_manual_current` (default `60`) and `hold_release_margin_v` (default
-`0.5` V) are plain variables inside the automation, **not helpers** — to
-change them, open the automation in YAML mode and edit the numbers directly.
+`max_manual_current` is set with the helper
+`input_number.pi30_max_manual_current` (see **MAX MANUAL CURRENT** below).
+`hold_release_margin_v` (default `0.5` V) is a plain variable inside the
+automation, **not a helper** — to change it, open the automation in YAML mode
+and edit the number directly.
 
 **Hold at the under-voltage threshold.** When the PI30 battery voltage drops
 to `sensor.heltec_pi30_display_pi30_battery_under_voltage`, KEEP runs instead
@@ -594,10 +596,13 @@ THEN
 	that is not enough, so DISCHARGE
 ```
 
-**MAX MANUAL CURRENT.** Not a helper: a fixed variable inside the automation
-itself, under `action > variables > max_manual_current` (default 60). To
-change it, open the automation in YAML mode, edit that number, and save. If
-set to, say, 40: the STEP UP phase will never go above 40A; if the current is
+**MAX MANUAL CURRENT.** Helper `input_number.pi30_max_manual_current`
+(Settings → Devices & services → Helpers → Create helper → Number, name
+`PI30 Max Manual Current`, min 2, max 60, step 1, A; see
+`Helper - PI30 Ricarica Batteria (Toggle).yaml`). Without the helper it is
+40A. A value between steps counts as the step below (35 = 30). Changing it
+re-runs the automation at once. It is also the current of
+`script.pi30_keep_battery_live` with charging off. If set to, say, 40: the STEP UP phase will never go above 40A; if the current is
 already above 40A (because the limit was lowered while the system was
 charging at a higher step), the automation immediately brings it back down to
 the highest valid step not exceeding 40 (i.e. 40).

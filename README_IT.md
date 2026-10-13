@@ -305,10 +305,11 @@ Sensori letti:
 | `sensor.heltec_pi30_battery_voltage` | Tensione batteria PI30 |
 | `sensor.heltec_pi30_display_pi30_battery_under_voltage` | PSDV, soglia di sottotensione letta dall'inverter (24.0V se non leggibile) |
 
-`max_manual_current` (default `60`) e `hold_release_margin_v` (default
-`0.5` V) sono semplici variabili dentro l'automazione, **non helper** — per
-cambiarle, apri l'automazione in modalità YAML e modifica direttamente i
-numeri.
+`max_manual_current` si imposta con l'aiutante
+`input_number.pi30_max_manual_current` (vedi **MAX MANUAL CURRENT** sotto).
+`hold_release_margin_v` (default `0.5` V) è una semplice variabile dentro
+l'automazione, **non un helper** — per cambiarla, apri l'automazione in
+modalità YAML e modifica direttamente il numero.
 
 **Mantenimento alla soglia di sottotensione.** Quando la tensione della
 batteria PI30 scende a `sensor.heltec_pi30_display_pi30_battery_under_voltage`,
@@ -603,10 +604,13 @@ ALLORA
 	questo non basta, quindi SCARICA
 ```
 
-**MAX MANUAL CURRENT.** Non è un helper: è una variabile fissa dentro
-l'automazione stessa, in `action > variables > max_manual_current` (di
-default 60). Per cambiarla, apri l'automazione in modalità YAML, modifica
-quel numero e salva. Se impostata ad esempio a 40: la fase AUMENTA STEP non
+**MAX MANUAL CURRENT.** Aiutante `input_number.pi30_max_manual_current`
+(Impostazioni → Dispositivi e servizi → Aiutanti → Crea aiutante → Numero,
+nome `PI30 Max Manual Current`, min 2, max 60, passo 1, A; vedi
+`Helper - PI30 Ricarica Batteria (Toggle).yaml`). Senza l'aiutante vale 40A.
+Un valore fuori dagli step vale come lo step inferiore (35 = 30). Cambiarlo
+fa ripartire subito l'automazione. Vale anche come corrente di
+`script.pi30_keep_battery_live` a ricarica spenta. Se impostato ad esempio a 40: la fase AUMENTA STEP non
 salirà mai oltre 40A; se la corrente è già sopra 40A (perché il limite è
 stato abbassato mentre il sistema stava caricando a uno step più alto),
 l'automazione la riporta subito al gradino valido più alto non superiore a

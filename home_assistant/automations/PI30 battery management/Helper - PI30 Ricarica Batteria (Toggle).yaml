@@ -18,7 +18,9 @@
 #
 # 3) Numero "PI30 keep battery live" (input_number.pi30_keep_battery_live)
 #    Tensione di mantenimento usata da spento: bulk e float vengono portati a
-#    questo valore. Minimo 24.0V (il PI30 non accetta di meno). Consigliato
+#    questo valore. La usa anche MANTIENI (script.pi30_batteria_da_mantenere)
+#    da acceso, alla soglia di sottotensione: la batteria resta a questa
+#    tensione finché il surplus non basta per la CARICA. Minimo 24.0V (il PI30 non accetta di meno). Consigliato
 #    25.8V, non 24.0: a 24.0V il pacco è al 2% e la curva LiFePO4 è ripida,
 #    ogni impulso del caricabatterie (circa 14 Wh) lo porta a 24.4V e
 #    l'autoconsumo lo riporta a 23.9V in 20 minuti, un dente di sega di

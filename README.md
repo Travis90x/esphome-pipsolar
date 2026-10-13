@@ -314,10 +314,25 @@ on 25 Sep at 22:00 and on 26 Sep at 04:29 (Italian time), always at
 22.7-22.8V. **2A are not enough**: on 26 Sep from 04:02 to 04:29 the PI30
 reported +2A while the pack went from 23.6V to 22.8V and the BMS cut it; with
 9-10A, from 04:30, it went back from 23.2V to 25.9V. With 10A the pack rises a
-few tenths of a volt within minutes; KEEP stays active until the voltage is
-`hold_release_margin_v` above the threshold, then DISCHARGE takes over again,
-and KEEP comes back when the voltage falls to the threshold again: the grid
-only supplies what the inverter consumes, it is not a recharge. KEEP is the **first check** of every run and wins over all
+few tenths of a volt within minutes. KEEP also brings **bulk and float to the
+hold voltage** `input_number.pi30_keep_battery_live` (helper "PI30 keep battery
+live", 25.8V recommended, see **Battery charging switch** below), after storing the
+charging ones in `input_number.pi30_bulk_carica` / `_float_carica`: the 10A
+bring the pack to that voltage and the charger holds it there, taking from the
+grid only the inverter's own consumption. KEEP stays active **with no voltage
+release** until the visible surplus is enough for CHARGE; then the charging
+bulk and float are put back, the utility current goes back to 2A and the
+normal branches decide. Before, KEEP released at `hold_release_margin_v` above
+the threshold to DISCHARGE ("solar only", charger off) and the inverter's
+consumption brought the pack back to the threshold: a 24.0-24.5V sawtooth
+every 25-30 minutes all night long, alternating KEEP and DISCHARGE (10-11 Oct
+and 13 Oct 2026). With bulk and float at 25.0V and "solar + utility" (9 Oct
+2026 18:00-23:00) the pack stayed between 24.7V and 25.0V. The old
+`hold_release_margin_v` cycle is kept only when one of the three
+`input_number` helpers is missing or the hold voltage is below 24.0V. With
+charging off the pack is held by `script.pi30_keep_battery_live` and KEEP does
+not step in; turning charging back on leaves KEEP (unless the pack is at the
+threshold). KEEP is the **first check** of every run and wins over all
 the CHARGE and DISCHARGE branches, so even a 2A charge (not enough) is
 replaced by KEEP when the pack is at the threshold. The automation does
 everything on its own and must stay enabled: disabled, it no longer protects the pack (it was disabled on 25
@@ -374,7 +389,9 @@ Writes: `select.heltec_pi30_display_pi30_set_max_utility_charging_current`,
 (DISCHARGE, also resets the utility current to 2A), `script.pi30_batteria_piena`
 (FULL: output "utility first" with charger "solar only", for a pack at 95% or
 more with surplus), `script.pi30_batteria_da_mantenere` (KEEP — used instead of
-DISCHARGE to hold the PI30 battery at the under-voltage threshold with 10A).
+DISCHARGE to hold the PI30 battery at the hold voltage with 10A). With KEEP
+and with charging off also
+`number.heltec_pi30_display_pi30_set_battery_bulk_voltage` / `_float_voltage`.
 
 Utility current steps: `2 10 20 30 40 50 60`.
 
@@ -388,20 +405,31 @@ THEN
 	store current bulk/float in input_number.pi30_bulk_carica / pi30_float_carica
 	(unless they are already at the hold voltage)
 
+THEN
+IF
+	input_boolean.pi30_ricarica_batteria = on
+	AND (
+		sensor.heltec_pi30_battery_voltage <= sensor.heltec_pi30_display_pi30_battery_under_voltage
+		OR (KEEP already active AND visible surplus not enough
+		    AND not the trigger of charging just turned back on)
+	)
+	(KEEP active = output priority SBU AND charger priority solar + utility)
+	(without the three input_number helpers, or hold voltage < 24.0V: old cycle, also with charging off,
+	 voltage <= under-voltage OR (KEEP active AND voltage < under-voltage + hold_release_margin_v))
+THEN
+	on entry: store bulk/float in input_number.pi30_bulk_carica / pi30_float_carica
+	(only if above the hold voltage)
+	KEEP = script.pi30_batteria_da_mantenere
+	(SBU, solar + utility, 10A, bulk and float = input_number.pi30_keep_battery_live:
+	 holds the battery at that voltage, the grid only covers the inverter's consumption)
+	and STOP: none of the branches below runs
+
+THEN
 IF input_boolean.pi30_ricarica_batteria = on
 	AND (just turned on OR bulk/float still at the hold voltage)
 THEN
 	bulk = input_number.pi30_bulk_carica, then float = input_number.pi30_float_carica
-
-THEN
-IF
-	sensor.heltec_pi30_battery_voltage <= sensor.heltec_pi30_display_pi30_battery_under_voltage
-	OR (KEEP already active AND voltage < under-voltage + hold_release_margin_v)
-	(KEEP active = output priority SBU AND charger priority solar + utility)
-THEN
-	KEEP = script.pi30_batteria_da_mantenere
-	(SBU, solar + utility, 10A: hold the battery just above the threshold, do not recharge it from the grid)
-	and STOP: none of the branches below runs
+	(leaving KEEP: also utility current to 2A)
 
 THEN
 IF

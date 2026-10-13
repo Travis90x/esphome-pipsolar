@@ -1,17 +1,38 @@
 alias: PI30 batteria da mantenere
 description: >-
-  Mantenimento alla soglia di sottotensione: SBU, carica "solare + rete",
-  corrente massima da rete 10A. A quella tensione l'inverter in SBU è già
-  in Line mode (i carichi vanno sulla rete); i 10A riportano la batteria
-  qualche decimo di volt sopra la soglia, poi l'automazione MAN torna a
-  SCARICA e il ciclo si ripete, invece di scendere fino allo stacco del
-  BMS. 2A NON bastano: il 26/09/2026 02:02-02:29 l'inverter segnava +2A
+  MANTIENI, usato dall'automazione MAN alla soglia di sottotensione con
+  input_boolean.pi30_ricarica_batteria acceso: SBU, carica "solare + rete",
+  corrente massima da rete 10A e bulk e float alla tensione di
+  mantenimento input_number.pi30_keep_battery_live (aiutante "PI30 keep
+  battery live", consigliato 25.8V). A quella tensione l'inverter in SBU è
+  già in Line mode (i carichi vanno sulla rete): i 10A portano la batteria
+  alla tensione di mantenimento e il caricabatterie la tiene lì, coprendo
+  solo l'autoconsumo dell'inverter, finché il surplus non basta per la
+  CARICA (allora la MAN rimette bulk e float di carica). Prima, senza
+  toccare bulk e float, i 10A la portavano a 24.5V, la MAN tornava a
+  SCARICA ("solo solare", caricabatterie spento) e l'autoconsumo la
+  riportava a 24.0V: un dente di sega 24.0-24.5V ogni 25-30 minuti per
+  tutta la notte (10-11/10 e 13/10/2026). Con bulk e float a 25.0V e
+  "solare + rete" (09/10/2026 18:00-23:00) la batteria è rimasta tra 24.7V
+  e 25.0V. 2A NON bastano: il 26/09/2026 02:02-02:29 l'inverter segnava +2A
   mentre la batteria scendeva da 23.6V a 22.8V, e il BMS l'ha staccata
-  (inverter spento). Con 9-10A, lo stesso giorno 02:30-03:58, è risalita
-  da 23.2V a 25.9V. La corrente viene riportata a 10A anche quando le
+  (inverter spento). La corrente viene riportata a 10A anche quando le
   priorità sono già giuste, così un valore più alto lasciato da un'altra
-  logica non diventa una ricarica piena dalla rete.
+  logica non diventa una ricarica piena dalla rete. Bulk e float vengono
+  scritti solo se diversi (in discesa prima il float, in salita prima il
+  bulk); la MAN memorizza prima i valori di carica in
+  input_number.pi30_bulk_carica / _float_carica. Se uno dei tre aiutanti
+  input_number manca o la tensione di mantenimento è sotto 24.0V, bulk e
+  float non vengono toccati e vale il vecchio ciclo (la MAN torna a
+  SCARICA 0.5V sopra la soglia).
 sequence:
+  - variables:
+      hold_voltage: "{{ states('input_number.pi30_keep_battery_live') | float(0) | round(1) }}"
+      hold_valid: >-
+        {{ hold_voltage >= 24.0
+           and states('input_number.pi30_bulk_carica') not in ['unknown', 'unavailable']
+           and states('input_number.pi30_float_carica') not in ['unknown', 'unavailable'] }}
+      bulk_now: "{{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(0) | round(1) }}"
   - delay:
       hours: 0
       minutes: 0
@@ -44,6 +65,81 @@ sequence:
           minutes: 0
           seconds: 1
           milliseconds: 0
+  # Bulk e float alla tensione di mantenimento. In discesa prima il float,
+  # in salita prima il bulk: il float non supera mai il bulk.
+  - if:
+      - condition: template
+        value_template: '{{ hold_valid and hold_voltage < bulk_now }}'
+    then:
+      - if:
+          - condition: template
+            value_template: >-
+              {{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage')
+                 | float(0) | round(1) != hold_voltage }}
+        then:
+          - action: number.set_value
+            target:
+              entity_id: number.heltec_pi30_display_pi30_set_battery_float_voltage
+            data:
+              value: "{{ hold_voltage }}"
+          - delay:
+              hours: 0
+              minutes: 0
+              seconds: 2
+              milliseconds: 0
+      - if:
+          - condition: template
+            value_template: >-
+              {{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage')
+                 | float(0) | round(1) != hold_voltage }}
+        then:
+          - action: number.set_value
+            target:
+              entity_id: number.heltec_pi30_display_pi30_set_battery_bulk_voltage
+            data:
+              value: "{{ hold_voltage }}"
+          - delay:
+              hours: 0
+              minutes: 0
+              seconds: 2
+              milliseconds: 0
+    else:
+      - if:
+          - condition: template
+            value_template: '{{ hold_valid }}'
+        then:
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage')
+                     | float(0) | round(1) != hold_voltage }}
+            then:
+              - action: number.set_value
+                target:
+                  entity_id: number.heltec_pi30_display_pi30_set_battery_bulk_voltage
+                data:
+                  value: "{{ hold_voltage }}"
+              - delay:
+                  hours: 0
+                  minutes: 0
+                  seconds: 2
+                  milliseconds: 0
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage')
+                     | float(0) | round(1) != hold_voltage }}
+            then:
+              - action: number.set_value
+                target:
+                  entity_id: number.heltec_pi30_display_pi30_set_battery_float_voltage
+                data:
+                  value: "{{ hold_voltage }}"
+              - delay:
+                  hours: 0
+                  minutes: 0
+                  seconds: 2
+                  milliseconds: 0
   - if:
       - condition: template
         value_template: >-

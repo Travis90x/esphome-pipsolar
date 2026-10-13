@@ -5,7 +5,8 @@ description: >-
   alla tensione di mantenimento input_number.pi30_keep_battery_live
   (aiutante "PI30 keep battery live", da 24.0V, il minimo accettato dal
   PI30; consigliato 25.8V, vedi sotto), corrente massima da rete almeno
-  40A. Sopra quella tensione il caricabatterie non eroga nulla e la
+  40A (meno, se la MAN passa un limite di temperatura come current_limit:
+  allora al massimo quel valore). Sopra quella tensione il caricabatterie non eroga nulla e la
   batteria alimenta i carichi. Quando in SBU l'inverter passa alla rete
   (tensione di recharge), il caricabatterie porta la batteria alla
   tensione di mantenimento e la tiene lì, prelevando dalla rete solo
@@ -34,7 +35,10 @@ sequence:
   - variables:
       hold_voltage: "{{ states('input_number.pi30_keep_battery_live') | float(0) | round(1) }}"
       hold_valid: "{{ hold_voltage >= 24.0 }}"
-      hold_current: 40
+      # Limite di temperatura dalla MAN (current_cap): al massimo current_limit
+      hold_cap: >-
+        {{ (current_limit | int(999)) if current_limit is defined else 999 }}
+      hold_current: "{{ [40, hold_cap] | min }}"
       bulk_now: "{{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(0) | round(1) }}"
   - delay:
       hours: 0
@@ -146,7 +150,9 @@ sequence:
       - condition: template
         value_template: >-
           {{ states('sensor.heltec_pi30_display_pi30_max_utility_charging_current')
-             | int(default=0) < hold_current }}
+             | int(default=0) < hold_current or
+             states('sensor.heltec_pi30_display_pi30_max_utility_charging_current')
+             | int(default=0) > hold_cap }}
     then:
       - action: select.select_option
         target:

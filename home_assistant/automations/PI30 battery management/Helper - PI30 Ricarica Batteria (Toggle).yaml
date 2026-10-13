@@ -39,7 +39,9 @@
 #    per esempio 70°C. Superata, l'automazione abbassa la corrente da rete di
 #    uno step ogni 2 minuti, fino a 2A, senza staccare la carica. Torna a
 #    salire solo sotto il limite meno 5°C (isteresi); in mezzo la corrente
-#    resta dov'è. Senza questo aiutante nessun limite di temperatura.
+#    resta dov'è. Vale per ogni carica da rete, anche MANTIENI (10A) e
+#    "keep battery live" (40A). Senza questo aiutante nessun limite di
+#    temperatura.
 #    Dopo averlo creato impostalo a 70: da configuration.yaml parte dal
 #    minimo (40), poi Home Assistant ricorda il valore ai riavvii.
 #

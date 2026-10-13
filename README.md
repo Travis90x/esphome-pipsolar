@@ -615,8 +615,12 @@ stays where it is (the step-downs for grid draw or GoodWe discharge still
 apply), below limit - 5°C the modulation goes back up normally, one step at a
 time. A template trigger (`temperatura_alta`) makes the automation react as
 soon as the limit is exceeded. Without the helper, or with the sensor
-unavailable, there is no limit. It does not apply to KEEP (fixed 10A against
-the BMS cut) nor to `script.pi30_keep_battery_live`.
+unavailable, there is no limit. It applies to **every** grid charge: KEEP (10A)
+and `script.pi30_keep_battery_live` (40A) also receive `current_cap` as the
+`current_limit` variable and step down the same way (KEEP from 10A to 2A). At
+2A, at the under-voltage threshold, the pack may sink (2A are not enough
+against the inverter's consumption), but at 2A the heat sink cools down and
+below the limit minus the hysteresis the current goes back up.
 
 **Trigger:**
 

@@ -625,8 +625,12 @@ corrente resta dov'è (gli step in giù per prelievo dalla rete o scarica GoodWe
 valgono sempre), sotto limite - 5°C la modulazione risale normalmente, uno
 step alla volta. Un trigger template (`temperatura_alta`) fa intervenire
 l'automazione appena il limite viene superato. Senza l'aiutante o con il
-sensore non disponibile non c'è nessun limite. Non si applica a MANTIENI (10A
-fissi contro lo stacco del BMS) né a `script.pi30_keep_battery_live`.
+sensore non disponibile non c'è nessun limite. Vale per **ogni** carica da
+rete: anche MANTIENI (10A) e `script.pi30_keep_battery_live` (40A) ricevono
+`current_cap` come variabile `current_limit` e scendono di step allo stesso
+modo (MANTIENI da 10A a 2A). A 2A, alla soglia di sottotensione, il pacco può
+scendere (2A non bastano contro l'autoconsumo), ma a 2A il dissipatore si
+raffredda e sotto il limite meno l'isteresi la corrente torna a salire.
 
 **Trigger:**
 

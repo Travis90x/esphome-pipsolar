@@ -18,7 +18,10 @@ description: >-
   mentre la batteria scendeva da 23.6V a 22.8V, e il BMS l'ha staccata
   (inverter spento). La corrente viene riportata a 10A anche quando le
   priorità sono già giuste, così un valore più alto lasciato da un'altra
-  logica non diventa una ricarica piena dalla rete. Bulk e float vengono
+  logica non diventa una ricarica piena dalla rete. Con il limite di
+  temperatura della MAN (variabile current_limit, da current_cap) la
+  corrente è il minimo tra 10A e il limite: con il dissipatore oltre
+  "PI30 Charging Max Temperature" scende a 2A. Bulk e float vengono
   scritti solo se diversi (in discesa prima il float, in salita prima il
   bulk); la MAN memorizza prima i valori di carica in
   input_number.pi30_bulk_carica / _float_carica. Se uno dei tre aiutanti
@@ -33,6 +36,9 @@ sequence:
            and states('input_number.pi30_bulk_carica') not in ['unknown', 'unavailable']
            and states('input_number.pi30_float_carica') not in ['unknown', 'unavailable'] }}
       bulk_now: "{{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(0) | round(1) }}"
+      # Limite di temperatura dalla MAN (current_cap): 10A o meno
+      hold_current: >-
+        {{ ([10, current_limit | int(10)] | min) if current_limit is defined else 10 }}
   - delay:
       hours: 0
       minutes: 0
@@ -144,13 +150,13 @@ sequence:
       - condition: template
         value_template: >-
           {{ states('sensor.heltec_pi30_display_pi30_max_utility_charging_current')
-             | int(default=0) != 10 }}
+             | int(default=0) != hold_current }}
     then:
       - action: select.select_option
         target:
           entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
         data:
-          option: '10'
+          option: "{{ hold_current | string }}"
   - delay:
       hours: 0
       minutes: 0

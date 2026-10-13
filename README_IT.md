@@ -613,6 +613,13 @@ ALLORA
 	questo non basta, quindi SCARICA
 ```
 
+**Attesa prima di salire.** In CARICA uno step in su arriva solo se la
+corrente da rete non è cambiata da almeno `step_up_wait_s` (20 s, variabile
+nell'automazione): i sensori GoodWe si aggiornano più lentamente della PI30 e
+senza attesa la corrente saliva a ogni esecuzione, prima che la GoodWe
+mostrasse l'effetto dello step precedente. Le discese, e il salto a 2A sopra
+250 W, restano immediati.
+
 **Carica dalla GoodWe.** In CARICA sopra 2A, appena la batteria GoodWe
 (`sensor.goodwe_battery_power`) eroga più di `goodwe_drain_w` (250 W, variabile
 nell'automazione), la corrente da rete va subito a 2A invece di scendere uno

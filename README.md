@@ -605,6 +605,13 @@ THEN
 	that is not enough, so DISCHARGE
 ```
 
+**Wait before stepping up.** In CHARGE a step up comes only if the utility
+current has not changed for at least `step_up_wait_s` (20 s, a variable inside
+the automation): the GoodWe sensors update more slowly than the PI30, and
+without the wait the current went up at every run, before the GoodWe showed
+the effect of the previous step. Step-downs, and the jump to 2A above 250 W,
+stay immediate.
+
 **Charging from the GoodWe.** In CHARGE above 2A, as soon as the GoodWe
 battery (`sensor.goodwe_battery_power`) delivers more than `goodwe_drain_w`
 (250 W, a variable inside the automation), the utility current goes straight

@@ -172,6 +172,12 @@ description: >-
   i 10 secondi di batteria_stabile. A 2A, se la GoodWe eroga ancora almeno
   200W per 60 s, il "VUOL DIRE CHE" passa a SCARICA. Non vale per MANTIENI
   né per keep battery live: lì la corrente serve a non far staccare il BMS.
+  ATTESA PRIMA DI SALIRE. Uno step in su arriva solo se la corrente da
+  rete non è cambiata da almeno step_up_wait_s (20 s): i sensori GoodWe si
+  aggiornano più lentamente della PI30, e senza attesa la corrente saliva
+  a ogni esecuzione (ogni 10 s) prima che la GoodWe mostrasse l'effetto
+  dello step precedente. Le discese (e il salto a 2A sopra 250W) restano
+  immediate.
 triggers:
   - trigger: homeassistant
     id: avvio
@@ -332,6 +338,10 @@ actions:
            (0 - grid_power) >= ([export_cap_w - export_margin_w, pi30_load_w + entry_charge_w] | min) }}
       discharge_confirm_s: 60
       goodwe_drain_w: 250
+      step_up_wait_s: 20
+      current_age_s: >-
+        {% set ch = states.sensor.heltec_pi30_display_pi30_max_utility_charging_current %}
+        {{ (now() - ch.last_changed).total_seconds() if ch is not none else 999999 }}
       goodwe_glitch_s: 600
       goodwe_glitch: >-
         {% set bad = expand(['sensor.goodwe_battery_state_of_charge', 'sensor.goodwe_battery_voltage',
@@ -614,6 +624,17 @@ actions:
           entity_id: script.pi30_batteria_da_scaricare
         action: script.turn_on
       - stop: Surplus visibile insufficiente, scarica
+  # ATTESA PRIMA DI SALIRE: in CARICA, con contatore e GoodWe che
+  # permetterebbero uno step in più, si sale solo se la corrente da rete è
+  # ferma da almeno step_up_wait_s, così i sensori GoodWe (più lenti della
+  # PI30) mostrano l'effetto dello step precedente. Le discese non aspettano.
+  - if:
+      - condition: template
+        value_template: >-
+          {{ in_charge and power_known and grid_power < 300 and battery_power < 200
+             and current_age_s < step_up_wait_s }}
+    then:
+      - stop: Corrente cambiata da meno di 20 s, nessuno step in su
   - if:
       - condition: template
         value_template: '{{ soc_known and soc > 99 }}'

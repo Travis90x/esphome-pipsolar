@@ -554,6 +554,7 @@ THEN
 		INCREASING THE STEP (e.g.: if at 2 go to 10, if 10 -> 20, if 60 stay at 60, etc.)
 		(STEPS ARE: 2 10 20 30 40 50 60)
 		THE STEP CAN NEVER EXCEED max_manual_current (MAX MANUAL CURRENT)
+		NOR current_cap (TEMPERATURE LIMIT, see below)
 	OTHERWISE (STEP DOWN) (if either condition is not met, something is drawing too much: sensor.potenza_contatore < 300 AND sensor.goodwe_battery_power)
 		READ sensor.heltec_pi30_display_pi30_max_utility_charging_current
 		SET select.heltec_pi30_display_pi30_set_max_utility_charging_current
@@ -600,6 +601,22 @@ set to, say, 40: the STEP UP phase will never go above 40A; if the current is
 already above 40A (because the limit was lowered while the system was
 charging at a higher step), the automation immediately brings it back down to
 the highest valid step not exceeding 40 (i.e. 40).
+
+**Temperature limit.** Optional helper
+`input_number.pi30_charging_max_temperature` (Number, name `PI30 Charging Max
+Temperature`, in °C, for example 70; see
+`Helper - PI30 Ricarica Batteria (Toggle).yaml`), compared with the heat sink
+temperature `sensor.heltec_pi30_heat_sink_temperature`. Instead of
+`max_manual_current` the modulation uses `current_cap`: from the limit up the
+utility current goes down one step every `thermal_step_s` (120 s, the heat
+sink cools slowly), down to 2A, **without stopping the charge**. Hysteresis
+`charging_temp_hysteresis` (5°C): between limit - 5°C and the limit the current
+stays where it is (the step-downs for grid draw or GoodWe discharge still
+apply), below limit - 5°C the modulation goes back up normally, one step at a
+time. A template trigger (`temperatura_alta`) makes the automation react as
+soon as the limit is exceeded. Without the helper, or with the sensor
+unavailable, there is no limit. It does not apply to KEEP (fixed 10A against
+the BMS cut) nor to `script.pi30_keep_battery_live`.
 
 **Trigger:**
 

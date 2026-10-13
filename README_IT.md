@@ -563,6 +563,7 @@ ALLORA
 		AUMENTANDO LO STEP (es: se sta a 2 vai a 10, se 10 ->20, se 60 rimani a 60 ecc.)
 		(GLI STEP SONO: 2 10 20 30 40 50 60)
 		LO STEP NON PUÒ COMUNQUE SUPERARE max_manual_current (MAX MANUAL CURRENT)
+		NÉ current_cap (LIMITE DI TEMPERATURA, vedi sotto)
 	ALTRIMENTI (DIMINUISCI STEP) (se uno dei due non è rispettato, c'è qualcosa che preleva troppo: sensor.potenza_contatore < 300 E sensor.goodwe_battery_power)
 		LEGGI sensor.heltec_pi30_display_pi30_max_utility_charging_current
 		MODIFICA select.heltec_pi30_display_pi30_set_max_utility_charging_current
@@ -610,6 +611,22 @@ salirà mai oltre 40A; se la corrente è già sopra 40A (perché il limite è
 stato abbassato mentre il sistema stava caricando a uno step più alto),
 l'automazione la riporta subito al gradino valido più alto non superiore a
 40 (quindi 40).
+
+**Limite di temperatura.** Aiutante facoltativo
+`input_number.pi30_charging_max_temperature` (Numero, nome `PI30 Charging Max
+Temperature`, in °C, per esempio 70; vedi
+`Helper - PI30 Ricarica Batteria (Toggle).yaml`), confrontato con la
+temperatura del dissipatore `sensor.heltec_pi30_heat_sink_temperature`. Al
+posto di `max_manual_current` la modulazione usa `current_cap`: dal limite in
+su la corrente da rete scende di uno step ogni `thermal_step_s` (120 s, il
+dissipatore si raffredda lentamente), fino a 2A, **senza staccare la carica**.
+Isteresi `charging_temp_hysteresis` (5°C): tra limite - 5°C e limite la
+corrente resta dov'è (gli step in giù per prelievo dalla rete o scarica GoodWe
+valgono sempre), sotto limite - 5°C la modulazione risale normalmente, uno
+step alla volta. Un trigger template (`temperatura_alta`) fa intervenire
+l'automazione appena il limite viene superato. Senza l'aiutante o con il
+sensore non disponibile non c'è nessun limite. Non si applica a MANTIENI (10A
+fissi contro lo stacco del BMS) né a `script.pi30_keep_battery_live`.
 
 **Trigger:**
 

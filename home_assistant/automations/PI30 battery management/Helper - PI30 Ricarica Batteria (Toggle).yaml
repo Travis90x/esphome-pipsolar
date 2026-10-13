@@ -32,6 +32,17 @@
 #    scaricare e il caricabatterie la ricarica dalla rete a ogni ciclo.
 #    Cambiarlo con l'interruttore spento lo applica subito.
 #
+# 4) Numero "PI30 Charging Max Temperature"
+#    (input_number.pi30_charging_max_temperature), facoltativo
+#    Temperatura massima del dissipatore dell'inverter
+#    (sensor.heltec_pi30_heat_sink_temperature) durante la carica da rete,
+#    per esempio 70°C. Superata, l'automazione abbassa la corrente da rete di
+#    uno step ogni 2 minuti, fino a 2A, senza staccare la carica. Torna a
+#    salire solo sotto il limite meno 5°C (isteresi); in mezzo la corrente
+#    resta dov'è. Senza questo aiutante nessun limite di temperatura.
+#    Dopo averlo creato impostalo a 70: da configuration.yaml parte dal
+#    minimo (40), poi Home Assistant ricorda il valore ai riavvii.
+#
 # Senza uno dei tre numeri (o con la tensione di mantenimento sotto 24.0V),
 # da spento l'automazione esegue SCARICA (solo solare) e non tocca bulk e
 # float.
@@ -45,6 +56,8 @@
 #     modalità Campo di inserimento
 #   - Numero: Nome "PI30 keep battery live", min 24.0, max 29.0, passo 0.1, V,
 #     modalità Campo di inserimento, valore consigliato 25.8
+#   - Numero: Nome "PI30 Charging Max Temperature", min 40, max 90, passo 1,
+#     °C, modalità Campo di inserimento, valore 70
 #   Controlla gli ID entità dopo il salvataggio.
 #
 # Oppure, equivalente, in configuration.yaml (poi riavvia):
@@ -74,4 +87,12 @@ input_number:
     max: 29.0
     step: 0.1
     unit_of_measurement: V
+    mode: box
+  pi30_charging_max_temperature:
+    name: PI30 Charging Max Temperature
+    icon: mdi:thermometer-alert
+    min: 40
+    max: 90
+    step: 1
+    unit_of_measurement: "°C"
     mode: box

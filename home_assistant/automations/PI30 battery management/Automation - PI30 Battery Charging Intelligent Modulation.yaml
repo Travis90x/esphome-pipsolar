@@ -145,6 +145,20 @@ description: >-
   la tensione di mantenimento è sotto 24.0V, da spento esegue SCARICA
   (solo solare) senza toccare bulk e float. Modalità queued: le esecuzioni
   restano una alla volta, ma il cambio dell'interruttore non viene perso.
+  LIMITE DI TEMPERATURA. Con l'aiutante
+  input_number.pi30_charging_max_temperature ("PI30 Charging Max
+  Temperature", per esempio 70°C) e il sensore
+  sensor.heltec_pi30_heat_sink_temperature (dissipatore dell'inverter), la
+  modulazione non supera current_cap invece di max_manual_current. Da
+  charging_max_temp in su la corrente da rete scende di uno step ogni
+  thermal_step_s (120 s, il dissipatore è lento), fino a 2A: la carica non
+  si stacca. Isteresi di charging_temp_hysteresis (5°C): tra 65 e 70°C la
+  corrente resta dov'è (gli step in giù per prelievo o scarica GoodWe
+  valgono sempre), sotto 65°C la modulazione risale normalmente, uno step
+  alla volta. Il trigger temperatura_alta fa intervenire l'automazione
+  appena si supera il limite. Senza l'aiutante o con il sensore non
+  disponibile, nessun limite. Non si applica a MANTIENI (10A fissi, serve
+  contro lo stacco del BMS) né a script.pi30_keep_battery_live.
 triggers:
   - trigger: homeassistant
     id: avvio
@@ -171,6 +185,11 @@ triggers:
       float(24.0) }}
     for:
       minutes: 1
+  - trigger: template
+    id: temperatura_alta
+    value_template: >-
+      {{ states('sensor.heltec_pi30_heat_sink_temperature') | float(0) >=
+      states('input_number.pi30_charging_max_temperature') | float(999) }}
   - trigger: state
     id: ricarica_batteria
     entity_id: input_boolean.pi30_ricarica_batteria
@@ -303,6 +322,31 @@ actions:
           {% endif %}
         {% endfor %}
         {{ ns.g }}
+      # LIMITE DI TEMPERATURA: corrente da rete massima per la modulazione.
+      # Dissipatore >= charging_max_temp: uno step in meno ogni
+      # thermal_step_s (minimo 2A, la carica non si stacca); tra
+      # charging_max_temp - charging_temp_hysteresis e charging_max_temp:
+      # niente step in su; sotto: max_manual_current.
+      charging_temp_hysteresis: 5
+      thermal_step_s: 120
+      charging_max_temp: >-
+        {{ states('input_number.pi30_charging_max_temperature') | float(default=none) }}
+      heat_sink_temp: >-
+        {{ states('sensor.heltec_pi30_heat_sink_temperature') | float(default=none) }}
+      current_cap: >-
+        {% set ch = states.sensor.heltec_pi30_display_pi30_max_utility_charging_current %}
+        {% set age = (now() - ch.last_changed).total_seconds() if ch is not none else 999999 %}
+        {% set lower = charging_steps | select('lt', current_utility) | list %}
+        {% if heat_sink_temp is none or charging_max_temp is none %}
+          {% set cap = max_manual_current %}
+        {% elif heat_sink_temp >= charging_max_temp and age >= thermal_step_s %}
+          {% set cap = (lower | max) if lower | length > 0 else charging_steps | min %}
+        {% elif heat_sink_temp > charging_max_temp - charging_temp_hysteresis %}
+          {% set cap = [current_utility, max_manual_current] | min %}
+        {% else %}
+          {% set cap = max_manual_current %}
+        {% endif %}
+        {{ [cap, charging_steps | min] | max }}
       # MANTIENI: alla soglia di sottotensione, poi (con keep_valid) finché il
       # surplus non basta per la CARICA, senza rilascio a tensione: la
       # batteria resta alla tensione di mantenimento. Con la ricarica spenta
@@ -543,15 +587,15 @@ actions:
         else: []
       - if:
           - condition: template
-            value_template: '{{ current_utility > max_manual_current }}'
+            value_template: '{{ current_utility > current_cap }}'
         then:
           - target:
               entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
             data:
               option: >-
-                {{ (charging_steps | select('le', max_manual_current) | list |
+                {{ (charging_steps | select('le', current_cap) | list |
                 max) | string
-                   if (charging_steps | select('le', max_manual_current) | list | length > 0) else '2' }}
+                   if (charging_steps | select('le', current_cap) | list | length > 0) else '2' }}
             action: select.select_option
           - delay: '00:00:10'
         else:
@@ -567,9 +611,9 @@ actions:
                 data:
                   option: >-
                     {{ ((charging_steps | select('gt', current_utility) |
-                    select('le', max_manual_current) | list) | min)
-                       if (charging_steps | select('gt', current_utility) | select('le', max_manual_current) | list | length > 0)
-                       else (charging_steps | select('le', max_manual_current) | list | max) | string }}
+                    select('le', current_cap) | list) | min)
+                       if (charging_steps | select('gt', current_utility) | select('le', current_cap) | list | length > 0)
+                       else (charging_steps | select('le', current_cap) | list | max) | string }}
                 action: select.select_option
               - delay: '00:00:10'
             else:
@@ -605,16 +649,16 @@ actions:
             else: []
           - if:
               - condition: template
-                value_template: '{{ current_utility > max_manual_current }}'
+                value_template: '{{ current_utility > current_cap }}'
             then:
               - target:
                   entity_id: >-
                     select.heltec_pi30_display_pi30_set_max_utility_charging_current
                 data:
                   option: >-
-                    {{ (charging_steps | select('le', max_manual_current) | list
+                    {{ (charging_steps | select('le', current_cap) | list
                     | max) | string
-                       if (charging_steps | select('le', max_manual_current) | list | length > 0) else '2' }}
+                       if (charging_steps | select('le', current_cap) | list | length > 0) else '2' }}
                 action: select.select_option
               - delay: '00:00:10'
             else:
@@ -630,9 +674,9 @@ actions:
                     data:
                       option: >-
                         {{ ((charging_steps | select('gt', current_utility) |
-                        select('le', max_manual_current) | list) | min)
-                           if (charging_steps | select('gt', current_utility) | select('le', max_manual_current) | list | length > 0)
-                           else (charging_steps | select('le', max_manual_current) | list | max) | string }}
+                        select('le', current_cap) | list) | min)
+                           if (charging_steps | select('gt', current_utility) | select('le', current_cap) | list | length > 0)
+                           else (charging_steps | select('le', current_cap) | list | max) | string }}
                     action: select.select_option
                   - delay: '00:00:10'
                 else:
@@ -668,16 +712,16 @@ actions:
                 else: []
               - if:
                   - condition: template
-                    value_template: '{{ current_utility > max_manual_current }}'
+                    value_template: '{{ current_utility > current_cap }}'
                 then:
                   - target:
                       entity_id: >-
                         select.heltec_pi30_display_pi30_set_max_utility_charging_current
                     data:
                       option: >-
-                        {{ (charging_steps | select('le', max_manual_current) |
+                        {{ (charging_steps | select('le', current_cap) |
                         list | max) | string
-                           if (charging_steps | select('le', max_manual_current) | list | length > 0) else '2' }}
+                           if (charging_steps | select('le', current_cap) | list | length > 0) else '2' }}
                     action: select.select_option
                   - delay: '00:00:10'
                 else:
@@ -693,9 +737,9 @@ actions:
                         data:
                           option: >-
                             {{ ((charging_steps | select('gt', current_utility)
-                            | select('le', max_manual_current) | list) | min)
-                               if (charging_steps | select('gt', current_utility) | select('le', max_manual_current) | list | length > 0)
-                               else (charging_steps | select('le', max_manual_current) | list | max) | string }}
+                            | select('le', current_cap) | list) | min)
+                               if (charging_steps | select('gt', current_utility) | select('le', current_cap) | list | length > 0)
+                               else (charging_steps | select('le', current_cap) | list | max) | string }}
                         action: select.select_option
                       - delay: '00:00:10'
                     else:
@@ -737,7 +781,7 @@ actions:
                         else: []
                       - if:
                           - condition: template
-                            value_template: '{{ current_utility > max_manual_current }}'
+                            value_template: '{{ current_utility > current_cap }}'
                         then:
                           - target:
                               entity_id: >-
@@ -745,8 +789,8 @@ actions:
                             data:
                               option: >-
                                 {{ (charging_steps | select('le',
-                                max_manual_current) | list | max) | string
-                                   if (charging_steps | select('le', max_manual_current) | list | length > 0) else '2' }}
+                                current_cap) | list | max) | string
+                                   if (charging_steps | select('le', current_cap) | list | length > 0) else '2' }}
                             action: select.select_option
                           - delay: '00:00:10'
                         else:
@@ -764,9 +808,9 @@ actions:
                                   option: >-
                                     {{ ((charging_steps | select('gt',
                                     current_utility) | select('le',
-                                    max_manual_current) | list) | min)
-                                       if (charging_steps | select('gt', current_utility) | select('le', max_manual_current) | list | length > 0)
-                                       else (charging_steps | select('le', max_manual_current) | list | max) | string }}
+                                    current_cap) | list) | min)
+                                       if (charging_steps | select('gt', current_utility) | select('le', current_cap) | list | length > 0)
+                                       else (charging_steps | select('le', current_cap) | list | max) | string }}
                                 action: select.select_option
                               - delay: '00:00:10'
                             else:

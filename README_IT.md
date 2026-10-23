@@ -693,15 +693,17 @@ altro da `line_lost_s` (300 s), con le priorità ferme da almeno altrettanto,
 la PI30 non sta usando la rete: l'automazione crea una notifica persistente
 (id `pi30_fuori_rete`), riporta la corrente da rete a 2A (al ritorno della
 rete la carica riparte dal minimo) e non modula. La notifica sparisce da sola
-quando la PI30 torna in Line mode. Il 23/10/2026 dalle 14:49 la PI30 in CARICA
-è passata in Battery mode e non è più tornata sulla rete: uscita fissa a 240V,
-batteria a -3A per oltre due ore (SOC calcolato da 100 a 92%) con il contatore
-a -300 W, mentre l'automazione teneva 60A credendola in carica. Le uscite
-dalla rete di 10 secondi (20/10 13:53, 21/10 14:56, 22/10 15:21, 23/10 14:27)
-non contano. MANTIENI alla sottotensione resta il primo controllo.
+quando la PI30 torna in Line mode, e riporta anche la tensione di rete letta
+dalla PI30 (`sensor.heltec_pi30_pi30_grid_voltage`, "PI30 grid voltage"). Il
+23/10/2026 l'ingresso AC della PI30 è stato interrotto dalle 14:49:46 alle
+20:40 (0V, tornato solo 20 secondi alle 17:40) mentre la casa continuava a
+immettere: la PI30 in CARICA è passata in Battery mode, batteria a -3A (SOC
+calcolato da 100 a 92% in due ore) con il contatore a -300 W, mentre
+l'automazione teneva 60A credendola in carica. Le uscite dalla rete di 10
+secondi sono buchi di tensione (103V il 22/10 alle 15:21, 151V il 23/10 alle
+14:27) e non contano. MANTIENI alla sottotensione resta il primo controllo.
 L'automazione non può riportare la rete: controlla l'ingresso AC della PI30
-(sensore `PI30 grid voltage`, interruttore o presa) e il display
-dell'inverter.
+(interruttore o presa) e il display dell'inverter.
 
 **Script attesi.** Gli script delle modalità vengono chiamati direttamente
 (`action: script.pi30_...`) e l'automazione aspetta che finiscano. Con

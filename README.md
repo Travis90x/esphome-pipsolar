@@ -684,14 +684,16 @@ long, the PI30 is not using the grid: the automation creates a persistent
 notification (id `pi30_fuori_rete`), sets the utility current to 2A (so
 charging restarts from the minimum when the grid comes back) and does not
 modulate. The notification goes away by itself once the PI30 is back in Line
-mode. On 23 Oct 2026 from 14:49 the PI30, in CHARGE, went to Battery mode and
-never came back to the grid: output fixed at 240 V, battery at -3A for over
-two hours (calculated SOC from 100 to 92%) with the meter at -300 W, while the
-automation kept 60A thinking it was charging. The 10-second drops (20 Oct
-13:53, 21 Oct 14:56, 22 Oct 15:21, 23 Oct 14:27) do not count. Undervoltage
-KEEP is still the first check. The automation cannot bring the grid back:
-check the PI30 AC input (`PI30 grid voltage` sensor, breaker or socket) and
-the inverter display.
+mode, and also reports the grid voltage read by the PI30
+(`sensor.heltec_pi30_pi30_grid_voltage`, "PI30 grid voltage"). On 23 Oct 2026
+the PI30 AC input was interrupted from 14:49:46 to 20:40 (0 V, back for only
+20 seconds at 17:40) while the house kept exporting: the PI30, in CHARGE, went
+to Battery mode, battery at -3A (calculated SOC from 100 to 92% in two hours)
+with the meter at -300 W, while the automation kept 60A thinking it was
+charging. The 10-second drops are voltage dips (103 V on 22 Oct at 15:21,
+151 V on 23 Oct at 14:27) and do not count. Undervoltage KEEP is still the
+first check. The automation cannot bring the grid back: check the PI30 AC
+input (breaker or socket) and the inverter display.
 
 **Scripts are waited for.** The mode scripts are called directly
 (`action: script.pi30_...`) and the automation waits for them to finish. With

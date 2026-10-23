@@ -276,6 +276,7 @@ Files: [`home_assistant/automations/PI30 battery management/`](<home_assistant/a
 - `Automation - PI30 Battery Charging Intelligent Modulation.yaml`
 - `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery full.yaml`, `Script Battery to keep.yaml`, `Script Battery keep live.yaml`
 - `Helper - PI30 Ricarica Batteria (Toggle).yaml`
+- `Helper - PI30 Modalita MAN (Template sensor).yaml` (optional: the mode as one steady value)
 
 Goal: decide, every 10 minutes (plus on startup and on relevant sensor
 changes), whether the PI30 should be charging its LiFePO4 pack from the grid,
@@ -394,6 +395,21 @@ more with surplus), `script.pi30_batteria_da_mantenere` (KEEP — used instead o
 DISCHARGE to hold the PI30 battery at the hold voltage with 10A). With KEEP
 and with charging off also
 `number.heltec_pi30_display_pi30_set_battery_bulk_voltage` / `_float_voltage`.
+The utility current is written only when it changes. The scripts are called
+directly (`action: script.pi30_...`) and the automation waits for them, so all
+five must exist. With the PI30 off the grid in CHARGE or FULL:
+`persistent_notification.create` / `.dismiss` (id `pi30_fuori_rete`).
+
+**The scripts are not the mode.** A script is `on` only while it runs, a few
+seconds at each run of the automation, so `script.pi30_batteria_da_caricare`
+blinks on and off while the PI30 charges steadily. The mode is in the two
+inverter priorities; the optional template helper
+`Helper - PI30 Modalita MAN (Template sensor).yaml` (Settings → Devices &
+services → Helpers → Create helper → Template → Sensor, name `PI30 Modalità
+MAN`, giving `sensor.pi30_modalita_man`) shows it as CHARGE/FULL/DISCHARGE/KEEP
+in Italian (`CARICA`, `PIENA`, `SCARICA`, `MANTIENI`, `KEEP LIVE`), with
+`- NON SULLA RETE` added when the PI30 is in CHARGE or FULL but not in Line
+mode.
 
 Utility current steps: `2 10 20 30 40 50 60`.
 
@@ -447,9 +463,20 @@ IF
 	the PI30 is in CHARGE above 2A
 	AND sensor.goodwe_battery_power > goodwe_drain_w (250 W)
 THEN
-	utility current STRAIGHT to 2A (not one step at a time), and STOP
+	utility current STRAIGHT to the step that cancels that energy (plus any grid import),
+	leaving at most goodwe_idle_w (100 W): at least one step down, minimum 2A, and STOP
 	(the PI30 would be charging with the energy of the GoodWe battery;
-	 the goodwe_in_scarica trigger reacts as soon as 250 W are exceeded)
+	 the goodwe_in_scarica trigger reacts as soon as 250 W are exceeded;
+	 40A with 466 W from the GoodWe -> 20A, 60A with 1.7 kW -> 2A)
+
+THEN (PI30 OFF THE GRID, placed just before CHARGING FROM THE GOODWE)
+IF
+	the PI30 is in CHARGE or FULL (output "utility first")
+	AND sensor.heltec_pi30_display_pi30_device_mode is not "Line mode" since line_lost_s (300 s)
+	AND the priorities have not changed for as long
+THEN
+	persistent notification pi30_fuori_rete, utility current to 2A (in CHARGE), and STOP
+	(dismissed once the PI30 is back in Line mode)
 
 THEN (GOODWE GLITCH)
 IF
@@ -557,7 +584,10 @@ THEN
 	IF sensor.heltec_pi30_display_pi30_max_total_charging_current < 60
 		SET select.heltec_pi30_display_pi30_set_max_total_charging_current
 		TO 60
-	IF sensor.potenza_contatore < 300 AND sensor.goodwe_battery_power < 200
+	IF export (-sensor.potenza_contatore) >= MIN(export_cap_w - export_margin_w (250),
+	                                            (next step - current) x PI30 battery voltage)
+	   AND sensor.goodwe_battery_power < goodwe_idle_w (100)
+	   AND the utility current unchanged for step_up_wait_s (20 s)
 
 	(pi30_max_utility_charging_current can be < max_total_charging_current, which is the utility+solar charging current limit - solar is not used for now)
 	THEN (STEP UP)
@@ -567,11 +597,15 @@ THEN
 		(STEPS ARE: 2 10 20 30 40 50 60)
 		THE STEP CAN NEVER EXCEED max_manual_current (MAX MANUAL CURRENT)
 		NOR current_cap (TEMPERATURE LIMIT, see below)
-	OTHERWISE (STEP DOWN) (if either condition is not met, something is drawing too much: sensor.potenza_contatore < 300 AND sensor.goodwe_battery_power)
+	OTHERWISE IF sensor.potenza_contatore >= 300 OR sensor.goodwe_battery_power >= 200 (or powers unknown)
+	THEN (STEP DOWN)
 		READ sensor.heltec_pi30_display_pi30_max_utility_charging_current
 		SET select.heltec_pi30_display_pi30_set_max_utility_charging_current
 		DECREASING THE STEP (e.g.: if at 2 stay at 2, if 10 go to 2, if 60 go to 50, etc.)
 		(STEPS ARE: 2 10 20 30 40 50 60)
+	OTHERWISE (STILL ZONE)
+		the current stays where it is
+	(the current is written only when it changes)
 
 OTHERWISE
 	IF
@@ -613,23 +647,59 @@ the GoodWe also counts as full (`goodwe_full`) at 99% with its battery idle
 (`sensor.goodwe_battery_power` between -100 and +100 W, `goodwe_idle_w`); at
 99% and still charging, the GoodWe keeps priority as before.
 
-**Wait before stepping up.** In CHARGE a step up comes only if the utility
-current has not changed for at least `step_up_wait_s` (20 s, a variable inside
-the automation): the GoodWe sensors update more slowly than the PI30, and
-without the wait the current went up at every run, before the GoodWe showed
-the effect of the previous step. Step-downs, and the jump to 2A above 250 W,
-stay immediate.
+**Still zone.** In CHARGE a step up comes only with visible surplus: export
+(negative meter) at least as large as the next step ((step - current) × PI30
+battery voltage) or at the export cap minus `export_margin_w` (250 W: PV being
+clipped), the GoodWe battery below `goodwe_idle_w` (100 W), and the utility
+current unchanged for at least `step_up_wait_s` (20 s: the GoodWe sensors
+update more slowly than the PI30). A step down comes with the meter importing
+>= 300 W or the GoodWe delivering >= 200 W. In between the current stays where
+it is and is not written again. The old step-up rule, "meter < 300 W and
+GoodWe < 200 W", also fired with the meter at zero and the GoodWe already
+delivering 100-199 W: the current kept climbing past the surplus until the
+GoodWe went over 250 W, then crashed to 2A and started again. On 21-22 Oct
+2026, with the GoodWe full, that was a 2-40-2A sawtooth every 1-3 minutes (114
+current changes and 20 crashes to 2A between 16:00 and 17:00 on the 22nd), and
+before almost every crash the meter read 0 to +80 W while the GoodWe went from
+100 to 300 W in 30-40 seconds. The same value was also rewritten to the
+inverter at every run.
 
 **Charging from the GoodWe.** In CHARGE above 2A, as soon as the GoodWe
 battery (`sensor.goodwe_battery_power`) delivers more than `goodwe_drain_w`
-(250 W, a variable inside the automation), the utility current goes straight
-to 2A instead of stepping down one step at a time: otherwise the PI30 charges
-with the energy coming out of the GoodWe battery. A `numeric_state` trigger
+(250 W, a variable inside the automation), the utility current drops at once
+to the highest step that cancels that energy (plus any grid import), leaving at
+most `goodwe_idle_w` (100 W), at least one step down, minimum 2A: 40A with
+466 W from the GoodWe goes to 20A, 60A with 1.7 kW to 2A. It used to go
+straight to 2A every time, which is what made the sawtooth above so deep. A `numeric_state` trigger
 (`goodwe_in_scarica`) reacts as soon as 250 W are exceeded, without waiting
 for the 10 seconds of the other GoodWe triggers. At 2A, if the GoodWe still
 delivers at least 200 W for 60 s, the "WHICH MEANS" rule switches to
 DISCHARGE. It does not apply to KEEP or keep battery live, where the current
 is needed to stop the BMS from cutting the pack.
+
+**PI30 off the grid.** In CHARGE and FULL (output "utility first") the PI30
+must be in Line mode. If `sensor.heltec_pi30_display_pi30_device_mode` reads
+anything else for `line_lost_s` (300 s), with the priorities unchanged for as
+long, the PI30 is not using the grid: the automation creates a persistent
+notification (id `pi30_fuori_rete`), sets the utility current to 2A (so
+charging restarts from the minimum when the grid comes back) and does not
+modulate. The notification goes away by itself once the PI30 is back in Line
+mode. On 23 Oct 2026 from 14:49 the PI30, in CHARGE, went to Battery mode and
+never came back to the grid: output fixed at 240 V, battery at -3A for over
+two hours (calculated SOC from 100 to 92%) with the meter at -300 W, while the
+automation kept 60A thinking it was charging. The 10-second drops (20 Oct
+13:53, 21 Oct 14:56, 22 Oct 15:21, 23 Oct 14:27) do not count. Undervoltage
+KEEP is still the first check. The automation cannot bring the grid back:
+check the PI30 AC input (`PI30 grid voltage` sensor, breaker or socket) and
+the inverter display.
+
+**Scripts are waited for.** The mode scripts are called directly
+(`action: script.pi30_...`) and the automation waits for them to finish. With
+`script.turn_on` they started without waiting: a KEEP still running rewrote
+SBU, bulk and float at 25.8V and 10A after the automation had already moved
+to CHARGE (three times on 22 Oct 2026 between 09:04 and 09:06, bulk and float
+rewritten 29.0 -> 25.8 every time). The scripts only wait when they write
+something.
 
 **MAX MANUAL CURRENT.** Helper `input_number.pi30_max_manual_current`
 (Settings → Devices & services → Helpers → Create helper → Number, name

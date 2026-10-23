@@ -11,12 +11,11 @@ description: >-
   solare" vuol dire nessuna carica (il 25/09/2026 dalle 18:30 alle 22:00, in
   questa combinazione, la batteria è scesa da 24.5V a 22.7V: nessuna
   corrente dalla rete).
+  L'automazione MAN lo chiama a ogni esecuzione e aspetta che finisca:
+  senza niente da scrivere finisce subito, le attese ci sono solo
+  attorno alle scritture. Lo stato on/off dello script dice solo che sta
+  girando, non la modalità (vedi l'aiutante PI30 Modalita MAN).
 sequence:
-  - delay:
-      hours: 0
-      minutes: 0
-      seconds: 2
-      milliseconds: 0
   - if:
       - condition: template
         value_template: |-
@@ -26,6 +25,11 @@ sequence:
             states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(0) == 3.0
           ) }}
     then:
+      - delay:
+          hours: 0
+          minutes: 0
+          seconds: 2
+          milliseconds: 0
       - action: button.press
         target:
           entity_id: button.heltec_pi30_display_pi30_charger_solar_only
@@ -38,10 +42,10 @@ sequence:
       - action: switch.turn_on
         target:
           entity_id: switch.heltec_pi30_display_pi30_output_priority_utility
-  - delay:
-      hours: 0
-      minutes: 0
-      seconds: 2
-      milliseconds: 0
+      - delay:
+          hours: 0
+          minutes: 0
+          seconds: 2
+          milliseconds: 0
 mode: queued
 max: 10

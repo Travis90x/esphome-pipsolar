@@ -1,0 +1,2881 @@
+title: Home Assistant
+views:
+  - theme: Backend-selected
+    path: default_view
+    title: Casa
+    icon: mdi:home
+    badges: []
+    cards:
+      - type: entities
+        entities:
+          - entity: switch.scorrevole
+          - entity: switch.cancello
+          - entity: switch.garage
+          - entity: light.luce_garage
+          - entity: binary_sensor.sonoff_100265828e
+      - type: entities
+        entities:
+          - entity: light.cucina
+            icon: mdi:countertop-outline
+            secondary_info: brightness
+          - entity: light.veletta_cucina
+            secondary_info: brightness
+            icon: mdi:ceiling-light-multiple
+          - entity: light.soggiorno
+            icon: mdi:sofa-outline
+            secondary_info: brightness
+          - entity: light.veletta_soggiorno
+            icon: mdi:ceiling-light-multiple-outline
+            secondary_info: brightness
+          - entity: light.studio
+            icon: mdi:sofa-single-outline
+          - entity: light.letto
+            icon: mdi:bed
+            secondary_info: brightness
+          - entity: light.disimpegno
+          - entity: light.cameretta
+            icon: mdi:bed
+          - entity: light.bagno_grande
+          - entity: light.bagno_piccolo
+        state_color: true
+        title: Luci
+        show_header_toggle: false
+      - type: entities
+        entities:
+          - entity: sensor.temperatura_soggiorno
+          - entity: sensor.umidita_soggiorno
+          - entity: sensor.temperatura_termo_cucina
+          - entity: sensor.temperatura_studio
+          - entity: sensor.temperatura_letto
+          - entity: sensor.umidita_letto
+          - entity: sensor.temperatura_cameretta
+          - entity: binary_sensor.pioggia_water_leak
+        state_color: true
+      - type: entities
+        entities:
+          - entity: light.acquario_piccolo
+          - entity: light.acquario_grande
+            icon: ''
+          - entity: switch.acquario_ventola
+        title: Acquario
+        state_color: true
+        show_header_toggle: false
+      - show_name: true
+        show_icon: true
+        show_state: true
+        type: glance
+        entities:
+          - entity: switch.irrigatore
+          - entity: sensor.pulsante_battery
+          - entity: switch.s905x3
+        title: Altro
+        state_color: true
+      - type: entities
+        entities:
+          - entity: binary_sensor.sensore_porta_contact
+            name: Porta di ingresso
+            secondary_info: last-updated
+          - entity: sensor.sensore_porta_battery
+            name: Batteria
+            secondary_info: last-updated
+          - entity: binary_sensor.presenza_garage
+          - entity: binary_sensor.presenza_terrazzo
+          - entity: sensor.luminosita_terrazzo
+          - entity: light.luci_strada
+          - entity: sun.sun
+      - type: logbook
+        title: Porta
+        target:
+          entity_id:
+            - binary_sensor.sensore_porta_contact
+      - type: entities
+        entities:
+          - entity: switch.tripla_1
+            icon: mdi:numeric-1-box
+            name: Tripla 1
+            secondary_info: none
+          - entity: switch.tripla_2
+            name: Tripla 2
+            icon: mdi:numeric-2-box
+          - entity: switch.tripla_3
+            name: Tripla 3
+            icon: mdi:numeric-3-box
+          - entity: input_boolean.escludi_automazione_scaldabagno
+        state_color: true
+        title: Prese
+        show_header_toggle: false
+    visible:
+      - user: f0e6ae5b825d422898b6b950b6b2e43a
+      - user: d4d1f35aef604ed39ac1de70ed507db0
+  - theme: Backend-selected
+    title: Fotovoltaico
+    path: fotovoltaico
+    icon: mdi:solar-power-variant
+    badges: []
+    cards:
+      - type: custom:apexcharts-card
+        graph_span: 12h
+        update_interval: 30s
+        header:
+          show: false
+        yaxis:
+          - min: 0
+            max: 100
+            decimals: 0
+            apex_config:
+              tickAmount: 5
+              labels:
+                offsetX: -27
+                formatter: |
+                  EVAL:function(value) {
+                    return Math.round(value) + '%';
+                  }
+        apex_config:
+          legend:
+            show: false
+          chart:
+            height: 200
+          grid:
+            padding:
+              top: -18
+              right: 15
+              bottom: -18
+              left: 0
+        series:
+          - entity: sensor.goodwe_fotovoltaico_potenza_percentuale
+            name: GoodWe
+            type: area
+            opacity: 0.9
+            stroke_width: 2
+          - entity: sensor.fotovoltaico_potenza_percentuale
+            name: Fotovoltaico
+            type: area
+            opacity: 0.4
+            stroke_width: 2
+      - type: history-graph
+        entities:
+          - entity: sensor.goodwe_house_consumption
+            name: Consumo
+          - entity: sensor.goodwe_back_up_l1_power
+            name: Backup
+          - entity: sensor.goodwe_active_power
+            name: Contatore
+          - entity: sensor.goodwe_battery_power
+          - entity: sensor.goodwe_fotovoltaico_potenza
+        title: Potenza
+        hours_to_show: 24
+        show_names: true
+      - type: history-graph
+        entities:
+          - sun.sun
+        hours_to_show: 24
+      - square: false
+        type: grid
+        cards:
+          - type: custom:modern-circular-gauge
+            unit: W
+            name: Fotovoltaico Totale
+            header_position: top
+            gauge_foreground_style:
+              color: adaptive
+            gauge_background_style:
+              width: 2
+              color: adaptive
+            max: 8500
+            min: 0
+            smooth_segments: true
+            adaptive_icon_color: true
+            segments:
+              - from: 500
+                color:
+                  - 255
+                  - 0
+                  - 0
+              - from: 1000
+                color:
+                  - 252
+                  - 161
+                  - 3
+              - from: 3000
+                color:
+                  - 43
+                  - 255
+                  - 0
+              - from: 4000
+                color:
+                  - 11
+                  - 182
+                  - 239
+              - from: 6000
+                color:
+                  - 11
+                  - 182
+                  - 239
+              - from: 8500
+                color:
+                  - 255
+                  - 0
+                  - 0
+            secondary: {}
+            icon: mdi:solar-power-variant
+            entity: sensor.fotovoltaico_potenza_totale
+            card_mod:
+              style: |
+                ha-card .name {
+                  font-size: 10px !important;
+                  margin-top: 0px;
+                }
+          - type: custom:modern-circular-gauge
+            entity: sensor.goodwe_fotovoltaico_potenza
+            unit: W
+            name: Fotovoltaico Inverter
+            header_position: top
+            gauge_foreground_style:
+              color: adaptive
+            gauge_background_style:
+              width: 2
+              color: adaptive
+            max: 8000
+            min: 0
+            smooth_segments: true
+            adaptive_icon_color: true
+            segments:
+              - from: 500
+                color:
+                  - 255
+                  - 0
+                  - 0
+              - from: 1000
+                color:
+                  - 252
+                  - 161
+                  - 3
+              - from: 3000
+                color:
+                  - 43
+                  - 255
+                  - 0
+              - from: 4000
+                color:
+                  - 11
+                  - 182
+                  - 239
+              - from: 6000
+                color:
+                  - 11
+                  - 182
+                  - 239
+              - from: 8000
+                color:
+                  - 255
+                  - 0
+                  - 0
+            secondary:
+              entity: sensor.goodwe_fotovoltaico_potenza_percentuale
+            icon: mdi:solar-panel-large
+            card_mod:
+              style: |
+                ha-card .name {
+                  font-size: 10px !important;
+                  margin-top: 0px;
+                }
+          - type: custom:modern-circular-gauge
+            entity: sensor.fotovoltaico_potenza_2
+            unit: W
+            name: Fotovoltaico Plug&Play
+            header_position: top
+            gauge_foreground_style:
+              color: adaptive
+            gauge_background_style:
+              width: 2
+              color: adaptive
+            max: 650
+            min: 0
+            smooth_segments: true
+            adaptive_icon_color: true
+            segments:
+              - from: 50
+                color:
+                  - 255
+                  - 0
+                  - 0
+              - from: 100
+                color:
+                  - 252
+                  - 161
+                  - 3
+              - from: 300
+                color:
+                  - 43
+                  - 255
+                  - 0
+              - from: 400
+                color:
+                  - 11
+                  - 182
+                  - 239
+              - from: 600
+                color:
+                  - 11
+                  - 182
+                  - 239
+              - from: 640
+                color:
+                  - 255
+                  - 0
+                  - 0
+            secondary:
+              entity: sensor.fotovoltaico_potenza_percentuale
+            icon: mdi:solar-panel
+            card_mod:
+              style: |
+                ha-card .name {
+                  font-size: 10px !important;
+                  margin-top: 0px;
+                }
+          - type: custom:modern-circular-gauge
+            unit: W
+            name: Consumo Energetico
+            header_position: top
+            gauge_foreground_style:
+              color: adaptive
+            gauge_background_style:
+              width: 2
+              color: adaptive
+            max: 8500
+            min: 0
+            smooth_segments: true
+            adaptive_icon_color: true
+            segments:
+              - from: 1000
+                color:
+                  - 11
+                  - 182
+                  - 239
+              - from: 3000
+                color:
+                  - 43
+                  - 255
+                  - 0
+              - from: 6500
+                color:
+                  - 252
+                  - 161
+                  - 3
+              - from: 8500
+                color:
+                  - 255
+                  - 0
+                  - 0
+            secondary: {}
+            icon: mdi:home-import-outline
+            entity: sensor.contabilizzatore_1_potenza
+            card_mod:
+              style: |
+                ha-card .name {
+                  font-size: 10px !important;
+                  margin-top: 0px;
+                }
+          - type: custom:modern-circular-gauge
+            unit: W
+            name: Potenza Ceduta
+            header_position: top
+            gauge_foreground_style:
+              color: adaptive
+            gauge_background_style:
+              width: 2
+              color: adaptive
+            max: 8500
+            min: 0
+            smooth_segments: true
+            adaptive_icon_color: true
+            segments:
+              - from: 1000
+                color:
+                  - 11
+                  - 182
+                  - 239
+              - from: 3000
+                color:
+                  - 43
+                  - 255
+                  - 0
+              - from: 6500
+                color:
+                  - 252
+                  - 161
+                  - 3
+              - from: 8500
+                color:
+                  - 255
+                  - 0
+                  - 0
+            secondary: {}
+            icon: mdi:transmission-tower-export
+            entity: sensor.potenza_ceduta
+            card_mod:
+              style: |
+                ha-card .name {
+                  font-size: 10px !important;
+                  margin-top: 0px;
+                }
+          - type: custom:modern-circular-gauge
+            unit: W
+            name: Carico Monitor.
+            header_position: top
+            gauge_foreground_style:
+              color: adaptive
+            gauge_background_style:
+              width: 2
+              color: adaptive
+            max: 8500
+            min: 0
+            smooth_segments: true
+            adaptive_icon_color: true
+            segments:
+              - from: 1000
+                color:
+                  - 11
+                  - 182
+                  - 239
+              - from: 3000
+                color:
+                  - 43
+                  - 255
+                  - 0
+              - from: 6500
+                color:
+                  - 252
+                  - 161
+                  - 3
+              - from: 8500
+                color:
+                  - 255
+                  - 0
+                  - 0
+            secondary: {}
+            icon: mdi:power-plug
+            entity: sensor.contabilizzatore_2_potenza
+            card_mod:
+              style: |
+                ha-card .name {
+                  font-size: 10px !important;
+                  margin-top: 0px;
+                }
+        columns: 3
+      - type: custom:power-flow-card-plus
+        entities:
+          battery:
+            entity: sensor.goodwe_battery_power
+            state_of_charge: sensor.goodwe_battery_state_of_charge
+            show_state_of_charge: true
+            color_state_of_charge_value: true
+            invert_state: false
+            state_of_charge_unit_white_space: false
+            color_icon: color_dynamically
+            color_circle: color_dynamically
+            color_value: true
+            display_zero: true
+          grid:
+            entity: sensor.potenza_contatore
+            color_value: true
+            invert_state: false
+            power_outage: {}
+          solar:
+            entity: sensor.fotovoltaico_potenza_totale
+            secondary_info:
+              entity: sensor.fotovoltaico_potenza
+          home:
+            color_value: true
+            color_icon: true
+            entity: sensor.goodwe_house_consumption
+          individual:
+            - entity: sensor.potenza_ct2
+              color_value: true
+              name: P. Induzione
+              icon: mdi:washing-machine
+              display_zero: true
+              display_zero_state: true
+              calculate_flow_rate: false
+              show_direction: false
+              unit_white_space: true
+              color:
+                - 128
+                - 255
+                - 255
+            - entity: sensor.goodwe_back_up_l1_power
+              secondary_info:
+                entity: sensor.contabilizzatore_1_potenza
+                icon: mdi:counter
+              icon: mdi:home-battery
+            - entity: sensor.ups_power
+              name: UPS
+              unit_of_measurement: W
+              display_zero_state: true
+              display_zero: true
+          fossil_fuel_percentage:
+            icon: mdi:solar-panel
+            name: P&P
+            color_value: true
+            color_icon: true
+            state_type: power
+        clickable_entities: true
+        display_zero_lines:
+          mode: show
+          transparency: 50
+          grey_color:
+            - 189
+            - 189
+            - 189
+        use_new_flow_rate_model: true
+        min_flow_rate: 0.75
+        max_flow_rate: 6
+        max_expected_power: 2000
+        min_expected_power: 0.01
+        transparency_zero_lines: 0
+        disable_dots: false
+        kilo_threshold: 1000
+        base_decimals: 0
+        kilo_decimals: 1
+      - type: entities
+        entities:
+          - entity: sensor.fotovoltaico_potenza
+          - entity: sensor.fotovoltaico_tensione
+          - entity: sensor.fotovoltaico_corrente
+          - entity: sensor.fotovoltaico_temperatura
+          - entity: switch.fotovoltaico
+        title: Fotovoltaico P&P
+        show_header_toggle: false
+        state_color: true
+      - color: state
+        type: entities
+        entities:
+          - entity: sensor.goodwe_battery_state_of_charge
+          - entity: sensor.goodwe_battery_voltage
+          - type: custom:template-entity-row
+            entity: sensor.goodwe_battery_power
+            state: '{{ states(''sensor.goodwe_battery_power'') }} W'
+          - entity: sensor.daily_energia_batteria_prelevata
+            name: Batteria caricata oggi
+          - entity: sensor.goodwe_battery_power_input
+          - entity: sensor.daily_energia_batteria_ceduta
+            name: Batteria scaricata oggi
+          - entity: switch.caricabatterie_lifepo4
+          - entity: sensor.caricabatterie_lifepo4_current
+          - entity: sensor.caricabatterie_lifepo4_power
+          - entity: sensor.caricabatterie_lifepo4_energy
+          - entity: automation.caricatore_lifepo4
+          - entity: switch.ups
+          - entity: sensor.ups_power
+          - entity: automation.ups
+        title: Batteria Accumulo
+        show_header_toggle: false
+      - color: state
+        type: entities
+        entities:
+          - type: custom:template-entity-row
+            entity: sensor.goodwe_active_power
+            name: Active Power
+            state: '{{ states(''sensor.goodwe_active_power'') }} W'
+            color: |
+              {% if states('sensor.goodwe_active_power')|float >= 0 %}
+                green
+              {% else %}
+                red
+              {% endif %}
+          - entity: sensor.goodwe_house_consumption
+            name: House Consumption
+          - entity: sensor.goodwe_back_up_l1_power
+          - entity: sensor.goodwe_meter_total_energy_export
+            name: Meter Total Energy (export)
+          - entity: sensor.goodwe_meter_total_energy_import
+            name: Meter Total Energy (import)
+          - entity: sensor.goodwe_pv_power
+            name: PV Power
+          - entity: sensor.goodwe_today_s_pv_generation
+            name: Today's PV Generation
+          - entity: sensor.goodwe_fotovoltaico_energia_totale
+          - entity: sensor.goodwe_pv1_power
+          - entity: sensor.goodwe_pv2_power
+        title: GoodWe
+      - type: entities
+        entities:
+          - entity: sensor.potenza_prelevata
+          - entity: sensor.potenza_ceduta
+          - entity: sensor.contabilizzatore_1_potenza
+          - entity: sensor.contabilizzatore_tensione
+          - entity: sensor.contabilizzatore_1_corrente
+          - entity: sensor.contabilizzatore_hz
+          - entity: sensor.contabilizzatore_1_pf
+          - entity: sensor.contabilizzatore_2_potenza
+          - entity: sensor.contabilizzatore_2_corrente
+        title: Contabilizzatore
+        show_header_toggle: false
+        state_color: true
+      - type: gauge
+        entity: sensor.fotovoltaico_potenza
+        segments:
+          - from: 0
+            color: '#d00100'
+          - from: 50
+            color: '#ffa600'
+          - from: 150
+            color: '#ffc700'
+          - from: 300
+            color: '#00b400'
+          - from: 620
+            color: '#0015fd'
+        min: 0
+        max: 650
+        unit: W
+        name: Fotovoltaico
+        needle: true
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: gauge
+        entity: sensor.contabilizzatore_2_potenza
+        name: Carico 1
+        max: 3000
+        min: 0
+        needle: true
+        segments:
+          - from: 2000
+            color: '#d00100'
+          - from: 1000
+            color: '#ffa600'
+          - from: 500
+            color: '#ffc700'
+          - from: 200
+            color: '#00b400'
+          - from: 0
+            color: '#0015fd'
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: gauge
+        name: Surplus Energia
+        min: 0
+        max: 400
+        needle: true
+        entity: sensor.potenza_ceduta
+        segments:
+          - from: 0
+            color: '#d00100'
+          - from: 20
+            color: '#ffa600'
+          - from: 50
+            color: '#ffc700'
+          - from: 100
+            color: '#00b400'
+          - from: 200
+            color: '#0015fd'
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: gauge
+        entity: sensor.contabilizzatore_1_potenza
+        min: 0
+        max: 6500
+        needle: true
+        severity:
+          green: 500
+          yellow: 3500
+          red: 5500
+        unit: W
+        name: Contabilizzatore potenza netta
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: entities
+        entities:
+          - switch.tapo
+          - sensor.tapo_current_power
+          - sensor.tapo_month_energy
+          - sensor.tapo_month_runtime
+          - binary_sensor.tapo_overheat
+          - sensor.tapo_signal_level
+          - sensor.tapo_today_energy
+          - sensor.tapo_today_runtime
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: history-graph
+        entities:
+          - entity: sensor.goodwe_battery_power
+            name: Potenza Batteria
+          - entity: sensor.goodwe_battery_state_of_charge
+            name: SOC
+          - entity: switch.caricabatterie_lifepo4
+          - entity: sensor.goodwe_battery_voltage
+        title: Batteria
+        hours_to_show: 24
+      - type: entities
+        entities:
+          - entity: switch.tripla_1
+            name: Surplus 100W
+          - entity: sensor.percentage_power_charger_1
+            secondary_info: last-updated
+            icon: mdi:light-switch-off
+          - entity: switch.tripla_2
+            name: Surplus 250W
+          - entity: sensor.percentage_power_charger_2
+          - entity: switch.tripla_3
+            name: Surplus 400W
+          - entity: sensor.percentage_power_charger_3
+        show_header_toggle: false
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: custom:mini-graph-card
+        name: Temperature
+        align_state: center
+        icon: mdi:thermometer-lines
+        hour24: true
+        hours_to_show: 2
+        points_per_hour: 60
+        show:
+          labels: true
+          fill: true
+        entities:
+          - entity: sensor.daily_energia_fotovoltaico
+            name: Fotovoltaico
+            color: purple
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: entities
+        entities:
+          - entity: input_number.fake_sensor
+          - entity: script.fake_sensor_reset
+          - entity: input_number.fake_watt
+          - entity: switch.heltec_switch_gpio48
+          - entity: light.heltec_pwm_gpio46
+            secondary_info: brightness
+          - entity: switch.heltec_switch_gpio47
+          - entity: sensor.heltec_battery_voltage_gpio1
+          - entity: binary_sensor.battery_voltage_exceeded
+          - entity: input_boolean.battery_voltage_exceeded_today
+          - entity: automation.deg_variabile
+          - entity: automation.batteria_accumulo
+          - entity: automation.battery_exceed
+        title: Heltec
+        state_color: true
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: custom:energy-flow-card-plus
+        entities:
+          battery:
+            state_of_charge: sensor.poco_m3_battery_level
+            entity:
+              consumption: sensor.energia_batteria_ceduta
+              production: sensor.energia_batteria_prelevata
+          grid:
+            entity:
+              consumption: sensor.energia_acquistata
+              production: sensor.energia_ceduta
+          solar:
+            display_zero_state: true
+            entity: sensor.goodwe_fotovoltaico_energia_totale
+            secondary_info:
+              entity: sensor.fotovoltaico_energia
+          home:
+            entity: sensor.goodwe_total_load
+        clickable_entities: true
+        display_zero_lines:
+          mode: show
+          transparency: 50
+          grey_color:
+            - 189
+            - 189
+            - 189
+        use_new_flow_rate_model: true
+        base_decimals: 0
+        kilo_decimals: 1
+        min_flow_rate: 0.75
+        max_flow_rate: 6
+        max_expected_power: 2000
+        min_expected_power: 0.01
+        kilo_threshold: 1000
+        mega_threshold: 1000000
+        transparency_zero_lines: 0
+        sort_individual_devices: false
+        title: Giorno
+    visible:
+      - user: f0e6ae5b825d422898b6b950b6b2e43a
+      - user: d4d1f35aef604ed39ac1de70ed507db0
+  - type: sections
+    visible:
+      - user: f0e6ae5b825d422898b6b950b6b2e43a
+      - user: d4d1f35aef604ed39ac1de70ed507db0
+    max_columns: 4
+    path: elettrico
+    icon: mdi:battery-charging-high
+    cards: []
+    sections:
+      - type: grid
+        cards:
+          - type: entities
+            title: Batteria
+            show_header_toggle: false
+            entities:
+              - entity: sensor.heltec_pi30_display_pi30_battery_soc_calculated
+                name: PI30 battery SoC Smart
+              - entity: sensor.heltec_pi30_battery_voltage
+                name: PI30 battery voltage
+              - entity: sensor.heltec_pi30_battery_current
+                name: PI30 battery current
+              - type: divider
+              - entity: automation.pi30_battery_soc_coulomb_counting
+              - entity: sensor.heltec_pi30_display_heltec_pi30_battery_soc_real
+                name: PI30 battery SoC from V table
+              - entity: script.pi30_battery_soc_ricalibra_da_tensione
+              - entity: sensor.heltec_pi30_battery_soc
+                name: PI30 battery SoC inverter
+              - entity: sensor.heltec_pi30_heat_sink_temperature
+                name: PI30 heat sink temperature
+              - entity: sensor.heltec_pi30_battery_power
+                name: PI30 battery power
+              - entity: sensor.heltec_pi30_output_active_power
+                name: PI30 output active power
+              - type: divider
+              - entity: sensor.heltec_pi30_batteria_potenza_carica
+              - entity: sensor.heltec_pi30_batteria_energia_caricata
+              - entity: sensor.heltec_pi30_batteria_energia_caricata_giornaliera
+              - entity: sensor.heltec_pi30_batteria_potenza_scarica
+              - entity: sensor.heltec_pi30_batteria_energia_scaricata
+              - entity: sensor.heltec_pi30_batteria_energia_scaricata_giornaliera
+          - type: history-graph
+            entities:
+              - entity: sensor.heltec_pi30_battery_voltage
+                name: Tensione Batteria PI30
+              - entity: sensor.heltec_pi30_display_pi30_battery_soc_calcolato
+            hours_to_show: 24
+          - type: entities
+            title: Inverter
+            show_header_toggle: false
+            entities:
+              - entity: sensor.heltec_pi30_pi30_grid_voltage
+                name: PI30 grid voltage
+              - entity: sensor.heltec_pi30_pi30_grid_frequency
+                name: PI30 grid frequency
+              - entity: sensor.heltec_pi30_pi30_output_voltage
+                name: PI30 output voltage
+              - entity: sensor.heltec_pi30_pi30_output_frequency
+                name: PI30 output frequency
+              - entity: sensor.heltec_pi30_pi30_output_apparent_power
+                name: PI30 output apparent power
+              - entity: sensor.heltec_pi30_pi30_load_percent
+                name: PI30 load percent
+              - entity: sensor.heltec_pi30_pi30_bus_voltage
+                name: PI30 bus voltage
+              - entity: sensor.heltec_pi30_pi30_battery_charging_current
+                name: PI30 battery charging current
+              - entity: sensor.heltec_pi30_pi30_battery_discharge_current
+                name: PI30 battery discharge current
+              - entity: sensor.heltec_pi30_pi30_pv_voltage
+                name: PI30 PV voltage
+              - entity: sensor.heltec_pi30_pi30_pv_current
+                name: PI30 PV current
+              - entity: sensor.heltec_pi30_pi30_pv_power
+                name: PI30 PV power
+      - type: grid
+        cards:
+          - color: state
+            type: entities
+            title: Automazioni
+            show_header_toggle: false
+            entities:
+              - entity: automation.pi30_battery_charging_intelligent_modulation
+              - entity: input_boolean.pi30_ricarica_batteria
+              - type: divider
+              - entity: script.pi30_batteria_da_caricare
+                name: 0-2 Batteria da caricare  (POP00 PCP02)
+              - entity: script.pi30_batteria_da_mantenere
+                name: 2-2 Batteria da mantenere (POP02 PCP02)
+              - entity: script.pi30_batteria_da_scaricare
+                name: 2-3 Batteria da scaricare (POP02 PCP03)
+              - entity: sensor.heltec_pi30_display_pi30_modalita_man
+          - color: state
+            type: entities
+            title: Priorita' uscita (POP)
+            show_header_toggle: false
+            entities:
+              - entity: sensor.heltec_pi30_display_pi30_output_source_priority
+                name: Priorita' letta dall'inverter
+              - type: divider
+              - entity: switch.heltec_pi30_display_pi30_output_priority_utility
+                name: 0 Utility first (USB)
+              - entity: switch.heltec_pi30_display_pi30_output_priority_solar
+                name: 1 Solar first (SUB)
+              - entity: switch.heltec_pi30_display_pi30_output_priority_sbu
+                name: 2 Solar Battery Utility (SBU)
+          - type: entities
+            title: Priorita' carica (PCP)
+            show_header_toggle: false
+            entities:
+              - entity: sensor.heltec_pi30_display_pi30_charger_source_priority
+                name: Priorita' letta dall'inverter
+              - type: divider
+              - entity: button.heltec_pi30_display_pi30_charger_solar_first
+                name: 1 SOLAR FIRST
+              - entity: button.heltec_pi30_display_pi30_charger_solar_utility
+                name: 2 SOLAR + UTILITY
+              - entity: button.heltec_pi30_display_pi30_charger_solar_only
+                name: 3 SOLAR ONLY
+          - type: entities
+            title: Stato inverter
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: sensor.heltec_pi30_display_pi30_device_mode
+                name: Modo di funzionamento
+              - entity: binary_sensor.heltec_pi30_display_pi30_load_on
+                name: Carico attivo
+              - entity: binary_sensor.heltec_pi30_display_pi30_charging
+                name: In carica
+              - entity: binary_sensor.heltec_pi30_display_pi30_ac_charging
+                name: Carica da rete
+              - entity: binary_sensor.heltec_pi30_display_pi30_scc_charging
+                name: Carica da solare
+              - entity: binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode
+                name: In float
+          - color: state
+            type: entities
+            title: Automazioni
+            show_header_toggle: false
+            entities:
+              - entity: automation.ups_sempre_on
+              - entity: switch.ups
+              - entity: sensor.ups_power
+              - entity: sensor.heltec_pi30_battery_power
+              - entity: sensor.heltec_pi30_output_active_power
+              - entity: automation.ups
+      - type: grid
+        cards:
+          - type: entities
+            title: Batteria
+            show_header_toggle: false
+            entities:
+              - entity: input_number.pi30_max_manual_current
+              - entity: select.heltec_pi30_display_pi30_set_max_total_charging_current
+                name: Corrente max di carica totale
+              - entity: sensor.heltec_pi30_display_pi30_max_total_charging_current
+                name: Corrente max di carica totale
+              - entity: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                name: Corrente max di carica da rete
+              - entity: sensor.heltec_pi30_display_pi30_max_utility_charging_current
+                name: Corrente max di carica da rete
+              - type: divider
+              - entity: number.heltec_pi30_display_pi30_set_battery_recharge_voltage
+                name: Ripresa carica da rete (PBCV)
+              - entity: sensor.heltec_pi30_display_pi30_battery_recharge_voltage
+                name: Ripresa carica da rete (PBCV)
+              - type: divider
+              - entity: number.heltec_pi30_display_pi30_set_battery_redischarge_voltage
+                name: Ripresa scarica (PBDV)
+              - entity: sensor.heltec_pi30_display_pi30_battery_redischarge_voltage
+                name: Ripresa scarica (PBDV)
+              - type: divider
+              - entity: number.heltec_pi30_display_pi30_set_battery_under_voltage
+                name: Cut-off batteria (PSDV)
+              - entity: sensor.heltec_pi30_display_pi30_battery_under_voltage
+                name: Cut-off batteria (PSDV)
+              - type: divider
+              - entity: number.heltec_pi30_display_pi30_set_battery_bulk_voltage
+                name: Bulk / C.V. (PCVV)
+              - entity: sensor.heltec_pi30_display_pi30_battery_bulk_voltage
+                name: Bulk / C.V. (PCVV)
+              - type: divider
+              - entity: number.heltec_pi30_display_pi30_set_battery_float_voltage
+                name: Float (PBFT)
+              - entity: sensor.heltec_pi30_display_pi30_battery_float_voltage
+                name: Float (PBFT)
+              - type: divider
+              - entity: input_number.pi30_bulk_carica
+              - entity: input_number.pi30_float_carica
+              - entity: input_number.pi30_keep_battery_live
+              - entity: input_number.pi30_charging_max_temperature
+          - type: entities
+            title: Console comandi
+            show_header_toggle: false
+            entities:
+              - entity: text.heltec_pi30_pi30_manual_command
+                name: Comando (senza CRC)
+              - entity: button.heltec_pi30_pi30_send_manual_command
+                name: Invia
+          - type: entities
+            title: Configurazione
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: switch.heltec_pi30_display_pi30_input_voltage_range_ups
+                name: PGR (ON= UPS 170–280V / OFF= APL 90–280V)
+              - entity: switch.heltec_pi30_display_pi30_pv_power_balance
+                name: >-
+                  Power balance (PSPB) // ON= +autoconsumo -stress-relè // OFF=
+                  salvaguardia della batteria
+              - entity: switch.heltec_pi30_display_pi30_pv_ok_condition_for_parallel
+                name: Inverter in parallelo
+      - type: grid
+        cards:
+          - type: entities
+            title: Comandi di lettura
+            show_header_toggle: false
+            entities:
+              - entity: button.heltec_pi30_display_pi30_aggiorna_adesso_qpiri_qpigs_qmod
+                name: Aggiorna adesso (QPIRI / QPIGS / QMOD)
+              - type: divider
+              - entity: button.heltec_pi30_display_pi30_qpi_protocollo
+                name: QPI - protocollo
+              - entity: button.heltec_pi30_display_pi30_qid_numero_di_serie
+                name: QID - numero di serie
+              - entity: button.heltec_pi30_display_pi30_qvfw_firmware
+                name: QVFW - firmware
+              - entity: button.heltec_pi30_display_pi30_qdi_valori_di_default
+                name: QDI - valori di default
+              - entity: button.heltec_pi30_display_pi30_qmchgcr_correnti_di_carica_ammesse
+                name: QMCHGCR - correnti di carica ammesse
+              - entity: button.heltec_pi30_display_pi30_qmuchgcr_correnti_di_carica_da_rete_ammesse
+                name: QMUCHGCR - correnti da rete ammesse
+          - color: state
+            type: entities
+            title: Dati grezzi
+            show_header_toggle: false
+            entities:
+              - entity: switch.heltec_pi30_display_pi30_cattura_trame_grezze
+                name: Cattura dati grezzi
+              - entity: sensor.heltec_pi30_display_pi30_last_tx
+                name: Inviato
+              - entity: sensor.heltec_pi30_display_pi30_last_rx
+                name: Ricevuto
+          - type: entities
+            title: Risposte dal polling
+            show_header_toggle: false
+            entities:
+              - entity: sensor.heltec_pi30_display_pi30_last_qpiri
+                name: QPIRI
+              - entity: sensor.heltec_pi30_display_pi30_last_qpigs
+                name: QPIGS
+              - entity: sensor.heltec_pi30_display_pi30_last_qmod
+                name: QMOD
+      - type: grid
+        cards:
+          - color: state
+            type: entities
+            title: ESP32
+            show_header_toggle: false
+            entities:
+              - entity: binary_sensor.heltec_pi30_display_pi30_switch_on
+                name: Inverter acceso
+              - type: divider
+              - entity: sensor.heltec_esp_ip_address
+                name: Indirizzo IP
+              - entity: sensor.heltec_esp_connected_ssid
+                name: SSID
+              - entity: sensor.heltec_esp_connected_bssid
+                name: BSSID
+              - entity: sensor.heltec_wifi_signal_db
+                name: WiFi dBm
+              - entity: sensor.heltec_wifi_signal_2
+                name: WiFi Signal %
+      - type: grid
+        cards:
+          - type: logbook
+            title: Modalità
+            target:
+              entity_id:
+                - sensor.heltec_pi30_display_pi30_device_mode
+            grid_options:
+              columns: 12
+              rows: 8
+            name_detail: auto
+  - theme: Backend-selected
+    path: prova-sensori
+    badges: []
+    cards:
+      - type: custom:clock-weather-card
+        entity: weather.forecast_casa
+        title: Meteo
+        sun_entity: sun.sun
+        temperature_sensor: sensor.outdoor_temp
+        humidity_sensor: sensor.outdoor_humidity
+        weather_icon_type: fill
+        animated_icon: true
+        forecast_rows: 7
+        locale: it
+        time_format: 24
+        date_pattern: cccc, dd.MM.yyyy
+        hide_today_section: false
+        hide_forecast_section: false
+        hide_clock: false
+        hide_date: false
+        hourly_forecast: false
+        use_browser_time: true
+        show_decimal: false
+        apparent_sensor: sensor.real_feel_temperature
+        aqi_sensor: sensor.air_quality_index
+      - type: thermostat
+        entity: climate.clima_giorno
+        show_current_as_primary: false
+        features:
+          - style: icons
+            type: climate-hvac-modes
+            hvac_modes:
+              - 'off'
+              - auto
+              - fan_only
+              - heat
+              - dry
+              - cool
+          - style: icons
+            type: climate-fan-modes
+            fan_modes:
+              - auto
+              - quiet
+              - low
+              - medium
+              - high
+              - turbo
+          - type: climate-swing-modes
+            style: dropdown
+      - type: thermostat
+        entity: climate.clima_notte
+        features:
+          - style: icons
+            type: climate-hvac-modes
+            hvac_modes:
+              - 'off'
+              - auto
+              - fan_only
+              - heat
+              - dry
+              - cool
+          - style: icons
+            type: climate-fan-modes
+            fan_modes:
+              - auto
+              - quiet
+              - low
+              - medium_low
+              - medium
+              - medium_high
+              - high
+              - turbo
+          - type: climate-swing-modes
+            style: dropdown
+          - type: climate-swing-horizontal-modes
+            style: dropdown
+      - type: vertical-stack
+        cards:
+          - type: thermostat
+            name: Clima Studio
+            entity: climate.clima_studio_dgeicxfaaai_climate
+            features:
+              - style: icons
+                type: climate-hvac-modes
+                hvac_modes:
+                  - 'off'
+                  - auto
+                  - fan_only
+                  - heat
+                  - dry
+                  - cool
+              - style: dropdown
+                type: climate-fan-modes
+                fan_modes:
+                  - Auto
+                  - Mute
+                  - Low
+                  - Mid-low
+                  - Medium
+                  - Mid-high
+                  - High
+                  - Strong
+              - type: climate-swing-modes
+                style: dropdown
+              - type: climate-swing-horizontal-modes
+                style: dropdown
+          - type: entities
+            entities:
+              - entity: switch.clima_studio_dgeicxfaaai_eco_switch
+                name: Modalità ECO
+      - type: vertical-stack
+        cards:
+          - type: thermostat
+            entity: climate.clima_cameretta_dgehnhfaaai_climate
+            name: Clima Cameretta
+            features:
+              - style: icons
+                type: climate-hvac-modes
+                hvac_modes:
+                  - 'off'
+                  - auto
+                  - fan_only
+                  - heat
+                  - dry
+                  - cool
+              - style: icons
+                type: climate-fan-modes
+                fan_modes:
+                  - Auto
+                  - Mute
+                  - Low
+                  - Mid-low
+                  - Medium
+                  - Mid-high
+                  - High
+                  - Strong
+              - type: climate-swing-modes
+                style: dropdown
+              - type: climate-swing-horizontal-modes
+                style: dropdown
+            card_mod:
+              style:
+                hui-card-features $:
+                  hui-card-feature:nth-child(2) $:
+                    hui-climate-fan-modes-card-feature $:
+                      ha-control-select$: |
+                        #option-1>div>ha-attribute-icon {
+                          --card-mod-icon: mdi:fan-speed-4;
+                        }
+                        #option-2>div>ha-attribute-icon {
+                          --card-mod-icon: mdi:fan-speed-3;
+                        }
+                        #option-3>div>ha-attribute-icon {
+                          --card-mod-icon: mdi:fan-speed-3;
+                        }
+                        #option-4>div>ha-attribute-icon {
+                          --card-mod-icon: mdi:fan-speed-2;
+                        }
+                        #option-5>div>ha-attribute-icon {
+                          --card-mod-icon: mdi:fan-speed-2;
+                        }
+                        #option-6>div>ha-attribute-icon {
+                          --card-mod-icon: mdi:fan-speed-1;
+                        }
+                        #option-7>div>ha-attribute-icon {
+                          --card-mod-icon: mdi:fan-off;
+                        }
+                        #option-8>div>ha-attribute-icon {
+                          --card-mod-icon: mdi:fan-auto;
+                        }
+          - type: entities
+            entities:
+              - entity: switch.clima_cameretta_dgehnhfaaai_eco_switch
+                name: Modalità ECO
+      - type: entities
+        entities:
+          - entity: switch.clima_studio_dgeicxfaaai_eco_switch
+      - type: thermostat
+        entity: climate.termo_letto
+        features:
+          - type: climate-hvac-modes
+      - type: thermostat
+        entity: climate.termo_cameretta
+        features:
+          - type: climate-hvac-modes
+      - type: thermostat
+        entity: climate.termo_cucina
+        features:
+          - type: climate-hvac-modes
+    type: masonry
+    icon: mdi:leak
+    visible:
+      - user: d4d1f35aef604ed39ac1de70ed507db0
+      - user: f0e6ae5b825d422898b6b950b6b2e43a
+  - type: sections
+    max_columns: 4
+    title: Casa Condivisa
+    path: casa
+    icon: mdi:home
+    visible:
+      - user: 0fc1818b4ffa40a693c8573fe3d8f170
+      - user: d4d1f35aef604ed39ac1de70ed507db0
+      - user: f0e6ae5b825d422898b6b950b6b2e43a
+      - user: d3f97b67ecd344c0b338219caeee7c51
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading_style: title
+          - type: entities
+            entities:
+              - entity: switch.cancello
+              - entity: switch.scorrevole
+              - entity: switch.garage
+              - entity: light.luce_garage
+              - entity: binary_sensor.presenza_garage
+          - color: none
+            type: entities
+            entities:
+              - entity: switch.scaldabagno
+                icon: mdi:water-boiler-auto
+              - entity: sensor.scaldabagno_power
+              - entity: sensor.scaldabagno_energy
+              - entity: automation.vergara_scaldabagno_surplus
+                name: Gestione intelligente
+              - entity: input_boolean.escludi_automazione_scaldabagno
+                name: Manuale
+          - type: entities
+            entities:
+              - type: custom:template-entity-row
+                entity: sensor.goodwe_vergara_active_power
+                state: '{{ states(''sensor.goodwe_vergara_active_power'') }} W'
+                color: >
+                  {% if states('sensor.goodwe_vergara_active_power')|float >= 0
+                  %}
+                    green
+                  {% else %}
+                    red
+                  {% endif %}
+              - entity: sensor.goodwe_vergara_battery_state_of_charge
+              - entity: sensor.goodwe_vergara_house_consumption
+              - entity: sensor.goodwe_vergara_pv_power_total
+              - entity: sensor.goodwe_vergara_battery_voltage
+      - type: grid
+        cards:
+          - type: heading
+            heading_style: title
+            heading: Adesso
+          - type: custom:power-flow-card-plus
+            entities:
+              battery:
+                entity: sensor.goodwe_vergara_battery_power
+                state_of_charge: sensor.goodwe_vergara_battery_state_of_charge
+                show_state_of_charge: true
+                color_state_of_charge_value: true
+                invert_state: false
+                state_of_charge_unit_white_space: false
+                color_icon: color_dynamically
+                color_circle: color_dynamically
+                color_value: true
+                display_zero: false
+              grid:
+                color_value: true
+                invert_state: true
+                power_outage: {}
+                entity: sensor.goodwe_vergara_active_power
+              solar:
+                secondary_info: {}
+                entity: sensor.goodwe_vergara_pv_power
+              home:
+                color_value: true
+                color_icon: true
+              individual:
+                - entity: sensor.scaldabagno_power
+                  name: Scaldabagno
+              fossil_fuel_percentage:
+                icon: mdi:solar-panel
+                name: P&P
+                color_value: true
+                color_icon: true
+                state_type: power
+            clickable_entities: true
+            display_zero_lines:
+              mode: show
+              transparency: 50
+              grey_color:
+                - 189
+                - 189
+                - 189
+            use_new_flow_rate_model: true
+            min_flow_rate: 0.75
+            max_flow_rate: 6
+            max_expected_power: 2000
+            min_expected_power: 0.01
+            transparency_zero_lines: 0
+            disable_dots: false
+            kilo_threshold: 1000
+            base_decimals: 0
+            kilo_decimals: 1
+      - type: grid
+        cards:
+          - type: heading
+            heading: Nuova sezione
+          - type: history-graph
+            entities:
+              - entity: sensor.goodwe_vergara_active_power
+                name: Contatore
+              - entity: sensor.goodwe_vergara_pv_power
+                name: Fotovoltaico
+              - entity: sensor.goodwe_vergara_house_consumption
+                name: Consumo
+            title: Fotovoltaico
+            hours_to_show: 12
+            min_y_axis: 0
+            grid_options:
+              columns: 24
+              rows: auto
+          - type: history-graph
+            entities:
+              - entity: sensor.goodwe_vergara_battery_power
+                name: Potenza Batteria
+              - entity: sensor.goodwe_vergara_battery_state_of_charge
+                name: SOC
+              - entity: sensor.goodwe_vergara_battery_voltage
+            title: Batteria
+            hours_to_show: 24
+        column_span: 2
+      - type: grid
+        cards:
+          - type: heading
+            heading: Nuova sezione
+    cards: []
+  - title: Prova
+    path: prova
+    icon: mdi:account
+    badges: []
+    cards:
+      - type: grid
+        square: false
+        columns: 1
+        cards:
+          - type: horizontal-stack
+            cards:
+              - type: button
+                tap_action:
+                  action: toggle
+                entity: button.sp5_resume_print
+                icon: mdi:play
+                name: Resume
+                show_state: false
+                show_icon: true
+                show_name: true
+                hold_action:
+                  action: none
+                card_mod:
+                  style: |
+                    :host {
+                      --paper-item-icon-color: green;
+                    }
+              - type: button
+                tap_action:
+                  action: toggle
+                entity: button.sp5_pause_print
+                icon: mdi:motion-pause-outline
+                name: Pause
+                show_state: false
+                show_icon: true
+                show_name: true
+                hold_action:
+                  action: none
+                card_mod:
+                  style: |
+                    :host {
+                      --paper-item-icon-color: yellow;
+                    }
+              - type: button
+                tap_action:
+                  action: toggle
+                entity: button.sp5_cancel_print
+                icon: mdi:cancel
+                name: Cancel
+                show_state: false
+                show_name: true
+                show_icon: true
+                hold_action:
+                  action: none
+                card_mod:
+                  style: |
+                    :host {
+                      --paper-item-icon-color: red;
+                    }
+              - type: button
+                tap_action:
+                  action: toggle
+                entity: button.sp5_firmware_restart
+                icon: mdi:restart
+                name: FW Restart
+                show_state: false
+                show_icon: true
+                show_name: true
+                hold_action:
+                  action: none
+                card_mod:
+                  style: |
+                    :host {
+                      --paper-item-icon-color: lightblue;
+                    }
+              - type: button
+                tap_action:
+                  action: toggle
+                entity: button.sp5_emergency_stop
+                icon: mdi:alert-octagon-outline
+                name: Emergency
+                show_state: false
+                show_icon: true
+                show_name: true
+                hold_action:
+                  action: none
+                card_mod:
+                  style: |
+                    :host {
+                      --paper-item-icon-color: red;
+                    }
+      - type: gauge
+        entity: sensor.sp5_progress
+        min: 0
+        max: 100
+        severity:
+          green: 90
+          yellow: 50
+          red: 0
+        name: Print progress
+      - type: grid
+        square: false
+        columns: 1
+        cards:
+          - type: picture-entity
+            entity: camera.sp5
+            name: 3DPrinterCam
+            show_state: false
+            show_name: false
+            camera_view: live
+            card_mod:
+              style: |
+                ha-card {
+                  transition: transform 0s;
+                  transform: rotate(180deg);
+                }
+                ha-dialog {
+                  transform: rotate(180deg);
+                }
+          - show_state: true
+            show_name: true
+            camera_view: live
+            type: picture-entity
+            entity: camera.sp5_thumbnail
+            name: Current Print
+            camera_image: camera.sp5_thumbnail
+      - show_name: true
+        show_icon: true
+        show_state: true
+        type: glance
+        entities:
+          - entity: sensor.sp5_current_display_message
+            name: Message
+          - entity: sensor.sp5_printer_state
+            name: State
+          - entity: sensor.sp5_current_print_state
+            name: Current State
+          - entity: sensor.sp5_speed_factor
+            name: Speed %
+            icon: mdi:layers-triple
+          - entity: sensor.sp5_progress
+            name: Progress
+          - entity: sensor.sp5_print_duration
+            name: Duration
+          - entity: sensor.sp5_print_eta
+            name: Eta
+          - entity: sensor.sp5_print_projected_total_duration
+            name: Total Time
+            icon: mdi:layers-triple
+          - entity: sensor.sp5_print_time_left
+            name: Time left
+            icon: mdi:layers-edit
+          - entity: binary_sensor.sp5_encoder_sensor
+            name: Encoder
+          - entity: binary_sensor.sp5_filament_sensor
+            name: Bed Power
+          - entity: sensor.sp5_current_layer
+            name: Power
+            icon: mdi:power
+            tap_action:
+              action: toggle
+          - entity: sensor.sp5_total_layer
+          - entity: sensor.sp5_filament_used
+          - entity: sensor.sp5_slicer_print_duration_estimate
+          - entity: sensor.sp5_slicer_print_time_left_estimate
+        columns: 4
+        state_color: true
+      - type: custom:mini-graph-card
+        name: Extruder
+        align_state: center
+        icon: mdi:thermometer-lines
+        hour24: true
+        hours_to_show: 1
+        points_per_hour: 60
+        show:
+          labels: true
+          fill: true
+        entities:
+          - entity: sensor.sp5_extruder_temperature
+            name: Extruder
+            color: red
+      - type: custom:mini-graph-card
+        name: Bed
+        align_state: center
+        icon: mdi:thermometer-lines
+        hour24: true
+        hours_to_show: 2
+        points_per_hour: 60
+        show:
+          labels: true
+          fill: true
+        entities:
+          - entity: sensor.sp5_bed_temperature
+            name: Bed
+            color: green
+      - type: grid
+        square: false
+        columns: 1
+        cards:
+          - type: horizontal-stack
+            cards:
+              - type: button
+                entity: sensor.sp5_fan0
+                name: Fan
+                icon: mdi:fan
+                show_state: true
+                show_name: true
+                show_icon: true
+              - type: button
+                entity: sensor.sp5_extruder
+                name: Extruder
+                icon: mdi:fan-chevron-down
+                show_state: true
+                show_name: true
+                show_icon: true
+              - type: button
+                entity: sensor.sp5_driver_fan
+                name: TMC fan
+                icon: mdi:fan-alert
+                show_state: true
+                show_name: true
+                show_icon: true
+              - type: button
+                entity: binary_sensor.sp5_encoder_sensor
+                name: Encoder
+                icon: mdi:printer-3d-nozzle-alert
+                show_icon: true
+                show_name: true
+                show_state: true
+              - type: button
+                entity: binary_sensor.sp5_filament_sensor
+                icon: mdi:printer-3d-nozzle-alert-outline
+                name: Sensor Sw
+                show_icon: true
+                show_name: true
+                show_state: true
+      - type: custom:mini-graph-card
+        name: Temperature
+        align_state: center
+        icon: mdi:thermometer-lines
+        hour24: true
+        hours_to_show: 2
+        points_per_hour: 60
+        show:
+          labels: true
+          fill: true
+        entities:
+          - entity: sensor.sp5_idm_coil_temp
+            name: IDM
+            color: yellow
+          - entity: sensor.sp5_skrat_temp
+            name: Skrat
+            color: grey
+          - entity: sensor.sp5_stepper_x_temp
+            name: Step X
+            color: red
+          - entity: sensor.sp5_stepper_y_temp
+            name: Step Y
+            color: green
+          - entity: sensor.sp5_tvbox_temp
+            name: TvBox
+            color: purple
+    visible:
+      - user: 85dfe23084c945e2bcc28e4d029c6a09
+      - user: f0e6ae5b825d422898b6b950b6b2e43a
+  - type: sections
+    max_columns: 4
+    title: Stampanti
+    path: stampanti
+    icon: mdi:printer-3d
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: X1C
+            heading_style: title
+            icon: mdi:printer-3d
+          - type: tile
+            entity: switch.x1c_abilita_fotocamera
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: 9
+              rows: 1
+          - type: tile
+            entity: light.x1c_luce_camera_di_stampa
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: 9
+              rows: 1
+          - type: tile
+            entity: number.x1c_temperatura_target_piatto
+            name: Bed Temp
+            show_entity_picture: false
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: tile
+            entity: number.x1c_temperatura_target_ugello
+            name: Extr. Temp
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: fan.x1c_ventola_di_raffreddamento
+            name: Fan
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: tile
+            entity: select.x1c_velocita_di_stampa
+            name: Speed
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: fan.x1c_ventola_ausiliaria
+            name: Aux Fan
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: fan.x1c_ventola_camera_di_stampa
+            name: Chamber Fan
+            vertical: false
+            features_position: bottom
+          - type: tile
+            grid_options:
+              columns: 6
+              rows: 1
+            entity: button.x1c_sospendi_stampa
+            name: Pausa
+            vertical: false
+            features_position: bottom
+          - type: tile
+            grid_options:
+              columns: 6
+              rows: 1
+            entity: button.x1c_riprendi_stampa
+            name: Riprendi
+            vertical: false
+            features_position: bottom
+          - type: tile
+            grid_options:
+              columns: 9
+              rows: 1
+            entity: button.x1c_interrompi_stampa
+            name: Interrompi Stampa
+            vertical: false
+            features_position: bottom
+        column_span: 1
+      - type: grid
+        cards:
+          - type: heading
+            heading: Nuova sezione
+          - camera_view: auto
+            fit_mode: cover
+            type: picture-glance
+            title: X1C
+            image:
+              media_content_id: https://demo.home-assistant.io/stub_config/kitchen.png
+            entities:
+              - entity: switch.x1c_abilita_fotocamera
+              - entity: light.x1c_luce_camera_di_stampa
+                icon: mdi:led-on
+            camera_image: camera.x1c_camera
+      - type: grid
+        cards:
+          - type: heading
+            heading: X1C AMS 1
+            heading_style: title
+          - type: tile
+            entity: sensor.x1c_ams_1_temperatura
+            name: AMS Temp
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_ams_1_indice_umidita
+            name: Umidità
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_ams_1_slot_1
+            name: Bobina 1
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_ams_1_slot_2
+            name: Bobina 2
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_ams_1_slot_3
+            name: Bobina 3
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_ams_1_slot_4
+            name: Bobina 4
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: binary_sensor.x1c_ams_1_attivo
+            name: Stato
+            vertical: false
+            features_position: bottom
+          - type: heading
+            heading: X1C Bobina Esterna
+            heading_style: title
+          - type: tile
+            entity: binary_sensor.x1c_externalspool_attivo
+            name: Stato
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_externalspool_bobina_esterna
+            name: Bobina Ext
+            vertical: false
+            features_position: bottom
+      - type: grid
+        cards:
+          - type: heading
+            heading: X1C
+          - type: tile
+            entity: camera.x1c_camera
+            show_entity_picture: true
+            vertical: false
+            features_position: bottom
+          - type: tile
+            grid_options:
+              rows: 2
+              columns: 6
+            entity: image.x1c_immagine_modello
+            name: Progetto
+            show_entity_picture: true
+            vertical: true
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_fase_corrente
+            name: Stato
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_stato_di_stampa
+            name: Stato
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_progressi_di_stampa
+            name: Progresso
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_strato_corrente
+            name: Layer corrente
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_livelli_totali
+            name: Layers Totali
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_grammatura_stampa
+            name: Peso Stampa
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_piatto_attivo
+            name: Materiale
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_dimensione_ugello
+            name: Ugello
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_tipo_di_ugello
+            name: Ugello
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_file_gcode_scaricato
+            name: File
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: 12
+              rows: 1
+          - type: tile
+            entity: sensor.x1c_nome_attivita
+            name: Attività
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_oggetti_saltati
+            name: Oggetti esclusi
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_oggetti_stampabili
+            name: Oggetti stampabili
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_ora_inizio
+            name: Inizio
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: binary_sensor.x1c_registra_timelapse
+            name: Timelapse
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: binary_sensor.x1c_stato_del_filamento_di_estrusore
+            name: Filamento
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_temperatura_camera
+            name: Temp Camera
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_temperatura_ugello
+            name: Temp
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_temperatura_target_ugello
+            name: Temp Target
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_temperatura_piatto
+            name: Temp Bed
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_temperatura_target_piatto
+            name: Temp Bed Target
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_tempo_di_fine
+            name: Fine
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_tempo_rimanente
+            name: Tempo rimanente
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_tipo_di_stampa
+            name: Connessione
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_tipo_piano_di_stampa
+            name: Tipo Piatto
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.x1c_velocita_ventola_heatbreak
+            name: Fan Hotend
+            vertical: false
+            features_position: bottom
+    visible:
+      - user: f0e6ae5b825d422898b6b950b6b2e43a
+    cards: []
+  - title: Echo
+    path: echo
+    icon: mdi:tablet
+    badges: []
+    card_mod:
+      style: |
+        ha-card {
+      transform: scale(2.0); }
+    cards:
+      - type: history-graph
+        entities:
+          - entity: sensor.goodwe_house_consumption
+            name: Consumo
+          - entity: sensor.goodwe_back_up_l1_power
+            name: Backup
+          - entity: sensor.goodwe_active_power
+            name: Contatore
+        title: Potenza
+        hours_to_show: 24
+      - type: history-graph
+        entities:
+          - sun.sun
+        hours_to_show: 24
+      - type: entities
+        entities:
+          - entity: sensor.fotovoltaico_potenza
+          - entity: sensor.fotovoltaico_tensione
+          - entity: sensor.fotovoltaico_corrente
+          - entity: sensor.fotovoltaico_temperatura
+          - entity: switch.fotovoltaico
+        title: Fotovoltaico P&P
+        show_header_toggle: false
+      - type: entities
+        entities:
+          - entity: sensor.daily_energia_batteria_prelevata
+            name: Batteria caricata oggi
+          - entity: sensor.daily_energia_batteria_ceduta
+            name: Batteria scaricata oggi
+          - entity: sensor.goodwe_battery_voltage
+          - entity: sensor.goodwe_battery_temperature
+        title: Batteria Accumulo
+      - type: entities
+        entities:
+          - entity: sensor.goodwe_active_power
+            name: Active Power
+          - entity: sensor.goodwe_battery_state_of_charge
+            name: Battery State of Charge
+          - entity: sensor.goodwe_house_consumption
+            name: House Consumption
+          - entity: sensor.goodwe_meter_total_energy_export
+            name: Meter Total Energy (export)
+          - entity: sensor.goodwe_meter_total_energy_import
+            name: Meter Total Energy (import)
+          - entity: sensor.goodwe_pv_power
+            name: PV Power
+          - entity: sensor.goodwe_today_s_pv_generation
+            name: Today's PV Generation
+          - entity: sensor.goodwe_total_battery_charge
+            name: Total Battery Charge
+          - entity: sensor.goodwe_total_battery_discharge
+            name: Total Battery Discharge
+          - entity: sensor.goodwe_fotovoltaico_energia_totale
+          - entity: sensor.goodwe_battery_temperature
+        title: GoodWe
+      - type: entities
+        entities:
+          - entity: sensor.potenza_prelevata
+          - entity: sensor.potenza_ceduta
+          - entity: sensor.contabilizzatore_1_potenza
+          - entity: sensor.contabilizzatore_tensione
+          - entity: sensor.contabilizzatore_1_corrente
+          - entity: sensor.contabilizzatore_hz
+          - entity: sensor.contabilizzatore_1_pf
+          - entity: sensor.contabilizzatore_2_potenza
+          - entity: sensor.contabilizzatore_2_corrente
+        title: Contabilizzatore
+        show_header_toggle: false
+        state_color: false
+      - type: gauge
+        entity: sensor.fotovoltaico_potenza
+        segments:
+          - from: 0
+            color: '#d00100'
+          - from: 50
+            color: '#ffa600'
+          - from: 150
+            color: '#ffc700'
+          - from: 300
+            color: '#00b400'
+          - from: 620
+            color: '#0015fd'
+        min: 0
+        max: 650
+        unit: W
+        name: Fotovoltaico
+        needle: true
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: gauge
+        entity: sensor.contabilizzatore_2_potenza
+        name: Carico 1
+        max: 3000
+        min: 0
+        needle: true
+        segments:
+          - from: 2000
+            color: '#d00100'
+          - from: 1000
+            color: '#ffa600'
+          - from: 500
+            color: '#ffc700'
+          - from: 200
+            color: '#00b400'
+          - from: 0
+            color: '#0015fd'
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: gauge
+        name: Surplus Energia
+        min: 0
+        max: 400
+        needle: true
+        entity: sensor.potenza_ceduta
+        segments:
+          - from: 0
+            color: '#d00100'
+          - from: 20
+            color: '#ffa600'
+          - from: 50
+            color: '#ffc700'
+          - from: 100
+            color: '#00b400'
+          - from: 200
+            color: '#0015fd'
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: gauge
+        entity: sensor.contabilizzatore_1_potenza
+        min: 0
+        max: 6500
+        needle: true
+        severity:
+          green: 500
+          yellow: 3500
+          red: 5500
+        unit: W
+        name: Contabilizzatore potenza netta
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: entities
+        entities:
+          - switch.tapo
+          - sensor.tapo_current_power
+          - sensor.tapo_month_energy
+          - sensor.tapo_month_runtime
+          - binary_sensor.tapo_overheat
+          - sensor.tapo_signal_level
+          - sensor.tapo_today_energy
+          - sensor.tapo_today_runtime
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: history-graph
+        entities:
+          - entity: sensor.goodwe_battery_power
+            name: Potenza Batteria
+          - entity: sensor.goodwe_battery_state_of_charge
+            name: SOC
+        hours_to_show: 24
+        title: Batteria
+      - type: entities
+        entities:
+          - entity: switch.tripla_1
+            name: Surplus 100W
+          - entity: sensor.percentage_power_charger_1
+            secondary_info: last-updated
+            icon: mdi:light-switch-off
+          - entity: switch.tripla_2
+            name: Surplus 250W
+          - entity: sensor.percentage_power_charger_2
+          - entity: switch.tripla_3
+            name: Surplus 400W
+          - entity: sensor.percentage_power_charger_3
+        show_header_toggle: false
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: custom:mini-graph-card
+        name: Temperature
+        align_state: center
+        icon: mdi:thermometer-lines
+        hour24: true
+        hours_to_show: 2
+        points_per_hour: 60
+        show:
+          labels: true
+          fill: true
+        entities:
+          - entity: sensor.daily_energia_fotovoltaico
+            name: Fotovoltaico
+            color: purple
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+      - type: entities
+        entities:
+          - entity: input_number.fake_sensor
+          - entity: script.fake_sensor_reset
+          - entity: input_number.fake_watt
+          - entity: switch.heltec_switch_gpio48
+          - entity: light.heltec_pwm_gpio46
+            secondary_info: brightness
+          - entity: switch.heltec_switch_gpio47
+          - entity: sensor.heltec_battery_voltage_gpio1
+          - entity: binary_sensor.battery_voltage_exceeded
+          - entity: input_boolean.battery_voltage_exceeded_today
+          - entity: automation.deg_variabile
+          - entity: automation.batteria_accumulo
+          - entity: automation.battery_exceed
+        title: Heltec
+        state_color: true
+        visibility:
+          - condition: time
+            after: '00:00:00'
+            before: '00:00:00'
+    visible:
+      - user: f0e6ae5b825d422898b6b950b6b2e43a
+      - user: d4d1f35aef604ed39ac1de70ed507db0
+    type: sections
+    sections:
+      - type: grid
+        cards:
+          - type: custom:bar-card
+            direction: right
+            height: 40px
+            decimal: 0
+            positions:
+              icon: outside
+              indicator: inside
+              name: inside
+              value: inside
+              minmax: 'off'
+            entities:
+              - entity: sensor.goodwe_house_consumption
+                name: Consumo Casa
+                icon: mdi:home-lightning-bolt
+                max: 6000
+                animation:
+                  state: 'on'
+                severity:
+                  - from: 0
+                    to: 500
+                    color: '#0091d7'
+                  - from: 500
+                    to: 1000
+                    color: '#009b0c'
+                  - from: 1000
+                    to: 2000
+                    color: '#ae9900'
+                  - from: 2000
+                    to: 10000
+                    color: '#ff2b30'
+              - entity: sensor.potenza_contatore
+                name: Rete
+                icon: mdi:transmission-tower
+                max: 4500
+                animation:
+                  state: 'on'
+                color: '#e19300'
+              - entity: sensor.goodwe_battery_power
+                name: Batteria
+                max: '4000'
+                limit_value: true
+                animation:
+                  state: 'on'
+                decimal: '0'
+                positions:
+                  icon: outside
+                color: '#1bb300'
+              - entity: sensor.fotovoltaico_potenza_percentuale
+                name: SOLAR P&P
+                icon: mdi:solar-power-variant-outline
+                max: '100'
+                min: '0'
+                direction: right
+                color: '#00afff'
+                animation: {}
+              - entity: sensor.goodwe_fotovoltaico_potenza_percentuale
+                name: SOLAR GOODWE
+                icon: mdi:solar-power-variant
+                max: '100'
+                animation:
+                  state: 'on'
+                severity:
+                  - from: 0
+                    to: 500
+                    color: '#0db0ff'
+                  - from: 500
+                    to: 2000
+                    color: '#00ea12'
+                  - from: 2000
+                    to: 4000
+                    color: '#ffe000'
+                  - from: 4000
+                    to: 10000
+                    color: '#ff2b30'
+                min: '0'
+            columns: '1'
+            animation:
+              state: 'on'
+          - type: custom:sensor-bar-card-plus
+            entities:
+              - entity: sensor.goodwe_house_consumption
+                name: CASA
+                icon: mdi:home-lightning-bolt
+                max: 6000
+              - entity: sensor.potenza_contatore
+                name: RETE
+                icon: mdi:transmission-tower
+                max: 4500
+              - entity: sensor.goodwe_battery_power
+                name: BATT
+                max: 4000
+              - entity: sensor.fotovoltaico_potenza_percentuale
+                name: P&P
+                icon: mdi:solar-power-variant-outline
+                max: 100
+                min: 0
+              - entity: sensor.goodwe_fotovoltaico_potenza_percentuale
+                name: GOODWE
+                icon: mdi:solar-power-variant
+                max: 100
+                min: 0
+            columns: 1
+            entity_row: true
+            animation:
+              state: 'on'
+          - square: false
+            type: grid
+            cards:
+              - type: custom:modern-circular-gauge
+                unit: W
+                name: Fotovoltaico Totale
+                header_position: top
+                gauge_foreground_style:
+                  color: adaptive
+                gauge_background_style:
+                  width: 2
+                  color: adaptive
+                max: 8500
+                min: 0
+                smooth_segments: true
+                adaptive_icon_color: true
+                segments:
+                  - from: 1000
+                    color:
+                      - 11
+                      - 182
+                      - 239
+                  - from: 3000
+                    color:
+                      - 43
+                      - 255
+                      - 0
+                  - from: 6500
+                    color:
+                      - 252
+                      - 161
+                      - 3
+                  - from: 8500
+                    color:
+                      - 255
+                      - 0
+                      - 0
+                secondary: {}
+                icon: mdi:solar-power-variant
+                tap_action:
+                  action: navigate
+                  navigation_path: /energy
+                entity: >-
+                  {{ (states('sensor.fotovoltaico_potenza_2') | float(0) +
+                  states('sensor.goodwe_fotovoltaico_potenza') | float(0) ) |
+                  float(0) | round(0) }}
+                card_mod:
+                  style: |
+                    ha-card .name {
+                      font-size: 10px !important;
+                      margin-top: 0px;
+                    }
+              - type: custom:modern-circular-gauge
+                unit: W
+                name: Consumo Energetico
+                header_position: top
+                gauge_foreground_style:
+                  color: adaptive
+                gauge_background_style:
+                  width: 2
+                  color: adaptive
+                max: 8500
+                min: 0
+                smooth_segments: true
+                adaptive_icon_color: true
+                segments:
+                  - from: 1000
+                    color:
+                      - 11
+                      - 182
+                      - 239
+                  - from: 3000
+                    color:
+                      - 43
+                      - 255
+                      - 0
+                  - from: 6500
+                    color:
+                      - 252
+                      - 161
+                      - 3
+                  - from: 8500
+                    color:
+                      - 255
+                      - 0
+                      - 0
+                secondary: {}
+                icon: mdi:transmission-tower
+                entity: sensor.contabilizzatore_potenza_netta
+                card_mod:
+                  style: |
+                    ha-card .name {
+                      font-size: 10px !important;
+                      margin-top: 0px;
+                    }
+              - type: custom:modern-circular-gauge
+                unit: W
+                name: Potenza Ceduta
+                header_position: top
+                gauge_foreground_style:
+                  color: adaptive
+                gauge_background_style:
+                  width: 2
+                  color: adaptive
+                max: 8500
+                min: 0
+                smooth_segments: true
+                adaptive_icon_color: true
+                segments:
+                  - from: 1000
+                    color:
+                      - 11
+                      - 182
+                      - 239
+                  - from: 3000
+                    color:
+                      - 43
+                      - 255
+                      - 0
+                  - from: 6500
+                    color:
+                      - 252
+                      - 161
+                      - 3
+                  - from: 8500
+                    color:
+                      - 255
+                      - 0
+                      - 0
+                secondary: {}
+                icon: mdi:transmission-tower-export
+                entity: sensor.potenza_ceduta
+                card_mod:
+                  style: |
+                    ha-card .name {
+                      font-size: 10px !important;
+                      margin-top: 0px;
+                    }
+            columns: 3
+          - type: custom:power-flow-card-plus
+            entities:
+              battery:
+                entity: sensor.goodwe_battery_power
+                state_of_charge: sensor.goodwe_battery_state_of_charge
+                show_state_of_charge: true
+                color_state_of_charge_value: true
+                invert_state: false
+                state_of_charge_unit_white_space: false
+                color_icon: color_dynamically
+                color_circle: color_dynamically
+                color_value: true
+                display_zero: false
+              grid:
+                entity: sensor.potenza_contatore
+                color_value: true
+                invert_state: false
+                power_outage: {}
+              solar:
+                entity: sensor.fotovoltaico_potenza_totale
+                secondary_info:
+                  entity: sensor.fotovoltaico_potenza
+              home:
+                color_value: true
+                color_icon: true
+              individual:
+                - entity: sensor.potenza_ct2
+                  color_value: true
+                  name: P. Induzione
+                  icon: mdi:washing-machine
+                  display_zero: true
+                  display_zero_state: true
+                  calculate_flow_rate: false
+                  show_direction: false
+                  unit_white_space: true
+                  color:
+                    - 128
+                    - 255
+                    - 255
+                - entity: sensor.goodwe_back_up_l1_power
+                  secondary_info:
+                    entity: sensor.contabilizzatore_1_potenza
+                    icon: mdi:counter
+                  icon: mdi:home-battery
+              fossil_fuel_percentage:
+                icon: mdi:solar-panel
+                name: P&P
+                color_value: true
+                color_icon: true
+                state_type: power
+            clickable_entities: true
+            display_zero_lines:
+              mode: show
+              transparency: 50
+              grey_color:
+                - 189
+                - 189
+                - 189
+            use_new_flow_rate_model: true
+            min_flow_rate: 0.75
+            max_flow_rate: 6
+            max_expected_power: 2000
+            min_expected_power: 0.01
+            transparency_zero_lines: 0
+            disable_dots: false
+            kilo_threshold: 1000
+            base_decimals: 0
+            kilo_decimals: 1
+            visibility:
+              - condition: state
+                entity: ...
+      - type: grid
+        cards:
+          - type: custom:clock-weather-card
+            entity: weather.forecast_casa
+            sun_entity: sun.sun
+            temperature_sensor: sensor.outdoor_temp
+            humidity_sensor: sensor.outdoor_humidity
+            weather_icon_type: fill
+            animated_icon: true
+            forecast_rows: 0
+            locale: it
+            time_format: 24
+            date_pattern: cccc, dd.MM.yyyy
+            hide_today_section: false
+            hide_forecast_section: true
+            hide_clock: false
+            hide_date: false
+            hourly_forecast: false
+            use_browser_time: true
+            show_decimal: false
+            apparent_sensor: sensor.real_feel_temperature
+            aqi_sensor: sensor.air_quality_index
+            card_mod:
+              style: |
+                ha-card {
+                  {% set p = states('sensor.potenza_contatore') | float(0) %}
+                  {% set s = states('sensor.goodwe_battery_power') | float(0) %}
+                  {% set fotovoltaico = states('sensor.goodwe_fotovoltaico_potenza_percentuale') | float(0) %}
+                  {% set fotovoltaicoTarget = states('sensor.fotovoltaico_potenza_percentuale') | float(0) %}
+
+                  {% if p > 10000 %}
+                    background: rgba(255, 0, 0, 1);
+                  {% elif (fotovoltaico + 10) < fotovoltaicoTarget %}
+                    background: rgba(100, 180, 255, 0.56);
+                  {% elif s < -1000 %}
+                    background: rgba(100, 180, 255, 0.56);
+                  {% elif p < -250 %}
+                    background: rgba(100, 180, 255, 0.56);
+                  {% elif p < -1 %}
+                    background: rgba(0, 255, 0, 0.18);
+                  {% elif p < 250 %}
+                    background: rgba(255, 255, 0, 0.25);
+                  {% elif p > 200 %}
+                    background: rgba(255, 0, 0, 0.25);
+                  {% else %}
+                    background: var(--ha-card-background);
+                  {% endif %}
+                }
+          - type: custom:config-template-card
+            entities:
+              - sensor.potenza_contatore
+            card:
+              type: custom:clockpro-card
+              language: it
+              weather_entity: weather.forecast_casa
+              location_entity: zone.home
+              sun_entity: sun.sun
+              pro_icon: true
+              pro_icon_pack: /local/community/clockpro-card/icon-pack.js,
+              pro_icons_folder: your-folder-name,
+              card:
+                height: 150
+              background:
+                mode: color
+                color: |-
+                  ${(() => {
+                    const p = Number(states['sensor.potenza_contatore'].state);
+                    const s = Number(states['sensor.goodwe_battery_power'].state);
+                    const fotovoltaico = Number(states['sensor.goodwe_fotovoltaico_potenza_percentuale'].state);
+                    const fotovoltaicoTarget = Number(states['sensor.fotovoltaico_potenza_percentuale'].state);
+
+                    if (p > 10000) return '#FF0000FF';
+                    if ((fotovoltaico + 10) < fotovoltaicoTarget) return '#64B4FF8F';
+                    if (s < -1000) return '#64B4FF8F';
+                    if (p < -250) return '#64B4FF8F';
+                    if (p < -1) return '#00FF002F';
+                    if (p < 250) return '#FFFF003F';
+                    if (p > 200) return '#FF00003F';
+                    
+                    return '#00000000 ';
+                  })()}
+                radius: 10
+                padding: 0
+              elements:
+                time:
+                  pos:
+                    left: 15
+                    bottom: 80
+                  font:
+                    size: 70
+                    weight: 650
+                  letter_spacing: -2
+                  gaps:
+                    hh_colon: 26
+                    colon_mm: 26
+                  colors:
+                    first_digit: '#ff3b30'
+                    rest: '#FFFFFF'
+                date:
+                  pos:
+                    left: 14
+                    bottom: 10
+                  font:
+                    size: 30
+                    weight: 650
+                  letter_spacing: -0.5
+                  color: '#FFFFFF'
+                  format: dd MMMM
+                day:
+                  pos:
+                    left: 14
+                    bottom: 45
+                  font:
+                    size: 30
+                    weight: 750
+                  letter_spacing: -0.5
+                  color: '#FFFFFF'
+                icon:
+                  pos:
+                    right: 80
+                    top: 30
+                  icon:
+                    size: 110
+                    color: '#FFFFFF'
+                  transform:
+                    x: 0
+                    'true': -12
+                    scale: 1.12
+                  source: weather
+                  default_icon: mdi:alert-circle-outline
+                details:
+                  pos:
+                    right: 14
+                    top: 0
+                  font:
+                    size: 20
+                    weight: 650
+                  letter_spacing: -0.2
+                  color: '#FFFFFF'
+                location:
+                  pos:
+                    right: 14
+                    bottom: 5
+                  font:
+                    size: 20
+                    weight: 800
+                  letter_spacing: -0.2
+                  color: '#FFFFFF'
+                forecast:
+                  show: false
+                  days: 5
+                  pos:
+                    left: 16
+                    bottom: 8
+                  gap: 18
+                  day:
+                    font:
+                      size: 14
+                      weight: 700
+                    letter_spacing: 0.4
+                    color: '#FFFFFF'
+                    uppercase: true
+                  icon:
+                    size: 34
+                    color: '#FFFFFF'
+                  temp:
+                    font:
+                      size: 16
+                      weight: 700
+                    letter_spacing: -0.2
+                    color: '#FFFFFF'
+                    format: maxmin
+            visibility:
+              - condition: state
+                entity: ...
+          - type: custom:apexcharts-card
+            graph_span: 12h
+            update_interval: 30s
+            header:
+              show: false
+            yaxis:
+              - min: 0
+                max: 100
+                decimals: 0
+                apex_config:
+                  tickAmount: 5
+                  labels:
+                    offsetX: -27
+                    formatter: |
+                      EVAL:function(value) {
+                        return Math.round(value) + '%';
+                      }
+            apex_config:
+              legend:
+                show: false
+              chart:
+                height: 150
+              grid:
+                padding:
+                  top: -18
+                  right: 15
+                  bottom: -18
+                  left: 0
+            series:
+              - entity: sensor.goodwe_fotovoltaico_potenza_percentuale
+                name: GoodWe
+                type: area
+                opacity: 0.9
+                stroke_width: 2
+              - entity: sensor.fotovoltaico_potenza_percentuale
+                name: Fotovoltaico
+                type: area
+                opacity: 0.4
+                stroke_width: 2
+          - type: custom:mini-graph-card
+            entities:
+              - entity: sensor.goodwe_battery_state_of_charge
+            hours_to_show: 24
+            points_per_hour: 2
+            height: 130
+            line_width: 3
+            show:
+              name: false
+              icon: false
+              state: false
+              graph: line
+              fill: fade
+              labels: true
+              points: false
+              legend: true
+              extrema: false
+            color_thresholds:
+              - value: 0
+                color: '#ff2b30'
+              - value: 20
+                color: '#ff8346'
+              - value: 50
+                color: '#ffe000'
+              - value: 80
+                color: '#00c853'
+          - graph: line
+            type: sensor
+            entity: sensor.goodwe_battery_state_of_charge
+            detail: 2
+            hours_to_show: 24
+            limits: {}
+            name: BATTERIA
+            grid_options:
+              columns: 12
+              rows: 3
+          - type: history-graph
+            grid_options:
+              rows: 3
+            entities:
+              - entity: sensor.goodwe_battery_state_of_charge
+                name: SOC
+            hours_to_show: 24
+            show_names: false
+            expand_legend: false
+            min_y_axis: 0
+            max_y_axis: 100
+            visibility:
+              - condition: state
+                entity: ...
+          - type: custom:bolder-weather-card
+            entity: weather.forecast_casa
+            sun_entity: sun.sun
+            use_day_night_colors: false
+            hide_forecast_section: true
+            hide_clock: false
+            show_humidity: true
+            show_decimal: false
+            humidity_sensor: sensor.umidita_soggiorno
+            apparent_sensor: sensor.temperatura_soggiorno
+            time_format: '24'
+            hide_today_section: false
+            use_time_as_primary: true
+            show_low_high_on_primary: false
+            show_dots_between_primary_elements: false
+            use_browser_time: false
+            visibility:
+              - condition: state
+                entity: ...
+    max_columns: 2
+    dense_section_placement: true
+  - type: sections
+    max_columns: 4
+    title: Jeep
+    path: jeep
+    icon: mdi:car-back
+    sections:
+      - type: grid
+        cards:
+          - type: map
+            entities:
+              - device_tracker.jeep
+          - type: entities
+            entities:
+              - entity: device_tracker.jeep
+              - entity: sensor.jeep_address
+              - entity: sensor.jeep_allarme
+              - entity: sensor.jeep_altitude
+              - entity: sensor.jeep_batteria
+              - entity: sensor.jeep_geofence
+              - entity: sensor.jeep_ignition
+              - entity: binary_sensor.jeep_movimento
+              - entity: sensor.jeep_posizione
+              - entity: sensor.jeep_sat
+              - entity: binary_sensor.jeep_stato
+              - entity: sensor.jeep_velocita
+              - entity: sensor.jeep_batteria_gps
+              - entity: sensor.jeep_batteria_auto
+              - entity: sensor.jeep_battery_voltage
+              - entity: sensor.jeep_posizione_gnss
+              - entity: sensor.jeep_supply_voltage

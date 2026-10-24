@@ -274,7 +274,7 @@ Paste them into a dashboard's YAML mode.
 
 Files: [`home_assistant/automations/PI30 battery management/`](<home_assistant/automations/PI30 battery management/>)
 - `Automazione - PI30 Batteria MAN.yaml`
-- `Script - PI30 batteria da caricare.yaml`, `Script - PI30 batteria piena.yaml`, `Script - PI30 batteria da scaricare.yaml`
+- `Script - PI30 batteria da caricare.yaml`, `Script - PI30 batteria da scaricare.yaml`
 - `Aiutanti - PI30 Ricarica Batteria.yaml` (the helpers to create)
 - `Aiutante - PI30 Modalita MAN (Sensore template).yaml` (optional: the mode as one steady value)
 
@@ -311,17 +311,17 @@ Sensors read:
 
 | Mode | Script | Output | Charger | Bulk and float | Utility current |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| IN CARICA (charge) | PI30 batteria da caricare | utility first | solar + utility | charging values (29.0 / 27.0V) | from 2A, modulated |
-| PIENA (full) | PI30 batteria piena | utility first | solar only | unchanged | unchanged |
+| IN CARICA (charge, and PIENA, full) | PI30 batteria da caricare | utility first | solar + utility | charging values (29.0 / 27.0V) | from 2A, modulated |
 | IN SCARICA / MANTENIMENTO (discharge / hold) | PI30 batteria da scaricare | SBU | solar + utility | at the hold voltage (25.5V) | 10A |
 
 - **CHARGE**: the PI30 loads go to the grid and the pack charges with the
   surplus. On entry the utility current starts at 2A; then the automation
-  sets it (below).
-- **FULL**: pack at 95% or more with surplus. The loads go to the grid (to the
-  PV the GoodWe is clipping) and the charger stays off: every return to
-  CHARGE on a full pack restarted bulk at 29.0V (five times in 40 minutes on
-  29 Sep 2026, with unbalanced cells hitting the BMS overcharge protection).
+  sets it (below). The pack looks after itself: the charger goes from bulk
+  to float and, once full, holds it in float with the loads on the surplus.
+  Until 24 Oct 2026 there was a separate FULL mode (utility first, solar
+  only), from when every return to CHARGE on a full pack started at 15-30A
+  and bulk reached 29.0V within a minute (five times in 40 minutes on 29
+  Sep). With entry at 2A and the 10-minute anti-oscillation it is not needed.
 - **DISCHARGE and HOLD** are the same script. The pack powers the loads until
   it falls to the inverter's recharge voltage; there the PI30 moves the loads
   to the grid and, with bulk and float at the hold voltage, the charger keeps
@@ -336,16 +336,16 @@ scripts never overlap. Do not call them as direct actions
 (`action: script.pi30_...`): that action uses the configuration id, which for
 a script created in the UI is not the entity id (on 24 Oct 2026 every run
 stopped with "unknown action" and nothing started with the pack at 24.0V).
-The entity ids must be `script.pi30_batteria_da_caricare`,
-`script.pi30_batteria_piena` and `script.pi30_batteria_da_scaricare`.
+The entity ids must be `script.pi30_batteria_da_caricare` and
+`script.pi30_batteria_da_scaricare`.
 
 **The scripts are not the mode.** A script is `on` only while it runs, a
 moment at each run. The mode is read from the priorities; the optional
 `PI30 Modalità MAN` helper (Template > Sensor, file
 `Aiutante - PI30 Modalita MAN (Sensore template).yaml`) shows it as
-`IN CARICA`, `PIENA`, `IN SCARICA` or `MANTENIMENTO` (SBU output with the loads
-on the grid, or the pack within 0.3V of the hold voltage), `ALTRO` for
-priorities set by hand.
+`IN CARICA`, `PIENA` (in CHARGE with the charger in float), `IN SCARICA` or
+`MANTENIMENTO` (SBU output with the loads on the grid, or the pack within 0.3V
+of the hold voltage), `ALTRO` for priorities set by hand.
 
 #### Helpers
 
@@ -368,36 +368,29 @@ protect the pack (on 25 Sep 2026 the BMS shut the inverter down at 22:00).
    and 10A the pack comes back up. A trigger reacts within a minute of the
    threshold. 2A are not enough: on 26 Sep the PI30 read +2A while the pack
    fell from 23.6V to 22.8V and the BMS cut it.
-2. **PI30 off the grid**: in CHARGE or FULL but not in Line mode for 5
-   minutes, with the priorities unchanged for as long, the PI30 is not using
-   the grid. Persistent notification "PI30 non sta usando la rete" (id
+2. **PI30 off the grid**: in CHARGE but not in Line mode for 5 minutes, with
+   the priorities unchanged for as long, the PI30 is not using the grid.
+   Persistent notification "PI30 non sta usando la rete" (id
    `pi30_fuori_rete`, with the grid voltage read by the PI30), current to 2A,
    no modulation. The notification goes away once it is back in Line mode.
    On 23 Oct 2026 the PI30 AC input read 0 V from 14:49 to 20:40: the PI30, in
    CHARGE, went to Battery mode with the meter at -300 W. The 10-second drops
    (voltage dips to 103-151 V) do not count.
-3. **Charging from the GoodWe**: in CHARGE above 2A, as soon as the GoodWe
-   battery delivers more than 250 W the current drops at once to the step
-   that cancels that energy (plus any grid import), leaving at most 100 W:
-   40A with 466 W goes to 20A, 60A with 1.7 kW to 2A.
-4. **GoodWe glitch**: a GoodWe sensor `unavailable`/`unknown` for less than 10
+3. **GoodWe glitch**: a GoodWe sensor `unavailable`/`unknown` for less than 10
    minutes decides nothing (on 4-5 Oct sixteen gaps of a few seconds had
    caused eleven mode changes).
-5. **Charging at the minimum is not enough** ("WHICH MEANS"): in CHARGE at 2A
+4. **Charging at the minimum is not enough** ("WHICH MEANS"): in CHARGE at 2A
    with the meter importing >= 500 W or the GoodWe delivering >= 200 W for 60
    seconds → DISCHARGE. Under 60 s it is the load transfer, a transient.
-6. **Anti-oscillation**: moved to DISCHARGE less than 10 minutes ago, it
+5. **Anti-oscillation**: moved to DISCHARGE less than 10 minutes ago, it
    stays. Without it, with a borderline surplus the PI30 went CHARGE ↔
    DISCHARGE every 20-40 seconds (20-34 times a day between 27 Sep and 2 Oct).
-7. **Full pack** (calculated SOC >= 95%): outside CHARGE, FULL with surplus,
-   otherwise DISCHARGE; FULL goes to DISCHARGE with >= 500 W import or >= 200
-   W from the GoodWe for 60 seconds. In CHARGE (float) nothing changes.
-8. **Visible surplus**: outside CHARGE the PI30 enters only if the export
+6. **Visible surplus**: outside CHARGE the PI30 enters only if the export
    covers its loads plus 60 W, or is at the export cap minus 50 W (250 W:
    above 300 W the GoodWe clips the PV and the real surplus is not visible).
    Otherwise DISCHARGE. On 4 Oct the PI30 tried CHARGE with 500 W of loads and
    120-240 W of export, six times in one evening.
-9. **CHARGE**: it enters at 2A and the current is modulated from the next run.
+7. **CHARGE**: it enters at 2A and the current is modulated from the next run.
 
 #### Current modulation in CHARGE
 
@@ -408,14 +401,19 @@ temperature limit.
   next step ((step - current) × PI30 voltage) or at the 250 W cap, GoodWe
   battery below 100 W, and the current unchanged for 20 seconds (the GoodWe
   sensors are slower than the PI30).
-- **Down** one step with the meter importing >= 300 W or the GoodWe
-  delivering >= 200 W (or with unknown powers).
+- **Down at once**, as soon as the meter imports >= 300 W or the GoodWe
+  delivers >= 200 W: to the highest step that stops the draw, leaving at most
+  100 W (40A with 466 W from the GoodWe to 20A, 60A with 1.7 kW to 2A, 40A
+  with +600 W at the meter to 20A). It never charges from the grid or the
+  GoodWe battery. Two triggers (GoodWe over 200 W, meter over 300 W) react
+  without waiting for the 10 seconds of the others.
+- **Down gradually** only for temperature (below).
 - **In between it stays** and is not rewritten to the inverter.
-- It can only go up with the GoodWe full (100%, or 99% with its battery idle:
-  its BMS may stop at 99 for hours; or >= 55V, or 100% below 53V), or at 2A
+- It can go up with the GoodWe full (100%, or 99% with its battery idle: its
+  BMS may stop at 99 for hours; or >= 55V, or 100% below 53V), or from 2A
   with no import and no GoodWe discharge. With the GoodWe below 100%, above
   2A the current can only go down: the GoodWe has priority.
-- With unknown GoodWe SOC or voltage, or unknown powers: 2A.
+- With unknown powers, or unknown GoodWe SOC or voltage: 2A.
 
 Before 23 Oct 2026 the step-up rule was "meter < 300 W and GoodWe < 200 W",
 which also fired with the meter at zero and the GoodWe already delivering
@@ -431,7 +429,7 @@ stopping the charge; between the limit minus 5°C and the limit it stays;
 below it rises normally. It also applies to the 10A of DISCHARGE (passed to
 the script as `current_limit`).
 
-#### Why DISCHARGE and HOLD are one script
+#### Why only two scripts
 
 Until 24 Oct 2026 DISCHARGE was "SBU + solar only" and a second script (KEEP)
 set bulk and float to the hold voltage when the pack reached the threshold;
@@ -443,7 +441,8 @@ had to step in. With bulk and float already at the hold voltage DISCHARGE
 stops at the minimum by itself: the inverter moves to the grid at the
 recharge voltage and the charger covers only the own consumption. The three
 scripts became one, and the undervoltage threshold stays only as a safety
-net. The hold is not a flat line: the PI30 charger switches on and off
+net. For the same reason FULL merged into CHARGE (above): in both cases the
+charger looks after the pack. The hold is not a flat line: the PI30 charger switches on and off
 around the setpoint, and in SBU the inverter returns to Battery mode after
 float, so at night it alternates 10-15 minutes on the grid and 10-15 on the
 battery near the hold voltage. At 24.0V (2%, steep curve) the voltage made a
@@ -457,9 +456,12 @@ triggers:
   - trigger: homeassistant          # startup
   - trigger: time_pattern           # every 10 minutes
     minutes: /10
-  - trigger: numeric_state          # GoodWe delivering over 250 W
+  - trigger: numeric_state          # GoodWe delivering over 200 W
     entity_id: sensor.goodwe_battery_power
-    above: 250
+    above: 200
+  - trigger: numeric_state          # meter importing over 300 W
+    entity_id: sensor.potenza_contatore
+    above: 300
   - trigger: state                  # GoodWe sensors and meter, held 10 s
     entity_id:
       - sensor.goodwe_battery_state_of_charge
@@ -835,8 +837,8 @@ empty → full cycles, replayed minute by minute against the automation).**
   about ten minutes, 20-34 switches a day, and each return to CHARGE with a
   full pack restarted the bulk stage at 29.0V. The SOC count is not
   affected (it sees the real power either way), the pack and the inverter
-  are; see the anti-oscillation and full-pack rules of the charging
-  automation above.
+  are; see the anti-oscillation and the 2A entry into CHARGE of the
+  charging automation above.
 
 **Starting value.** Not needed any more: with the voltage correction, a
 wrong starting value is fixed within about 15-20 minutes of discharge

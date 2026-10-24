@@ -282,7 +282,7 @@ di una dashboard.
 
 File: [`home_assistant/automations/PI30 battery management/`](<home_assistant/automations/PI30 battery management/>)
 - `Automazione - PI30 Batteria MAN.yaml`
-- `Script - PI30 batteria da caricare.yaml`, `Script - PI30 batteria piena.yaml`, `Script - PI30 batteria da scaricare.yaml`
+- `Script - PI30 batteria da caricare.yaml`, `Script - PI30 batteria da scaricare.yaml`
 - `Aiutanti - PI30 Ricarica Batteria.yaml` (gli aiutanti da creare)
 - `Aiutante - PI30 Modalita MAN (Sensore template).yaml` (facoltativo: la modalità come un valore fisso)
 
@@ -319,18 +319,18 @@ Sensori letti:
 
 | Modalità | Script | Uscita | Carica | Bulk e float | Corrente da rete |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| IN CARICA | PI30 batteria da caricare | rete prima | solare + rete | di carica (29.0 / 27.0V) | da 2A, modulata |
-| PIENA | PI30 batteria piena | rete prima | solo solare | invariati | invariata |
+| IN CARICA (e PIENA) | PI30 batteria da caricare | rete prima | solare + rete | di carica (29.0 / 27.0V) | da 2A, modulata |
 | IN SCARICA / MANTENIMENTO | PI30 batteria da scaricare | SBU | solare + rete | alla tensione minima (25.5V) | 10A |
 
 - **IN CARICA**: i carichi della PI30 vanno sulla rete e la batteria si carica
   con il surplus. Entrando, la corrente da rete parte da 2A; poi la regola
-  l'automazione (vedi sotto).
-- **PIENA**: batteria al 95% o più con surplus. I carichi vanno sulla rete
-  (sul fotovoltaico che la GoodWe sta tagliando) e il caricabatterie resta
-  spento: ogni ritorno in CARICA su un pacco pieno faceva ripartire il bulk a
-  29.0V (il 29/09/2026 cinque volte in 40 minuti, con le celle sbilanciate
-  alla protezione di sovraccarica del BMS).
+  l'automazione (vedi sotto). La batteria si gestisce da sola: il
+  caricabatterie passa da bulk a float e, quando è piena, la tiene in float
+  con i carichi sul surplus. Fino al 24/10/2026 c'era una modalità PIENA a
+  parte (uscita "rete prima", carica "solo solare"), nata quando ogni ritorno
+  in CARICA su un pacco pieno ripartiva a 15-30A e il bulk arrivava a 29.0V
+  in un minuto (il 29/09 cinque volte in 40 minuti). Con l'ingresso a 2A e i
+  10 minuti di anti-oscillazione non serve più.
 - **IN SCARICA e MANTENIMENTO** sono lo stesso script. La batteria alimenta i
   carichi finché scende alla tensione di recharge dell'inverter; lì la PI30
   passa i carichi sulla rete e, con bulk e float alla tensione minima, il
@@ -346,16 +346,15 @@ diretta (`action: script.pi30_...`): quell'azione usa l'ID di configurazione,
 che per uno script creato da interfaccia è diverso dall'ID entità (il
 24/10/2026 ogni esecuzione si fermava con "azione sconosciuta", e con la
 batteria a 24.0V non è partito niente). Gli ID entità devono essere
-`script.pi30_batteria_da_caricare`, `script.pi30_batteria_piena` e
-`script.pi30_batteria_da_scaricare`.
+`script.pi30_batteria_da_caricare` e `script.pi30_batteria_da_scaricare`.
 
 **Gli script non sono la modalità.** Uno script è `on` solo mentre gira,
 pochi istanti a ogni esecuzione. La modalità si legge dalle priorità;
 l'aiutante facoltativo `PI30 Modalità MAN` (Template > Sensore, file
 `Aiutante - PI30 Modalita MAN (Sensore template).yaml`) la mostra come
-`IN CARICA`, `PIENA`, `IN SCARICA` o `MANTENIMENTO` (uscita SBU con i carichi
-sulla rete, o batteria entro 0.3V dalla tensione minima), `ALTRO` per
-priorità impostate a mano.
+`IN CARICA`, `PIENA` (in CARICA con il caricabatterie in float), `IN SCARICA`
+o `MANTENIMENTO` (uscita SBU con i carichi sulla rete, o batteria entro 0.3V
+dalla tensione minima), `ALTRO` per priorità impostate a mano.
 
 #### Aiutanti
 
@@ -379,36 +378,29 @@ non protegge la batteria (il 25/09/2026 il BMS ha spento l'inverter alle
    minima e 10A la batteria risale. Un trigger interviene entro un minuto
    dalla soglia. 2A non bastano: il 26/09 la PI30 segnava +2A mentre la
    batteria scendeva da 23.6V a 22.8V e il BMS l'ha staccata.
-2. **PI30 fuori rete**: in CARICA o PIENA ma non in Line mode da 5 minuti, con
-   le priorità ferme da almeno altrettanto, la PI30 non usa la rete. Notifica
+2. **PI30 fuori rete**: in CARICA ma non in Line mode da 5 minuti, con le
+   priorità ferme da almeno altrettanto, la PI30 non usa la rete. Notifica
    persistente "PI30 non sta usando la rete" (id `pi30_fuori_rete`, con la
    tensione di rete letta dalla PI30), corrente a 2A, nessuna modulazione. La
    notifica sparisce quando torna in Line mode. Il 23/10/2026 l'ingresso AC
    della PI30 è rimasto a 0V dalle 14:49 alle 20:40: la PI30 in CARICA è
    andata in Battery mode con il contatore a -300W. Le uscite di 10 secondi
    (buchi di tensione a 103-151V) non contano.
-3. **Carica dalla GoodWe**: in CARICA sopra 2A, appena la batteria GoodWe
-   eroga più di 250W la corrente scende subito allo step che annulla
-   quell'energia (più l'eventuale prelievo), lasciandone al massimo 100W: da
-   40A con 466W a 20A, da 60A con 1.7kW a 2A.
-4. **Glitch GoodWe**: un sensore GoodWe `unavailable`/`unknown` da meno di 10
+3. **Glitch GoodWe**: un sensore GoodWe `unavailable`/`unknown` da meno di 10
    minuti non decide nulla (il 04-05/10 sedici buchi di pochi secondi avevano
    causato undici cambi di modalità).
-5. **Carica al minimo ma non basta** ("VUOL DIRE CHE"): in CARICA a 2A con il
+4. **Carica al minimo ma non basta** ("VUOL DIRE CHE"): in CARICA a 2A con il
    contatore che preleva >= 500W o la GoodWe che eroga >= 200W per 60 secondi
    → SCARICA. Sotto i 60 s è il trasferimento dei carichi, un transitorio.
-6. **Anti-oscillazione**: passata a SCARICA da meno di 10 minuti, resta. Senza,
+5. **Anti-oscillazione**: passata a SCARICA da meno di 10 minuti, resta. Senza,
    con il surplus al limite la PI30 passava CARICA ↔ SCARICA ogni 20-40
    secondi (20-34 volte al giorno tra il 27/09 e il 02/10).
-7. **Batteria piena** (SOC calcolato >= 95%): fuori dalla CARICA, PIENA se c'è
-   surplus, altrimenti SCARICA; da PIENA si esce in SCARICA con prelievo >=
-   500W o GoodWe >= 200W per 60 secondi. In CARICA (float) niente cambia.
-8. **Surplus visibile**: fuori dalla CARICA si entra solo se l'immissione
+6. **Surplus visibile**: fuori dalla CARICA si entra solo se l'immissione
    copre i carichi della PI30 più 60W, oppure è al limite di immissione meno
    50W (250W: oltre i 300W la GoodWe taglia il fotovoltaico e il surplus vero
    non si vede). Altrimenti SCARICA. Il 04/10 la PI30 tentava la CARICA con
    500W di carichi e 120-240W di immissione, sei volte in una sera.
-9. **CARICA**: si entra a 2A e la corrente si modula dall'esecuzione
+7. **CARICA**: si entra a 2A e la corrente si modula dall'esecuzione
    successiva.
 
 #### Modulazione della corrente in CARICA
@@ -420,14 +412,19 @@ temperatura.
   step successivo ((step - corrente) × tensione PI30) o al limite di 250W,
   batteria GoodWe sotto 100W e corrente ferma da 20 secondi (i sensori
   GoodWe sono più lenti della PI30).
-- **Giù** di uno step con il contatore che preleva >= 300W o la GoodWe che
-  eroga >= 200W (o con le potenze sconosciute).
+- **Giù subito**, appena il contatore preleva >= 300W o la GoodWe eroga >=
+  200W: allo step più alto che smette di prelevare, lasciandone al massimo
+  100W (da 40A con 466W dalla GoodWe a 20A, da 60A con 1.7kW a 2A, da 40A con
+  +600W al contatore a 20A). Non si carica mai con la rete o con la batteria
+  GoodWe. Due trigger (GoodWe oltre 200W, contatore oltre 300W) intervengono
+  senza aspettare i 10 secondi degli altri.
+- **Giù gradualmente** solo per la temperatura (sotto).
 - **In mezzo resta** e non viene riscritta sull'inverter.
-- Si può salire solo con la GoodWe piena (100%, oppure 99% con la batteria
-  ferma: il suo BMS può fermarsi a 99 per ore; oppure >= 55V, o al 100% sotto
-  53V), o a 2A senza prelievo né scarica GoodWe. Con la GoodWe sotto il 100%,
-  sopra 2A la corrente può solo scendere: la GoodWe ha la precedenza.
-- Con SOC o tensione GoodWe sconosciuti, o le potenze sconosciute: 2A.
+- Si può salire con la GoodWe piena (100%, oppure 99% con la batteria ferma:
+  il suo BMS può fermarsi a 99 per ore; oppure >= 55V, o al 100% sotto 53V),
+  o da 2A senza prelievo né scarica GoodWe. Con la GoodWe sotto il 100%, sopra
+  2A la corrente può solo scendere: la GoodWe ha la precedenza.
+- Con le potenze sconosciute, o con SOC o tensione GoodWe sconosciuti: 2A.
 
 Prima (fino al 23/10/2026) si saliva con "contatore < 300W e GoodWe <
 200W", cioè anche con il contatore a zero e la GoodWe che erogava già
@@ -443,7 +440,7 @@ staccare la carica; tra il limite meno 5°C e il limite resta dov'è; sotto
 risale normalmente. Vale anche per i 10A della SCARICA (passati allo script
 come `current_limit`).
 
-#### Perché SCARICA e MANTENIMENTO sono un solo script
+#### Perché due script soli
 
 Fino al 24/10/2026 la SCARICA era "SBU + solo solare" e un secondo script
 (MANTIENI) portava bulk e float alla tensione minima quando la batteria
@@ -455,7 +452,8 @@ doveva intervenire. Con bulk e float già alla tensione minima la SCARICA si
 ferma da sola al minimo: l'inverter passa alla rete alla tensione di
 recharge e il caricabatterie copre solo l'autoconsumo. I tre script sono
 diventati uno, e la soglia di sottotensione resta solo come rete di
-sicurezza. Il mantenimento non è una linea piatta: il caricabatterie del
+sicurezza. Per lo stesso motivo PIENA è confluita in CARICA (vedi sopra): in
+tutti e due i casi è il caricabatterie a gestire la batteria. Il mantenimento non è una linea piatta: il caricabatterie del
 PI30 è acceso/spento attorno al setpoint, e in SBU l'inverter torna in
 Battery mode dopo il float, quindi di notte alterna 10-15 minuti sulla rete
 e 10-15 in batteria vicino alla tensione minima. A 24.0V (2%, curva ripida)
@@ -469,9 +467,12 @@ triggers:
   - trigger: homeassistant          # avvio
   - trigger: time_pattern           # ogni 10 minuti
     minutes: /10
-  - trigger: numeric_state          # GoodWe che eroga oltre 250W
+  - trigger: numeric_state          # GoodWe che eroga oltre 200W
     entity_id: sensor.goodwe_battery_power
-    above: 250
+    above: 200
+  - trigger: numeric_state          # contatore che preleva oltre 300W
+    entity_id: sensor.potenza_contatore
+    above: 300
   - trigger: state                  # sensori GoodWe e contatore, tenuti 10 s
     entity_id:
       - sensor.goodwe_battery_state_of_charge
@@ -864,9 +865,9 @@ l'automazione).**
   PI30 passava CARICA ↔ SCARICA ogni 20-40 secondi per una decina di minuti,
   20-34 commutazioni al giorno, e ogni ritorno in CARICA a batteria piena
   faceva ripartire il bulk a 29.0V. Il conteggio del SOC non ne risente
-  (vede la potenza reale in ogni caso), il pacco e l'inverter sì: vedi le
-  regole anti-oscillazione e batteria piena dell'automazione di carica più
-  sopra.
+  (vede la potenza reale in ogni caso), il pacco e l'inverter sì: vedi
+  l'anti-oscillazione e l'ingresso in CARICA a 2A dell'automazione di carica
+  più sopra.
 
 **Valore di partenza.** Non serve più: con la correzione in tensione un
 valore di partenza sbagliato si corregge entro 15-20 minuti di scarica

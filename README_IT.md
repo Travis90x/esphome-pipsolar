@@ -315,6 +315,73 @@ Sensori letti:
 | `sensor.heltec_pi30_output_active_power` | carichi della PI30 |
 | `sensor.heltec_pi30_pi30_grid_voltage` | tensione di rete letta dalla PI30 (solo per la notifica) |
 
+#### Schema
+
+```
+OGNI ESECUZIONE
+(all'avvio, ogni 10 min, a ogni cambio di contatore o GoodWe,
+ subito se la GoodWe eroga > 200W o il contatore preleva > 300W)
+│
+├─ 0. SICUREZZE, prima di tutto
+│   ├─ Ricarica spenta ("PI30 Ricarica Batteria" off) ......► SCARICA
+│   ├─ Batteria PI30 ≤ 24.0V (soglia di sottotensione) .....► SCARICA
+│   ├─ In CARICA ma PI30 non in Line mode da 5 min .........► notifica + 2A
+│   │  (rete assente sull'ingresso AC)
+│   ├─ Sensore GoodWe non disponibile da < 10 min ..........► aspetta
+│   └─ Contatore o potenza GoodWe illeggibili da > 10 min ..► SCARICA
+│
+├─ A. C'È SURPLUS
+│   │  = GoodWe piena (100%, o 99% ferma)
+│   │  E batteria GoodWe che non eroga (< 200W)
+│   │  E immissione in rete che copre i carichi della PI30 + 60W,
+│   │    oppure ≥ 250W (al limite la GoodWe taglia il fotovoltaico)
+│   ▼
+│   IN CARICA (rete prima, solare + rete, bulk 29.0 / float 27.0)
+│   │  entra sempre a 2A
+│   │
+│   ├─ SALE di uno step (2→10→20→30→40→50→60, max "PI30 Max Manual Current")
+│   │     se GoodWe piena
+│   │     E immissione ≥ potenza dello step successivo (o ≥ 250W)
+│   │     E GoodWe ferma (< 100W) E corrente ferma da 20 s
+│   │
+│   ├─ SCENDE SUBITO allo step che smette di prelevare
+│   │     se il contatore preleva ≥ 300W  O  la GoodWe eroga ≥ 200W
+│   │
+│   ├─ SCENDE SUBITO A 2A
+│   │     se manca una lettura: SOC o tensione GoodWe, tensione batteria PI30
+│   │     o se la GoodWe scende sotto il 98% (sta ricaricando: ha la precedenza)
+│   │
+│   ├─ SCENDE GRADUALMENTE, uno step ogni 2 min, fino a 2A
+│   │     se il dissipatore è al limite di temperatura, o non si legge
+│   │
+│   ├─ RESTA, senza riscrivere nulla
+│   │     negli altri casi (anche con la GoodWe al 98-99%:
+│   │     non sale e non esce, niente oscillazioni 99 ↔ 100)
+│   │
+│   ├─ "A ZERO" = esce in SCARICA (sotto 2A l'inverter non va)
+│   │     se è già a 2A E (contatore ≥ 300W O GoodWe ≥ 200W
+│   │     O GoodWe sotto il 98%) per 60 s
+│   │
+│   └─ batteria piena: il caricabatterie passa da solo
+│      da bulk a float e la tiene lì ..................► sensore: PIENA
+│
+└─ B. NO SURPLUS
+    │  (GoodWe non piena, GoodWe che eroga, prelievo, immissione insufficiente)
+    ▼
+    IN SCARICA (SBU, solare + rete, bulk = float = 25.5V, 10A)
+    │  ci resta almeno 10 minuti (anti-oscillazione)
+    │
+    ├─ batteria sopra 25.5V: alimenta i carichi ......► sensore: IN SCARICA
+    │
+    ├─ batteria scesa a 25.5V (tensione di recharge):
+    │  carichi sulla rete (BYPASS) e caricabatterie
+    │  che la tiene a 25.5V coprendo i ~50W ...........► sensore: MANTENIMENTO
+    │  (lo fa l'inverter da solo; 10A anche con la temperatura
+    │   illeggibile, perché a 2A il mantenimento non basta)
+    │
+    └─ torna IN CARICA quando c'è di nuovo surplus (ramo A)
+```
+
 #### Modalità e script
 
 | Modalità | Script | Uscita | Carica | Bulk e float | Corrente da rete |
@@ -386,19 +453,24 @@ non protegge la batteria (il 25/09/2026 il BMS ha spento l'inverter alle
    della PI30 è rimasto a 0V dalle 14:49 alle 20:40: la PI30 in CARICA è
    andata in Battery mode con il contatore a -300W. Le uscite di 10 secondi
    (buchi di tensione a 103-151V) non contano.
-3. **Glitch GoodWe**: un sensore GoodWe `unavailable`/`unknown` da meno di 10
-   minuti non decide nulla (il 04-05/10 sedici buchi di pochi secondi avevano
-   causato undici cambi di modalità).
+3. **Letture GoodWe mancanti**: un sensore GoodWe `unavailable`/`unknown` da
+   meno di 10 minuti non decide nulla (il 04-05/10 sedici buchi di pochi
+   secondi avevano causato undici cambi di modalità). Contatore o potenza
+   GoodWe illeggibili da più di 10 minuti → SCARICA: senza di loro non si vede
+   il prelievo, e la SCARICA tiene da sola la batteria al minimo. Fino al
+   24/10/2026 in questo caso si caricava a 2A.
 4. **Carica al minimo ma non basta** ("VUOL DIRE CHE"): in CARICA a 2A con il
-   contatore che preleva >= 500W o la GoodWe che eroga >= 200W per 60 secondi
-   → SCARICA. Sotto i 60 s è il trasferimento dei carichi, un transitorio.
+   contatore che preleva >= 300W, la GoodWe che eroga >= 200W o la GoodWe
+   sotto il 98% per 60 secondi → SCARICA, le stesse soglie delle discese (fino al 24/10/2026 500W). Sotto
+   i 60 s è il trasferimento dei carichi, un transitorio.
 5. **Anti-oscillazione**: passata a SCARICA da meno di 10 minuti, resta. Senza,
    con il surplus al limite la PI30 passava CARICA ↔ SCARICA ogni 20-40
    secondi (20-34 volte al giorno tra il 27/09 e il 02/10).
-6. **Surplus visibile**: fuori dalla CARICA si entra solo se l'immissione
-   copre i carichi della PI30 più 60W, oppure è al limite di immissione meno
-   50W (250W: oltre i 300W la GoodWe taglia il fotovoltaico e il surplus vero
-   non si vede). Altrimenti SCARICA. Il 04/10 la PI30 tentava la CARICA con
+6. **Surplus**: fuori dalla CARICA si entra solo con la GoodWe piena (100%, o
+   99% con la batteria ferma) e un'immissione che copre i carichi della PI30
+   più 60W, oppure al limite di immissione meno 50W (250W: oltre i 300W la
+   GoodWe taglia il fotovoltaico e il surplus vero non si vede). Altrimenti
+   SCARICA. Il 04/10 la PI30 tentava la CARICA con
    500W di carichi e 120-240W di immissione, sei volte in una sera.
 7. **CARICA**: si entra a 2A e la corrente si modula dall'esecuzione
    successiva.
@@ -418,13 +490,18 @@ temperatura.
   +600W al contatore a 20A). Non si carica mai con la rete o con la batteria
   GoodWe. Due trigger (GoodWe oltre 200W, contatore oltre 300W) intervengono
   senza aspettare i 10 secondi degli altri.
+- **Giù subito a 2A** se manca una lettura (SOC o tensione GoodWe, tensione
+  della batteria PI30) o se la GoodWe scende sotto il 98%: sta ricaricando e ha
+  la precedenza. Già a 2A, dopo 60 secondi così, SCARICA.
 - **Giù gradualmente** solo per la temperatura (sotto).
 - **In mezzo resta** e non viene riscritta sull'inverter.
-- Si può salire con la GoodWe piena (100%, oppure 99% con la batteria ferma:
-  il suo BMS può fermarsi a 99 per ore; oppure >= 55V, o al 100% sotto 53V),
-  o da 2A senza prelievo né scarica GoodWe. Con la GoodWe sotto il 100%, sopra
-  2A la corrente può solo scendere: la GoodWe ha la precedenza.
-- Con le potenze sconosciute, o con SOC o tensione GoodWe sconosciuti: 2A.
+- Si sale solo con la GoodWe piena (100%, oppure 99% con la batteria ferma:
+  il suo BMS può fermarsi a 99 per ore). Se in CARICA la GoodWe scende al
+  98-99% la corrente non sale ma la PI30 non esce (sotto il 98%, vedi sopra): il SOC GoodWe oscilla tra
+  99 e 100, e il 04/10 un 99 di un attimo aveva mandato in SCARICA una PI30 in
+  float con -311W al contatore. Le vecchie eccezioni (GoodWe sopra 55V, al
+  100% sotto 53V, salita da 2 a 10A con la GoodWe non piena) sono sparite il
+  24/10/2026: quella mattina la GoodWe era a 55V al 91% mentre caricava a 3kW.
 
 Prima (fino al 23/10/2026) si saliva con "contatore < 300W e GoodWe <
 200W", cioè anche con il contatore a zero e la GoodWe che erogava già
@@ -437,8 +514,10 @@ riscritto sull'inverter a ogni esecuzione.
 (per esempio 70°C) e `sensor.heltec_pi30_heat_sink_temperature`: dal limite in
 su la corrente da rete scende di uno step ogni 2 minuti fino a 2A, senza
 staccare la carica; tra il limite meno 5°C e il limite resta dov'è; sotto
-risale normalmente. Vale anche per i 10A della SCARICA (passati allo script
-come `current_limit`).
+risale normalmente. Con il limite impostato e la temperatura illeggibile vale
+come oltre il limite. Vale anche per i 10A della SCARICA (passati allo script
+come `current_limit`), ma solo con la temperatura letta: illeggibile, la
+SCARICA resta a 10A, perché a 2A il mantenimento non copre l'autoconsumo.
 
 #### Perché due script soli
 

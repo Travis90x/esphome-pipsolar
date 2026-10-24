@@ -307,6 +307,73 @@ Sensors read:
 | `sensor.heltec_pi30_output_active_power` | PI30 loads |
 | `sensor.heltec_pi30_pi30_grid_voltage` | grid voltage read by the PI30 (notification only) |
 
+#### Diagram
+
+```
+EVERY RUN
+(on startup, every 10 min, on every meter or GoodWe change,
+ at once if the GoodWe delivers > 200 W or the meter imports > 300 W)
+│
+├─ 0. SAFETY FIRST
+│   ├─ Charging off ("PI30 Ricarica Batteria" off) ..........► DISCHARGE
+│   ├─ PI30 pack ≤ 24.0V (undervoltage threshold) ...........► DISCHARGE
+│   ├─ In CHARGE but PI30 not in Line mode for 5 min ........► notification + 2A
+│   │  (no grid on the AC input)
+│   ├─ GoodWe sensor unavailable for < 10 min ...............► wait
+│   └─ Meter or GoodWe power unreadable for > 10 min ........► DISCHARGE
+│
+├─ A. SURPLUS
+│   │  = GoodWe full (100%, or 99% idle)
+│   │  AND GoodWe battery not delivering (< 200 W)
+│   │  AND export covering the PI30 loads + 60 W,
+│   │      or ≥ 250 W (at the cap the GoodWe clips the PV)
+│   ▼
+│   CHARGE (utility first, solar + utility, bulk 29.0 / float 27.0)
+│   │  always enters at 2A
+│   │
+│   ├─ UP one step (2→10→20→30→40→50→60, max "PI30 Max Manual Current")
+│   │     if GoodWe full
+│   │     AND export ≥ power of the next step (or ≥ 250 W)
+│   │     AND GoodWe idle (< 100 W) AND current unchanged for 20 s
+│   │
+│   ├─ DOWN AT ONCE to the step that stops the draw
+│   │     if the meter imports ≥ 300 W  OR  the GoodWe delivers ≥ 200 W
+│   │
+│   ├─ DOWN TO 2A AT ONCE
+│   │     if a reading is missing: GoodWe SOC or voltage, PI30 pack voltage
+│   │     or if the GoodWe drops below 98% (it is recharging: it has priority)
+│   │
+│   ├─ DOWN GRADUALLY, one step every 2 min, to 2A
+│   │     if the heat sink is at the temperature limit, or unreadable
+│   │
+│   ├─ STAYS, nothing rewritten
+│   │     otherwise (also with the GoodWe at 98-99%:
+│   │     no step up and no exit, no 99 ↔ 100 flapping)
+│   │
+│   ├─ "TO ZERO" = goes to DISCHARGE (the inverter has no step below 2A)
+│   │     if already at 2A AND (meter ≥ 300 W OR GoodWe ≥ 200 W
+│   │     OR GoodWe below 98%) for 60 s
+│   │
+│   └─ full pack: the charger goes from bulk to float
+│      by itself and holds it there ...................► helper: PIENA
+│
+└─ B. NO SURPLUS
+    │  (GoodWe not full, GoodWe delivering, import, not enough export)
+    ▼
+    DISCHARGE (SBU, solar + utility, bulk = float = 25.5V, 10A)
+    │  stays at least 10 minutes (anti-oscillation)
+    │
+    ├─ pack above 25.5V: powers the loads ..............► helper: IN SCARICA
+    │
+    ├─ pack down to 25.5V (recharge voltage):
+    │  loads on the grid (BYPASS), charger holding
+    │  it at 25.5V covering the ~50 W ..................► helper: MANTENIMENTO
+    │  (the inverter does it by itself; 10A even with the
+    │   temperature unreadable, as 2A cannot cover the hold)
+    │
+    └─ back to CHARGE when there is surplus again (branch A)
+```
+
 #### Modes and scripts
 
 | Mode | Script | Output | Charger | Bulk and float | Utility current |
@@ -376,19 +443,23 @@ protect the pack (on 25 Sep 2026 the BMS shut the inverter down at 22:00).
    On 23 Oct 2026 the PI30 AC input read 0 V from 14:49 to 20:40: the PI30, in
    CHARGE, went to Battery mode with the meter at -300 W. The 10-second drops
    (voltage dips to 103-151 V) do not count.
-3. **GoodWe glitch**: a GoodWe sensor `unavailable`/`unknown` for less than 10
-   minutes decides nothing (on 4-5 Oct sixteen gaps of a few seconds had
-   caused eleven mode changes).
+3. **Missing GoodWe readings**: a GoodWe sensor `unavailable`/`unknown` for
+   less than 10 minutes decides nothing (on 4-5 Oct sixteen gaps of a few
+   seconds had caused eleven mode changes). Meter or GoodWe power unreadable
+   for more than 10 minutes → DISCHARGE: without them the draw cannot be seen,
+   and DISCHARGE holds the pack at the minimum by itself. Until 24 Oct 2026
+   this case charged at 2A.
 4. **Charging at the minimum is not enough** ("WHICH MEANS"): in CHARGE at 2A
-   with the meter importing >= 500 W or the GoodWe delivering >= 200 W for 60
-   seconds → DISCHARGE. Under 60 s it is the load transfer, a transient.
+   with the meter importing >= 300 W, the GoodWe delivering >= 200 W or the
+   GoodWe below 98% for 60 seconds → DISCHARGE, the same thresholds as the step-downs (500 W until 24
+   Oct 2026). Under 60 s it is the load transfer, a transient.
 5. **Anti-oscillation**: moved to DISCHARGE less than 10 minutes ago, it
    stays. Without it, with a borderline surplus the PI30 went CHARGE ↔
    DISCHARGE every 20-40 seconds (20-34 times a day between 27 Sep and 2 Oct).
-6. **Visible surplus**: outside CHARGE the PI30 enters only if the export
-   covers its loads plus 60 W, or is at the export cap minus 50 W (250 W:
-   above 300 W the GoodWe clips the PV and the real surplus is not visible).
-   Otherwise DISCHARGE. On 4 Oct the PI30 tried CHARGE with 500 W of loads and
+6. **Surplus**: outside CHARGE the PI30 enters only with the GoodWe full (100%,
+   or 99% with its battery idle) and an export covering its loads plus 60 W,
+   or at the export cap minus 50 W (250 W: above 300 W the GoodWe clips the PV
+   and the real surplus is not visible). Otherwise DISCHARGE. On 4 Oct the PI30 tried CHARGE with 500 W of loads and
    120-240 W of export, six times in one evening.
 7. **CHARGE**: it enters at 2A and the current is modulated from the next run.
 
@@ -407,13 +478,20 @@ temperature limit.
   with +600 W at the meter to 20A). It never charges from the grid or the
   GoodWe battery. Two triggers (GoodWe over 200 W, meter over 300 W) react
   without waiting for the 10 seconds of the others.
+- **Down to 2A at once** if a reading is missing (GoodWe SOC or voltage, PI30
+  pack voltage) or if the GoodWe drops below 98%: it is recharging and has
+  priority. Already at 2A, after 60 seconds like that, DISCHARGE.
 - **Down gradually** only for temperature (below).
 - **In between it stays** and is not rewritten to the inverter.
-- It can go up with the GoodWe full (100%, or 99% with its battery idle: its
-  BMS may stop at 99 for hours; or >= 55V, or 100% below 53V), or from 2A
-  with no import and no GoodWe discharge. With the GoodWe below 100%, above
-  2A the current can only go down: the GoodWe has priority.
-- With unknown powers, or unknown GoodWe SOC or voltage: 2A.
+- It only goes up with the GoodWe full (100%, or 99% with its battery idle:
+  its BMS may stop at 99 for hours). If the GoodWe drops to 98-99% during
+  CHARGE the current does not go up but the PI30 does not leave (below 98%,
+  see above): the GoodWe
+  SOC flaps between 99 and 100, and on 4 Oct a momentary 99 had sent a PI30
+  in float to DISCHARGE with -311 W at the meter. The old exceptions (GoodWe
+  above 55V, 100% below 53V, step from 2 to 10A with the GoodWe not full) went
+  on 24 Oct 2026: that morning the GoodWe read 55V at 91% while charging at
+  3 kW.
 
 Before 23 Oct 2026 the step-up rule was "meter < 300 W and GoodWe < 200 W",
 which also fired with the meter at zero and the GoodWe already delivering
@@ -426,8 +504,10 @@ the same value was rewritten to the inverter at every run.
 example 70°C) and `sensor.heltec_pi30_heat_sink_temperature`: from the limit
 up the utility current drops one step every 2 minutes down to 2A, without
 stopping the charge; between the limit minus 5°C and the limit it stays;
-below it rises normally. It also applies to the 10A of DISCHARGE (passed to
-the script as `current_limit`).
+below it rises normally. With the limit set and the temperature unreadable it
+counts as over the limit. It also applies to the 10A of DISCHARGE (passed to
+the script as `current_limit`), but only with a temperature reading:
+unreadable, DISCHARGE keeps 10A, as 2A cannot cover the hold.
 
 #### Why only two scripts
 

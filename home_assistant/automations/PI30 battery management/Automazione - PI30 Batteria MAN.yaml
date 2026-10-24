@@ -1,4 +1,4 @@
-alias: PI30 Battery MAN
+alias: PI30 Batteria MAN
 description: >-
   Logica umana completa: vedi il README.md principale del repository,
   sezione "Modulazione dinamica della carica da rete" (README_IT.md per
@@ -129,12 +129,13 @@ description: >-
   dei carichi sulla rete la batteria GoodWe supera i 200W per qualche
   secondo (il 05/10 alle 10:11 194W), un transitorio, non una scarica.
   RICARICA BATTERIA. Con l'aiutante input_boolean.pi30_ricarica_batteria
-  ("Helper - PI30 Ricarica Batteria (Toggle).yaml") acceso, o assente, la
+  ("Aiutanti - PI30 Ricarica Batteria.yaml") acceso, o assente, la
   batteria si ricarica con la logica normale. Quando lo spegni
   l'automazione memorizza bulk e float attuali (sensor
   ..._battery_bulk_voltage / ..._battery_float_voltage) in
   input_number.pi30_bulk_carica / input_number.pi30_float_carica, poi
-  finché resta spento esegue sempre script.pi30_keep_battery_live: SBU,
+  finché resta spento esegue sempre PI30 batteria minimo
+  (script.pi30_keep_battery_live): SBU,
   "solare + rete", bulk e float alla tensione di mantenimento
   input_number.pi30_keep_battery_live ("PI30 keep battery live", da 24.0V),
   così la batteria non viene ricaricata ma l'inverter la tiene a quella
@@ -175,7 +176,7 @@ description: >-
   di corrente, 20 crolli a 2A). Il trigger goodwe_in_scarica interviene
   appena si superano i 250W, senza i 10 secondi di batteria_stabile. A 2A,
   se la GoodWe eroga ancora almeno 200W per 60 s, il "VUOL DIRE CHE" passa
-  a SCARICA. Non vale per MANTIENI né per keep battery live: lì la corrente
+  a SCARICA. Non vale per MANTIENI né per PI30 batteria minimo: lì la corrente
   serve a non far staccare il BMS.
   ZONA FERMA. In CARICA uno step in su arriva solo con surplus visibile:
   immissione in rete (contatore negativo) almeno pari allo step successivo
@@ -217,8 +218,8 @@ description: >-
   ogni esecuzione si fermava con "azione sconosciuta" e alle 10:20 MANTIENI
   non è partito con la batteria a 24.0V. Gli script aspettano solo
   quando scrivono qualcosa. Lo stato on/off di uno script dice solo che sta
-  girando, non la modalità: per quella c'è l'aiutante "Helper - PI30
-  Modalita MAN (Template sensor).yaml".
+  girando, non la modalità: per quella c'è l'aiutante "Aiutante - PI30
+  Modalita MAN (Sensore template).yaml".
   GOODWE FERMA A 99%. Il BMS della GoodWe può fermare la carica a 99% e
   restarci per ore: con la regola "SOC > 99" la PI30 restava nel ramo
   "GoodWe sotto il 100%", dove la corrente può solo scendere, e non

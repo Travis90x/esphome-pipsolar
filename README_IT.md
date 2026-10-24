@@ -281,10 +281,10 @@ di una dashboard.
 ### Modulazione dinamica della carica da rete
 
 File: [`home_assistant/automations/PI30 battery management/`](<home_assistant/automations/PI30 battery management/>)
-- `Automation - PI30 Battery Charging Intelligent Modulation.yaml`
-- `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery full.yaml`, `Script Battery to keep.yaml`, `Script Battery keep live.yaml`
-- `Helper - PI30 Ricarica Batteria (Toggle).yaml`
-- `Helper - PI30 Modalita MAN (Template sensor).yaml` (facoltativo: la modalità come un valore fisso)
+- `Automazione - PI30 Batteria MAN.yaml`
+- `Script - PI30 batteria da caricare.yaml`, `Script - PI30 batteria da scaricare.yaml`, `Script - PI30 batteria piena.yaml`, `Script - PI30 batteria da mantenere.yaml`, `Script - PI30 batteria minimo.yaml`
+- `Aiutanti - PI30 Ricarica Batteria.yaml`
+- `Aiutante - PI30 Modalita MAN (Sensore template).yaml` (facoltativo: la modalità come un valore fisso)
 
 Obiettivo: decidere, ogni 10 minuti (più all'avvio e ai cambi rilevanti dei
 sensori), se il PI30 debba caricare il suo pacco LiFePO4 dalla rete,
@@ -356,12 +356,13 @@ da rete a 10A anche quando le priorità sono già giuste.
 
 **Ricarica batteria.** Aiutante facoltativo `input_boolean.pi30_ricarica_batteria`
 (Commutatore, nome `PI30 Ricarica Batteria`, vedi
-`Helper - PI30 Ricarica Batteria (Toggle).yaml`). Acceso o assente: la
+`Aiutanti - PI30 Ricarica Batteria.yaml`). Acceso o assente: la
 batteria si ricarica con la logica normale. Spento: l'automazione memorizza
 bulk e float attuali (`sensor.heltec_pi30_display_pi30_battery_bulk_voltage` /
 `_float_voltage`) nei due aiutanti `input_number.pi30_bulk_carica` /
 `input_number.pi30_float_carica` (solo nel momento in cui lo spegni), poi
-finché resta spento esegue sempre `script.pi30_keep_battery_live`: SBU, carica
+finché resta spento esegue sempre PI30 batteria minimo
+(`script.pi30_keep_battery_live`): SBU, carica
 "solare + rete", **bulk e float alla tensione di mantenimento**
 `input_number.pi30_keep_battery_live` (aiutante "PI30 keep battery live", da
 24.0V, il minimo accettato: `PCVV`/`PBFT` 24.0-29.2V; consigliato 25.8V, vedi
@@ -414,11 +415,22 @@ pochi secondi a ogni esecuzione dell'automazione, quindi
 `script.pi30_batteria_da_caricare` si accende e si spegne di continuo anche
 mentre la PI30 carica senza interruzioni. La modalità sta nelle due priorità
 dell'inverter; l'aiutante facoltativo
-`Helper - PI30 Modalita MAN (Template sensor).yaml` (Impostazioni → Dispositivi
+`Aiutante - PI30 Modalita MAN (Sensore template).yaml` (Impostazioni → Dispositivi
 e servizi → Aiutanti → Crea aiutante → Template → Sensore, nome `PI30 Modalità
-MAN`, che diventa `sensor.pi30_modalita_man`) la mostra come `CARICA`,
-`PIENA`, `SCARICA`, `MANTIENI` o `KEEP LIVE`, con `- NON SULLA RETE` quando la
-PI30 è in CARICA o PIENA ma non in Line mode.
+MAN`, che diventa `sensor.pi30_modalita_man`) la mostra come `IN CARICA`,
+`PIENA`, `IN SCARICA` o `MANTENIMENTO` (batteria scarica tenuta alla tensione
+minima: PI30 batteria da mantenere a ricarica accesa, PI30 batteria minimo a
+ricarica spenta).
+
+**PI30 batteria da mantenere e PI30 batteria minimo.** Fanno la stessa cosa
+sull'inverter (SBU, carica "solare + rete", bulk e float alla tensione di
+mantenimento) e cambiano solo quando e quanto: PI30 batteria da mantenere
+(MANTIENI) serve a ricarica accesa, parte alla soglia di sottotensione,
+prende al massimo 10A dalla rete e la MAN la lascia da sola quando torna il
+surplus; PI30 batteria minimo serve a ricarica spenta, resta finché non
+riaccendi la ricarica e prende fino a 40A. Gli ID entità degli script non
+cambiano con i nomi (`script.pi30_keep_battery_live` resta quello di PI30
+batteria minimo): modifica gli script esistenti, non crearne di nuovi.
 
 Step di corrente da rete: `2 10 20 30 40 50 60`.
 
@@ -462,7 +474,7 @@ POI
 SE
 	input_boolean.pi30_ricarica_batteria = off
 ALLORA
-	KEEP BATTERY LIVE = script.pi30_keep_battery_live
+	PI30 BATTERIA MINIMO = script.pi30_keep_battery_live
 	(SBU, solare + rete, bulk e float = input_number.pi30_keep_battery_live)
 	e STOP
 	(senza gli input_number, o mantenimento < 24.0V: SCARICA = script.pi30_batteria_da_scaricare)
@@ -684,7 +696,7 @@ massimo `goodwe_idle_w` (100 W), almeno uno step in giù, minimo 2A: da 40A con
 ed è questo che rendeva così profondo il dente di sega qui sopra. Un trigger `numeric_state` (`goodwe_in_scarica`) interviene
 appena si superano i 250 W, senza aspettare i 10 secondi degli altri trigger
 GoodWe. A 2A, se la GoodWe eroga ancora almeno 200 W per 60 s, il "VUOL DIRE
-CHE" passa a SCARICA. Non vale per MANTIENI né per keep battery live, dove la
+CHE" passa a SCARICA. Non vale per MANTIENI né per PI30 batteria minimo, dove la
 corrente serve a non far staccare il BMS.
 
 **PI30 fuori rete.** In CARICA e in PIENA (uscita "rete prima") la PI30 deve
@@ -719,7 +731,7 @@ sconosciuta" e alle 10:20, con il pacco a 24.0V, MANTIENI non è partito.
 **MAX MANUAL CURRENT.** Aiutante `input_number.pi30_max_manual_current`
 (Impostazioni → Dispositivi e servizi → Aiutanti → Crea aiutante → Numero,
 nome `PI30 Max Manual Current`, min 2, max 60, passo 1, A; vedi
-`Helper - PI30 Ricarica Batteria (Toggle).yaml`). Senza l'aiutante vale 40A.
+`Aiutanti - PI30 Ricarica Batteria.yaml`). Senza l'aiutante vale 40A.
 Un valore fuori dagli step vale come lo step inferiore (35 = 30). Cambiarlo
 fa ripartire subito l'automazione. Vale anche come corrente di
 `script.pi30_keep_battery_live` a ricarica spenta. Se impostato ad esempio a 40: la fase AUMENTA STEP non
@@ -731,7 +743,7 @@ l'automazione la riporta subito al gradino valido più alto non superiore a
 **Limite di temperatura.** Aiutante facoltativo
 `input_number.pi30_charging_max_temperature` (Numero, nome `PI30 Charging Max
 Temperature`, in °C, per esempio 70; vedi
-`Helper - PI30 Ricarica Batteria (Toggle).yaml`), confrontato con la
+`Aiutanti - PI30 Ricarica Batteria.yaml`), confrontato con la
 temperatura del dissipatore `sensor.heltec_pi30_heat_sink_temperature`. Al
 posto di `max_manual_current` la modulazione usa `current_cap`: dal limite in
 su la corrente da rete scende di uno step ogni `thermal_step_s` (120 s, il

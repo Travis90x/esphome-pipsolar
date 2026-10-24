@@ -273,10 +273,10 @@ Paste them into a dashboard's YAML mode.
 ### Dynamic utility-charging modulation
 
 Files: [`home_assistant/automations/PI30 battery management/`](<home_assistant/automations/PI30 battery management/>)
-- `Automation - PI30 Battery Charging Intelligent Modulation.yaml`
-- `Script Battery to charge.yaml`, `Script Battery to discharge.yaml`, `Script Battery full.yaml`, `Script Battery to keep.yaml`, `Script Battery keep live.yaml`
-- `Helper - PI30 Ricarica Batteria (Toggle).yaml`
-- `Helper - PI30 Modalita MAN (Template sensor).yaml` (optional: the mode as one steady value)
+- `Automazione - PI30 Batteria MAN.yaml`
+- `Script - PI30 batteria da caricare.yaml`, `Script - PI30 batteria da scaricare.yaml`, `Script - PI30 batteria piena.yaml`, `Script - PI30 batteria da mantenere.yaml`, `Script - PI30 batteria minimo.yaml`
+- `Aiutanti - PI30 Ricarica Batteria.yaml`
+- `Aiutante - PI30 Modalita MAN (Sensore template).yaml` (optional: the mode as one steady value)
 
 Goal: decide, every 10 minutes (plus on startup and on relevant sensor
 changes), whether the PI30 should be charging its LiFePO4 pack from the grid,
@@ -348,7 +348,7 @@ when the priorities are already right.
 
 **Battery charging switch.** Optional helper `input_boolean.pi30_ricarica_batteria`
 (Toggle, name `PI30 Ricarica Batteria`, see
-`Helper - PI30 Ricarica Batteria (Toggle).yaml`). On or missing: the pack
+`Aiutanti - PI30 Ricarica Batteria.yaml`). On or missing: the pack
 charges with the normal logic. Off: the automation stores the current bulk and
 float voltages (`sensor.heltec_pi30_display_pi30_battery_bulk_voltage` /
 `_float_voltage`) in the helpers `input_number.pi30_bulk_carica` /
@@ -404,12 +404,22 @@ with `script.turn_on` by entity id and the automation waits for them to go back
 seconds at each run of the automation, so `script.pi30_batteria_da_caricare`
 blinks on and off while the PI30 charges steadily. The mode is in the two
 inverter priorities; the optional template helper
-`Helper - PI30 Modalita MAN (Template sensor).yaml` (Settings → Devices &
+`Aiutante - PI30 Modalita MAN (Sensore template).yaml` (Settings → Devices &
 services → Helpers → Create helper → Template → Sensor, name `PI30 Modalità
-MAN`, giving `sensor.pi30_modalita_man`) shows it as CHARGE/FULL/DISCHARGE/KEEP
-in Italian (`CARICA`, `PIENA`, `SCARICA`, `MANTIENI`, `KEEP LIVE`), with
-`- NON SULLA RETE` added when the PI30 is in CHARGE or FULL but not in Line
-mode.
+MAN`, giving `sensor.pi30_modalita_man`) shows it in Italian as `IN CARICA`
+(charging), `PIENA` (full), `IN SCARICA` (discharging) or `MANTENIMENTO`
+(empty pack held at the hold voltage: PI30 batteria da mantenere with charging
+on, PI30 batteria minimo with charging off).
+
+**PI30 batteria da mantenere vs PI30 batteria minimo.** Both set the same on
+the inverter (SBU, charger "solar + utility", bulk and float at the hold
+voltage); they differ only in when and how much. PI30 batteria da mantenere
+(KEEP) runs with charging on, starts at the undervoltage threshold, takes at
+most 10A from the grid, and the automation leaves it on its own when surplus
+returns. PI30 batteria minimo runs with charging off, stays until charging is
+switched back on and takes up to 40A. Renaming the scripts does not change
+their entity ids (`script.pi30_keep_battery_live` is still PI30 batteria
+minimo): edit the existing scripts, do not create new ones.
 
 Utility current steps: `2 10 20 30 40 50 60`.
 
@@ -453,7 +463,7 @@ THEN
 IF
 	input_boolean.pi30_ricarica_batteria = off
 THEN
-	KEEP BATTERY LIVE = script.pi30_keep_battery_live
+	PI30 BATTERIA MINIMO (keep battery live) = script.pi30_keep_battery_live
 	(SBU, solar + utility, bulk and float = input_number.pi30_keep_battery_live)
 	and STOP
 	(without the input_number helpers, or hold < 24.0V: DISCHARGE = script.pi30_batteria_da_scaricare)
@@ -674,7 +684,7 @@ straight to 2A every time, which is what made the sawtooth above so deep. A `num
 (`goodwe_in_scarica`) reacts as soon as 250 W are exceeded, without waiting
 for the 10 seconds of the other GoodWe triggers. At 2A, if the GoodWe still
 delivers at least 200 W for 60 s, the "WHICH MEANS" rule switches to
-DISCHARGE. It does not apply to KEEP or keep battery live, where the current
+DISCHARGE. It does not apply to KEEP or PI30 batteria minimo, where the current
 is needed to stop the BMS from cutting the pack.
 
 **PI30 off the grid.** In CHARGE and FULL (output "utility first") the PI30
@@ -709,7 +719,7 @@ action" and KEEP did not start when the pack reached 24.0V at 10:20.
 **MAX MANUAL CURRENT.** Helper `input_number.pi30_max_manual_current`
 (Settings → Devices & services → Helpers → Create helper → Number, name
 `PI30 Max Manual Current`, min 2, max 60, step 1, A; see
-`Helper - PI30 Ricarica Batteria (Toggle).yaml`). Without the helper it is
+`Aiutanti - PI30 Ricarica Batteria.yaml`). Without the helper it is
 40A. A value between steps counts as the step below (35 = 30). Changing it
 re-runs the automation at once. It is also the current of
 `script.pi30_keep_battery_live` with charging off. If set to, say, 40: the STEP UP phase will never go above 40A; if the current is
@@ -720,7 +730,7 @@ the highest valid step not exceeding 40 (i.e. 40).
 **Temperature limit.** Optional helper
 `input_number.pi30_charging_max_temperature` (Number, name `PI30 Charging Max
 Temperature`, in °C, for example 70; see
-`Helper - PI30 Ricarica Batteria (Toggle).yaml`), compared with the heat sink
+`Aiutanti - PI30 Ricarica Batteria.yaml`), compared with the heat sink
 temperature `sensor.heltec_pi30_heat_sink_temperature`. Instead of
 `max_manual_current` the modulation uses `current_cap`: from the limit up the
 utility current goes down one step every `thermal_step_s` (120 s, the heat

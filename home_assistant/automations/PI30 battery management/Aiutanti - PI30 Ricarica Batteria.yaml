@@ -1,4 +1,4 @@
-# Aiutanti per "Automation - PI30 Battery Charging Intelligent Modulation.yaml".
+# Aiutanti per "Automazione - PI30 Batteria MAN.yaml".
 #
 # 1) Commutatore "PI30 Ricarica Batteria" (input_boolean.pi30_ricarica_batteria)
 #    Acceso (o assente): la batteria si ricarica, logica normale.
@@ -40,7 +40,7 @@
 #    uno step ogni 2 minuti, fino a 2A, senza staccare la carica. Torna a
 #    salire solo sotto il limite meno 5°C (isteresi); in mezzo la corrente
 #    resta dov'è. Vale per ogni carica da rete, anche MANTIENI (10A) e
-#    "keep battery live" (40A). Senza questo aiutante nessun limite di
+#    PI30 batteria minimo (40A). Senza questo aiutante nessun limite di
 #    temperatura.
 #    Dopo averlo creato impostalo a 70: da configuration.yaml parte dal
 #    minimo (40), poi Home Assistant ricorda il valore ai riavvii.
@@ -50,7 +50,7 @@
 #    (MAX MANUAL CURRENT). Gli step sono 2, 10, 20, 30, 40, 50, 60: un valore
 #    in mezzo vale come lo step inferiore (35 = 30). Cambiarlo lo applica
 #    subito, anche abbassando una corrente già più alta. Vale anche per
-#    "keep battery live" a ricarica spenta. Senza questo aiutante: 40A.
+#    PI30 batteria minimo a ricarica spenta. Senza questo aiutante: 40A.
 #
 # Senza uno dei tre numeri (o con la tensione di mantenimento sotto 24.0V),
 # da spento l'automazione esegue SCARICA (solo solare) e non tocca bulk e

@@ -1,36 +1,36 @@
-alias: PI30 keep battery live
+alias: PI30 batteria da mantenere
 description: >-
-  Usato dall'automazione MAN quando input_boolean.pi30_ricarica_batteria è
-  OFF. Uscita SBU, carica "solare + rete", tensioni di bulk e float uguali
-  alla tensione di mantenimento input_number.pi30_keep_battery_live
-  (aiutante "PI30 keep battery live", da 24.0V, il minimo accettato dal
-  PI30; consigliato 25.8V, vedi sotto), corrente massima da rete almeno
-  40A (meno, se la MAN passa un limite di temperatura come current_limit:
-  allora al massimo quel valore). Sopra quella tensione il caricabatterie non eroga nulla e la
-  batteria alimenta i carichi. Quando in SBU l'inverter passa alla rete
-  (tensione di recharge), il caricabatterie porta la batteria alla
-  tensione di mantenimento e la tiene lì, prelevando dalla rete solo
-  l'autoconsumo dell'inverter: niente stacco del BMS e niente ricarica.
-  Il mantenimento non è una linea piatta: il caricabatterie del PI30 è
-  acceso/spento attorno al setpoint, non regola la corrente. A 24.0V
-  (storico 7-8/10/2026, 40 ore) la tensione fa un dente di sega
-  23.9-24.4V ogni 25 minuti: un impulso di circa 14 Wh in 3-4 minuti,
-  poi l'autoconsumo (50W) la riporta giù in 20 minuti, perché al 2% la
-  curva LiFePO4 è ripida (0.6V per 1% di SOC). Sempre sopra 23.9V, quindi
-  il BMS non stacca: la tenuta c'è, l'oscillazione è del pacco. A 25.8V
-  (15%, tratto piatto: 0.16V per 6% di SOC) lo stesso impulso sposta la
-  tensione di pochi centesimi e il caricabatterie interviene ogni qualche
-  ora. La tensione di mantenimento deve restare sotto la tensione di
-  ritorno a batteria dell'inverter
-  (sensor.heltec_pi30_display_pi30_battery_redischarge_voltage): se la
-  supera, in SBU la PI30 torna a scaricare fino alla soglia e il
-  caricabatterie la ricarica dalla rete a ogni ciclo. Anche il solare non carica la batteria
-  oltre quella tensione. Le tensioni vengono scritte solo se diverse. In
-  discesa prima il float e poi il bulk, in salita (tensione di
-  mantenimento alzata) prima il bulk e poi il float, così il float non
-  supera mai il bulk. Se l'aiutante manca o vale meno di 24.0V, bulk e
-  float non vengono toccati. I valori di carica li memorizza e li rimette
-  l'automazione MAN (input_number.pi30_bulk_carica / _float_carica).
+  MANTIENI a ricarica accesa: come PI30 batteria minimo (stesse priorità,
+  bulk e float alla tensione di mantenimento), ma parte solo alla soglia di
+  sottotensione, prende al massimo 10A invece di 40A e la MAN lo lascia da
+  sola quando torna il surplus. Usato dall'automazione MAN alla soglia di sottotensione con
+  input_boolean.pi30_ricarica_batteria acceso: SBU, carica "solare + rete",
+  corrente massima da rete 10A e bulk e float alla tensione di
+  mantenimento input_number.pi30_keep_battery_live (aiutante "PI30 keep
+  battery live", consigliato 25.8V). A quella tensione l'inverter in SBU è
+  già in Line mode (i carichi vanno sulla rete): i 10A portano la batteria
+  alla tensione di mantenimento e il caricabatterie la tiene lì, coprendo
+  solo l'autoconsumo dell'inverter, finché il surplus non basta per la
+  CARICA (allora la MAN rimette bulk e float di carica). Prima, senza
+  toccare bulk e float, i 10A la portavano a 24.5V, la MAN tornava a
+  SCARICA ("solo solare", caricabatterie spento) e l'autoconsumo la
+  riportava a 24.0V: un dente di sega 24.0-24.5V ogni 25-30 minuti per
+  tutta la notte (10-11/10 e 13/10/2026). Con bulk e float a 25.0V e
+  "solare + rete" (09/10/2026 18:00-23:00) la batteria è rimasta tra 24.7V
+  e 25.0V. 2A NON bastano: il 26/09/2026 02:02-02:29 l'inverter segnava +2A
+  mentre la batteria scendeva da 23.6V a 22.8V, e il BMS l'ha staccata
+  (inverter spento). La corrente viene riportata a 10A anche quando le
+  priorità sono già giuste, così un valore più alto lasciato da un'altra
+  logica non diventa una ricarica piena dalla rete. Con il limite di
+  temperatura della MAN (variabile current_limit, da current_cap) la
+  corrente è il minimo tra 10A e il limite: con il dissipatore oltre
+  "PI30 Charging Max Temperature" scende a 2A. Bulk e float vengono
+  scritti solo se diversi (in discesa prima il float, in salita prima il
+  bulk); la MAN memorizza prima i valori di carica in
+  input_number.pi30_bulk_carica / _float_carica. Se uno dei tre aiutanti
+  input_number manca o la tensione di mantenimento è sotto 24.0V, bulk e
+  float non vengono toccati e vale il vecchio ciclo (la MAN torna a
+  SCARICA 0.5V sopra la soglia).
   L'automazione MAN lo chiama a ogni esecuzione e aspetta che finisca:
   senza niente da scrivere finisce subito, le attese ci sono solo
   attorno alle scritture. Lo stato on/off dello script dice solo che sta
@@ -38,12 +38,14 @@ description: >-
 sequence:
   - variables:
       hold_voltage: "{{ states('input_number.pi30_keep_battery_live') | float(0) | round(1) }}"
-      hold_valid: "{{ hold_voltage >= 24.0 }}"
-      # Limite di temperatura dalla MAN (current_cap): al massimo current_limit
-      hold_cap: >-
-        {{ (current_limit | int(999)) if current_limit is defined else 999 }}
-      hold_current: "{{ [40, hold_cap] | min }}"
+      hold_valid: >-
+        {{ hold_voltage >= 24.0
+           and states('input_number.pi30_bulk_carica') not in ['unknown', 'unavailable']
+           and states('input_number.pi30_float_carica') not in ['unknown', 'unavailable'] }}
       bulk_now: "{{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(0) | round(1) }}"
+      # Limite di temperatura dalla MAN (current_cap): 10A o meno
+      hold_current: >-
+        {{ ([10, current_limit | int(10)] | min) if current_limit is defined else 10 }}
   - if:
       - condition: template
         value_template: |-
@@ -60,7 +62,8 @@ sequence:
           milliseconds: 0
       - action: button.press
         target:
-          entity_id: button.heltec_pi30_display_pi30_charger_solar_utility
+          entity_id:
+            - button.heltec_pi30_display_pi30_charger_solar_utility
         data: {}
       - delay:
           hours: 0
@@ -154,9 +157,7 @@ sequence:
       - condition: template
         value_template: >-
           {{ states('sensor.heltec_pi30_display_pi30_max_utility_charging_current')
-             | int(default=0) < hold_current or
-             states('sensor.heltec_pi30_display_pi30_max_utility_charging_current')
-             | int(default=0) > hold_cap }}
+             | int(default=0) != hold_current }}
     then:
       - action: select.select_option
         target:

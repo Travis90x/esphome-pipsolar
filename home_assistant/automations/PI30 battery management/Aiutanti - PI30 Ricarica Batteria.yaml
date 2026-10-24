@@ -48,19 +48,22 @@
 #   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante
 #   - Commutatore: Nome "PI30 Ricarica Batteria"
 #   - Numero: Nome "PI30 bulk carica", min 24.0, max 29.2, passo 0.1, V,
-#     modalità Campo di inserimento
+#     modalità Campo di inserimento, valore 29.0
 #   - Numero: Nome "PI30 float carica", min 24.0, max 29.0, passo 0.1, V,
-#     modalità Campo di inserimento
+#     modalità Campo di inserimento, valore 27.0
 #   - Numero: Nome "PI30 keep battery live", min 24.0, max 29.0, passo 0.1, V,
 #     modalità Campo di inserimento, valore 25.5
 #   - Numero: Nome "PI30 Charging Max Temperature", min 40, max 90, passo 1,
 #     °C, modalità Campo di inserimento, valore 70
 #   - Numero: Nome "PI30 Max Manual Current", min 2, max 60, passo 1, A,
 #     modalità Campo di inserimento, valore 40
-#   Controlla gli ID entità dopo il salvataggio.
+#   Dopo il salvataggio controlla l'ID entità (aiutante > icona ingranaggio) e
+#   imposta il valore indicato: un Numero appena creato parte dal suo minimo
+#   (24.0V per bulk e float, cioè nessuna carica; 2A per la corrente massima).
 #
 # NON incollare questo file in un editor YAML: oppure, solo in
-# configuration.yaml (poi riavvia):
+# configuration.yaml (poi riavvia e imposta una volta i valori qui sopra: senza
+# `initial` Home Assistant li ricorda ai riavvii):
 input_boolean:
   pi30_ricarica_batteria:
     name: PI30 Ricarica Batteria

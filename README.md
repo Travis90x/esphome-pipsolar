@@ -286,7 +286,7 @@ the owner's Home Assistant.
 
 Goal: charge the PI30's LiFePO4 pack from the grid **only with the GoodWe's
 PV surplus**, use it to power the loads when there is no surplus, and never
-let it fall to the BMS cut-off. The automation runs on startup, every 10
+let it fall to the BMS cut-off. The automation runs on startup, every 2
 minutes and on every GoodWe sensor change (held for 10 seconds), picks the
 mode and, in CHARGE, sets the utility current.
 
@@ -311,7 +311,7 @@ Sensors read:
 
 ```
 EVERY RUN
-(on startup, every 10 min, on every meter or GoodWe change,
+(on startup, every 2 min, on every meter or GoodWe change,
  at once if the GoodWe delivers > 200 W or the meter imports > 300 W)
 │
 ├─ 0. SAFETY FIRST
@@ -319,6 +319,7 @@ EVERY RUN
 │   ├─ PI30 pack ≤ 24.0V (undervoltage threshold) ...........► DISCHARGE
 │   ├─ In CHARGE but PI30 not in Line mode for 5 min ........► notification + 2A
 │   │  (no grid on the AC input)
+│   ├─ PI30 sensors unavailable .............................► wait
 │   ├─ GoodWe sensor unavailable for < 10 min ...............► wait
 │   └─ Meter or GoodWe power unreadable for > 10 min ........► DISCHARGE
 │
@@ -448,7 +449,10 @@ protect the pack (on 25 Sep 2026 the BMS shut the inverter down at 22:00).
    seconds had caused eleven mode changes). Meter or GoodWe power unreadable
    for more than 10 minutes → DISCHARGE: without them the draw cannot be seen,
    and DISCHARGE holds the pack at the minimum by itself. Until 24 Oct 2026
-   this case charged at 2A.
+   this case charged at 2A. With the PI30 sensors unavailable (for example
+   while ESPHome reconnects) it decides nothing: there is nothing to write to.
+   A GoodWe sensor that disappears during the 60 seconds of check 4 does not
+   count as a draw.
 4. **Charging at the minimum is not enough** ("WHICH MEANS"): in CHARGE at 2A
    with the meter importing >= 300 W, the GoodWe delivering >= 200 W or the
    GoodWe below 98% for 60 seconds → DISCHARGE, the same thresholds as the step-downs (500 W until 24
@@ -507,7 +511,10 @@ stopping the charge; between the limit minus 5°C and the limit it stays;
 below it rises normally. With the limit set and the temperature unreadable it
 counts as over the limit. It also applies to the 10A of DISCHARGE (passed to
 the script as `current_limit`), but only with a temperature reading:
-unreadable, DISCHARGE keeps 10A, as 2A cannot cover the hold.
+unreadable, DISCHARGE keeps 10A, as 2A cannot cover the hold. For the same
+reason "PI30 Max Manual Current" only limits CHARGE, not the hold. The
+2-minute periodic check makes the current step down even when no other sensor
+changes.
 
 #### Why only two scripts
 
@@ -534,8 +541,8 @@ pulse moves it by a few hundredths.
 ```yaml
 triggers:
   - trigger: homeassistant          # startup
-  - trigger: time_pattern           # every 10 minutes
-    minutes: /10
+  - trigger: time_pattern           # every 2 minutes
+    minutes: /2
   - trigger: numeric_state          # GoodWe delivering over 200 W
     entity_id: sensor.goodwe_battery_power
     above: 200

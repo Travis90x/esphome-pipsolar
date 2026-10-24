@@ -294,7 +294,7 @@ per `configuration.yaml`.
 Obiettivo: caricare il pacco LiFePO4 della PI30 dalla rete **solo con il
 surplus fotovoltaico** della GoodWe, usarlo per alimentare i carichi quando
 il surplus non c'è, e non lasciarlo mai scendere fino allo stacco del BMS.
-L'automazione gira all'avvio, ogni 10 minuti e a ogni cambio dei sensori
+L'automazione gira all'avvio, ogni 2 minuti e a ogni cambio dei sensori
 GoodWe (tenuto per 10 secondi), sceglie la modalità e in CARICA regola la
 corrente da rete.
 
@@ -319,7 +319,7 @@ Sensori letti:
 
 ```
 OGNI ESECUZIONE
-(all'avvio, ogni 10 min, a ogni cambio di contatore o GoodWe,
+(all'avvio, ogni 2 min, a ogni cambio di contatore o GoodWe,
  subito se la GoodWe eroga > 200W o il contatore preleva > 300W)
 │
 ├─ 0. SICUREZZE, prima di tutto
@@ -327,6 +327,7 @@ OGNI ESECUZIONE
 │   ├─ Batteria PI30 ≤ 24.0V (soglia di sottotensione) .....► SCARICA
 │   ├─ In CARICA ma PI30 non in Line mode da 5 min .........► notifica + 2A
 │   │  (rete assente sull'ingresso AC)
+│   ├─ Sensori della PI30 non disponibili ..................► aspetta
 │   ├─ Sensore GoodWe non disponibile da < 10 min ..........► aspetta
 │   └─ Contatore o potenza GoodWe illeggibili da > 10 min ..► SCARICA
 │
@@ -458,7 +459,10 @@ non protegge la batteria (il 25/09/2026 il BMS ha spento l'inverter alle
    secondi avevano causato undici cambi di modalità). Contatore o potenza
    GoodWe illeggibili da più di 10 minuti → SCARICA: senza di loro non si vede
    il prelievo, e la SCARICA tiene da sola la batteria al minimo. Fino al
-   24/10/2026 in questo caso si caricava a 2A.
+   24/10/2026 in questo caso si caricava a 2A. Con i sensori della PI30 non
+   disponibili (per esempio alla riconnessione di ESPHome) non decide nulla:
+   non c'è niente su cui scrivere. Un sensore GoodWe che sparisce durante i
+   60 secondi del punto 4 non conta come prelievo.
 4. **Carica al minimo ma non basta** ("VUOL DIRE CHE"): in CARICA a 2A con il
    contatore che preleva >= 300W, la GoodWe che eroga >= 200W o la GoodWe
    sotto il 98% per 60 secondi → SCARICA, le stesse soglie delle discese (fino al 24/10/2026 500W). Sotto
@@ -518,6 +522,9 @@ risale normalmente. Con il limite impostato e la temperatura illeggibile vale
 come oltre il limite. Vale anche per i 10A della SCARICA (passati allo script
 come `current_limit`), ma solo con la temperatura letta: illeggibile, la
 SCARICA resta a 10A, perché a 2A il mantenimento non copre l'autoconsumo.
+Per lo stesso motivo "PI30 Max Manual Current" limita solo la CARICA, non il
+mantenimento. Il controllo ogni 2 minuti fa scendere la corrente anche quando
+nessun altro sensore cambia.
 
 #### Perché due script soli
 
@@ -544,8 +551,8 @@ la tensione faceva un dente di sega di 0.5V ogni 25 minuti; a 25.5-25.8V
 ```yaml
 triggers:
   - trigger: homeassistant          # avvio
-  - trigger: time_pattern           # ogni 10 minuti
-    minutes: /10
+  - trigger: time_pattern           # ogni 2 minuti
+    minutes: /2
   - trigger: numeric_state          # GoodWe che eroga oltre 200W
     entity_id: sensor.goodwe_battery_power
     above: 200

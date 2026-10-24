@@ -900,10 +900,8 @@ views:
               - type: divider
               - entity: script.pi30_batteria_da_caricare
                 name: 0-2 Batteria da caricare  (POP00 PCP02)
-              - entity: script.pi30_batteria_da_mantenere
-                name: 2-2 Batteria da mantenere (POP02 PCP02)
               - entity: script.pi30_batteria_da_scaricare
-                name: 2-3 Batteria da scaricare (POP02 PCP03)
+                name: 2-2 Batteria da scaricare (POP02 PCP02)
               - entity: sensor.heltec_pi30_display_pi30_modalita_man
           - color: state
             type: entities

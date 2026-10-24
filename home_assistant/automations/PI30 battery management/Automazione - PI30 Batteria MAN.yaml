@@ -36,7 +36,7 @@ description: >-
   rimasta tra 24.7V e 25.0V. Il vecchio ciclo resta solo se uno dei tre
   aiutanti input_number manca o la tensione di mantenimento è sotto 24.0V.
   Con la ricarica spenta (RICARICA BATTERIA, sotto) la batteria la tiene
-  script.pi30_keep_battery_live e MANTIENI non interviene. Riaccendere la
+  script.pi30_batteria_minimo e MANTIENI non interviene. Riaccendere la
   ricarica esce da MANTIENI (se la batteria non è alla soglia).
   Il mantenimento è il PRIMO controllo di ogni esecuzione e vince su
   tutti i rami di CARICA e SCARICA: anche una carica a 2A (che non
@@ -135,7 +135,7 @@ description: >-
   ..._battery_bulk_voltage / ..._battery_float_voltage) in
   input_number.pi30_bulk_carica / input_number.pi30_float_carica, poi
   finché resta spento esegue sempre PI30 batteria minimo
-  (script.pi30_keep_battery_live): SBU,
+  (script.pi30_batteria_minimo): SBU,
   "solare + rete", bulk e float alla tensione di mantenimento
   input_number.pi30_keep_battery_live ("PI30 keep battery live", da 24.0V),
   così la batteria non viene ricaricata ma l'inverter la tiene a quella
@@ -160,7 +160,7 @@ description: >-
   alla volta. Il trigger temperatura_alta fa intervenire l'automazione
   appena si supera il limite. Senza l'aiutante o con il sensore non
   disponibile, nessun limite. Vale per ogni carica da rete: anche MANTIENI
-  (10A) e script.pi30_keep_battery_live (40A) ricevono current_cap come
+  (10A) e script.pi30_batteria_minimo (40A) ricevono current_cap come
   current_limit e scendono di step allo stesso modo (MANTIENI da 10A a
   2A). A 2A alla soglia di sottotensione il pacco può scendere (2A non
   bastano contro l'autoconsumo), ma a 2A il dissipatore si raffredda e
@@ -437,7 +437,7 @@ actions:
       # MANTIENI: alla soglia di sottotensione, poi (con keep_valid) finché il
       # surplus non basta per la CARICA, senza rilascio a tensione: la
       # batteria resta alla tensione di mantenimento. Con la ricarica spenta
-      # tiene la batteria script.pi30_keep_battery_live. Senza gli aiutanti,
+      # tiene la batteria script.pi30_batteria_minimo. Senza gli aiutanti,
       # il vecchio ciclo: rilascio a sottotensione + hold_release_margin_v.
       hold_needed: >-
         {% set at_threshold = pi30_voltage is not none and pi30_voltage <= under_voltage %}
@@ -603,11 +603,11 @@ actions:
           # Ricarica disattivata: bulk e float alla tensione di mantenimento
           - action: script.turn_on
             target:
-              entity_id: script.pi30_keep_battery_live
+              entity_id: script.pi30_batteria_minimo
             data:
               variables:
                 current_limit: "{{ current_cap }}"
-          - wait_template: "{{ is_state('script.pi30_keep_battery_live', 'off') }}"
+          - wait_template: "{{ is_state('script.pi30_batteria_minimo', 'off') }}"
             timeout: 120
           - stop: Ricarica disattivata, mantenimento
       # Aiutanti input_number assenti o non validi: SCARICA senza toccare bulk e float

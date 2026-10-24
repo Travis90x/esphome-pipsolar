@@ -341,7 +341,7 @@ alternando MANTIENI e SCARICA (10-11/10 e 13/10/2026). Con bulk e float a
 25.0V e "solare + rete" (09/10/2026 18:00-23:00) il pacco è rimasto tra 24.7V
 e 25.0V. Il vecchio ciclo con `hold_release_margin_v` resta solo se manca uno
 dei tre aiutanti `input_number` o la tensione di mantenimento è sotto 24.0V.
-Con la ricarica spenta il pacco lo tiene `script.pi30_keep_battery_live` e
+Con la ricarica spenta il pacco lo tiene `script.pi30_batteria_minimo` e
 MANTIENI non interviene; riaccendere la ricarica esce da MANTIENI (se il
 pacco non è alla soglia). MANTIENI è il **primo controllo** di ogni esecuzione e vince
 su tutti i rami CARICA e SCARICA, quindi anche una carica a 2A (che non basta)
@@ -362,7 +362,7 @@ bulk e float attuali (`sensor.heltec_pi30_display_pi30_battery_bulk_voltage` /
 `_float_voltage`) nei due aiutanti `input_number.pi30_bulk_carica` /
 `input_number.pi30_float_carica` (solo nel momento in cui lo spegni), poi
 finché resta spento esegue sempre PI30 batteria minimo
-(`script.pi30_keep_battery_live`): SBU, carica
+(`script.pi30_batteria_minimo`): SBU, carica
 "solare + rete", **bulk e float alla tensione di mantenimento**
 `input_number.pi30_keep_battery_live` (aiutante "PI30 keep battery live", da
 24.0V, il minimo accettato: `PCVV`/`PBFT` 24.0-29.2V; consigliato 25.8V, vedi
@@ -428,9 +428,12 @@ mantenimento) e cambiano solo quando e quanto: PI30 batteria da mantenere
 (MANTIENI) serve a ricarica accesa, parte alla soglia di sottotensione,
 prende al massimo 10A dalla rete e la MAN la lascia da sola quando torna il
 surplus; PI30 batteria minimo serve a ricarica spenta, resta finché non
-riaccendi la ricarica e prende fino a 40A. Gli ID entità degli script non
-cambiano con i nomi (`script.pi30_keep_battery_live` resta quello di PI30
-batteria minimo): modifica gli script esistenti, non crearne di nuovi.
+riaccendi la ricarica e prende fino a 40A. L'automazione chiama gli script
+per ID entità: `script.pi30_batteria_da_caricare`, `_da_scaricare`, `_piena`,
+`_da_mantenere` e `script.pi30_batteria_minimo` (fino al 24/10/2026
+`script.pi30_keep_battery_live`: rinominalo da Impostazioni > Dispositivi e
+servizi > Entità > lo script > icona ingranaggio > ID entità). Cambiare il
+nome di uno script non cambia il suo ID entità.
 
 Step di corrente da rete: `2 10 20 30 40 50 60`.
 
@@ -474,7 +477,7 @@ POI
 SE
 	input_boolean.pi30_ricarica_batteria = off
 ALLORA
-	PI30 BATTERIA MINIMO = script.pi30_keep_battery_live
+	PI30 BATTERIA MINIMO = script.pi30_batteria_minimo
 	(SBU, solare + rete, bulk e float = input_number.pi30_keep_battery_live)
 	e STOP
 	(senza gli input_number, o mantenimento < 24.0V: SCARICA = script.pi30_batteria_da_scaricare)
@@ -734,7 +737,7 @@ nome `PI30 Max Manual Current`, min 2, max 60, passo 1, A; vedi
 `Aiutanti - PI30 Ricarica Batteria.yaml`). Senza l'aiutante vale 40A.
 Un valore fuori dagli step vale come lo step inferiore (35 = 30). Cambiarlo
 fa ripartire subito l'automazione. Vale anche come corrente di
-`script.pi30_keep_battery_live` a ricarica spenta. Se impostato ad esempio a 40: la fase AUMENTA STEP non
+`script.pi30_batteria_minimo` a ricarica spenta. Se impostato ad esempio a 40: la fase AUMENTA STEP non
 salirà mai oltre 40A; se la corrente è già sopra 40A (perché il limite è
 stato abbassato mentre il sistema stava caricando a uno step più alto),
 l'automazione la riporta subito al gradino valido più alto non superiore a
@@ -754,7 +757,7 @@ valgono sempre), sotto limite - 5°C la modulazione risale normalmente, uno
 step alla volta. Un trigger template (`temperatura_alta`) fa intervenire
 l'automazione appena il limite viene superato. Senza l'aiutante o con il
 sensore non disponibile non c'è nessun limite. Vale per **ogni** carica da
-rete: anche MANTIENI (10A) e `script.pi30_keep_battery_live` (40A) ricevono
+rete: anche MANTIENI (10A) e `script.pi30_batteria_minimo` (40A) ricevono
 `current_cap` come variabile `current_limit` e scendono di step allo stesso
 modo (MANTIENI da 10A a 2A). A 2A, alla soglia di sottotensione, il pacco può
 scendere (2A non bastano contro l'autoconsumo), ma a 2A il dissipatore si

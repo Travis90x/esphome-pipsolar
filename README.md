@@ -333,7 +333,7 @@ and 13 Oct 2026). With bulk and float at 25.0V and "solar + utility" (9 Oct
 2026 18:00-23:00) the pack stayed between 24.7V and 25.0V. The old
 `hold_release_margin_v` cycle is kept only when one of the three
 `input_number` helpers is missing or the hold voltage is below 24.0V. With
-charging off the pack is held by `script.pi30_keep_battery_live` and KEEP does
+charging off the pack is held by `script.pi30_batteria_minimo` and KEEP does
 not step in; turning charging back on leaves KEEP (unless the pack is at the
 threshold). KEEP is the **first check** of every run and wins over all
 the CHARGE and DISCHARGE branches, so even a 2A charge (not enough) is
@@ -353,7 +353,7 @@ charges with the normal logic. Off: the automation stores the current bulk and
 float voltages (`sensor.heltec_pi30_display_pi30_battery_bulk_voltage` /
 `_float_voltage`) in the helpers `input_number.pi30_bulk_carica` /
 `input_number.pi30_float_carica` (only at the moment it is turned off), then,
-while it stays off, always runs `script.pi30_keep_battery_live`: SBU, charger
+while it stays off, always runs `script.pi30_batteria_minimo`: SBU, charger
 "solar + utility", **bulk and float at the hold voltage**
 `input_number.pi30_keep_battery_live` (helper "PI30 keep battery live", from
 24.0V, the lowest accepted: `PCVV`/`PBFT` 24.0-29.2V; 25.8V recommended, see
@@ -417,9 +417,12 @@ voltage); they differ only in when and how much. PI30 batteria da mantenere
 (KEEP) runs with charging on, starts at the undervoltage threshold, takes at
 most 10A from the grid, and the automation leaves it on its own when surplus
 returns. PI30 batteria minimo runs with charging off, stays until charging is
-switched back on and takes up to 40A. Renaming the scripts does not change
-their entity ids (`script.pi30_keep_battery_live` is still PI30 batteria
-minimo): edit the existing scripts, do not create new ones.
+switched back on and takes up to 40A. The automation calls the scripts by
+entity id: `script.pi30_batteria_da_caricare`, `_da_scaricare`, `_piena`,
+`_da_mantenere` and `script.pi30_batteria_minimo` (until 24 Oct 2026
+`script.pi30_keep_battery_live`: rename it under Settings > Devices & services
+> Entities > the script > gear icon > Entity ID). Renaming a script does not
+change its entity id.
 
 Utility current steps: `2 10 20 30 40 50 60`.
 
@@ -463,7 +466,7 @@ THEN
 IF
 	input_boolean.pi30_ricarica_batteria = off
 THEN
-	PI30 BATTERIA MINIMO (keep battery live) = script.pi30_keep_battery_live
+	PI30 BATTERIA MINIMO (keep battery live) = script.pi30_batteria_minimo
 	(SBU, solar + utility, bulk and float = input_number.pi30_keep_battery_live)
 	and STOP
 	(without the input_number helpers, or hold < 24.0V: DISCHARGE = script.pi30_batteria_da_scaricare)
@@ -722,7 +725,7 @@ action" and KEEP did not start when the pack reached 24.0V at 10:20.
 `Aiutanti - PI30 Ricarica Batteria.yaml`). Without the helper it is
 40A. A value between steps counts as the step below (35 = 30). Changing it
 re-runs the automation at once. It is also the current of
-`script.pi30_keep_battery_live` with charging off. If set to, say, 40: the STEP UP phase will never go above 40A; if the current is
+`script.pi30_batteria_minimo` with charging off. If set to, say, 40: the STEP UP phase will never go above 40A; if the current is
 already above 40A (because the limit was lowered while the system was
 charging at a higher step), the automation immediately brings it back down to
 the highest valid step not exceeding 40 (i.e. 40).
@@ -741,7 +744,7 @@ apply), below limit - 5°C the modulation goes back up normally, one step at a
 time. A template trigger (`temperatura_alta`) makes the automation react as
 soon as the limit is exceeded. Without the helper, or with the sensor
 unavailable, there is no limit. It applies to **every** grid charge: KEEP (10A)
-and `script.pi30_keep_battery_live` (40A) also receive `current_cap` as the
+and `script.pi30_batteria_minimo` (40A) also receive `current_cap` as the
 `current_limit` variable and step down the same way (KEEP from 10A to 2A). At
 2A, at the under-voltage threshold, the pack may sink (2A are not enough
 against the inverter's consumption), but at 2A the heat sink cools down and

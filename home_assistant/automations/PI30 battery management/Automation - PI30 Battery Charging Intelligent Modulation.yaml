@@ -206,12 +206,16 @@ description: >-
   -300W, e l'automazione teneva 60A credendola in carica. Le uscite dalla
   rete di 10 secondi (buchi di tensione: 103V il 22/10 alle 15:21, 151V il
   23/10 alle 14:27) non contano. MANTIENI resta il primo controllo.
-  SCRIPT ATTESI. Gli script delle modalità vengono chiamati direttamente
-  (action: script.pi30_...) e l'automazione aspetta che finiscano. Con
-  script.turn_on partivano senza attesa: un MANTIENI ancora in corsa
+  SCRIPT ATTESI. Gli script delle modalità partono con script.turn_on (per
+  ID entità) e l'automazione aspetta che lo script torni off (al massimo 120
+  s). Senza attesa: un MANTIENI ancora in corsa
   riscriveva SBU, bulk e float a 25.8V e 10A dopo che l'automazione era già
   passata in CARICA (il 22/10/2026 tre volte tra le 09:04 e le 09:06, bulk e
-  float riscritti 29.0 -> 25.8 a ogni giro). Gli script aspettano solo
+  float riscritti 29.0 -> 25.8 a ogni giro). NON chiamarli come azione
+  diretta (action: script.pi30_...): quell'azione usa l'ID dello script, che
+  per uno script creato da interfaccia è diverso dall'ID entità; il 24/10
+  ogni esecuzione si fermava con "azione sconosciuta" e alle 10:20 MANTIENI
+  non è partito con la batteria a 24.0V. Gli script aspettano solo
   quando scrivono qualcosa. Lo stato on/off di uno script dice solo che sta
   girando, non la modalità: per quella c'è l'aiutante "Helper - PI30
   Modalita MAN (Template sensor).yaml".
@@ -522,9 +526,14 @@ actions:
                 data:
                   value: "{{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float | round(1) }}"
       # Batteria PI30 alla soglia di sottotensione: MANTIENI a 10A, prima di ogni altro ramo
-      - action: script.pi30_batteria_da_mantenere
+      - action: script.turn_on
+        target:
+          entity_id: script.pi30_batteria_da_mantenere
         data:
-          current_limit: "{{ current_cap }}"
+          variables:
+            current_limit: "{{ current_cap }}"
+      - wait_template: "{{ is_state('script.pi30_batteria_da_mantenere', 'off') }}"
+        timeout: 120
       - stop: Batteria PI30 alla soglia di sottotensione, mantenimento
   # Ricarica batteria tornata ON, o uscita da MANTIENI: rimetti bulk e float
   # memorizzati. Anche senza il trigger, se bulk o float sono ancora alla
@@ -591,12 +600,21 @@ actions:
                  and states('input_number.pi30_keep_battery_live') | float(0) >= 24.0 }}
         then:
           # Ricarica disattivata: bulk e float alla tensione di mantenimento
-          - action: script.pi30_keep_battery_live
+          - action: script.turn_on
+            target:
+              entity_id: script.pi30_keep_battery_live
             data:
-              current_limit: "{{ current_cap }}"
+              variables:
+                current_limit: "{{ current_cap }}"
+          - wait_template: "{{ is_state('script.pi30_keep_battery_live', 'off') }}"
+            timeout: 120
           - stop: Ricarica disattivata, mantenimento
       # Aiutanti input_number assenti o non validi: SCARICA senza toccare bulk e float
-      - action: script.pi30_batteria_da_scaricare
+      - action: script.turn_on
+        target:
+          entity_id: script.pi30_batteria_da_scaricare
+      - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
+        timeout: 120
       - stop: Ricarica disattivata, scarica
   # PI30 FUORI RETE: in CARICA o PIENA ma non in Line mode da line_lost_s, la
   # PI30 non sta usando la rete (23/10/2026 dalle 14:49, oltre due ore in
@@ -688,7 +706,11 @@ actions:
             value_template: '{{ wait.completed }}'
         then:
           - stop: Prelievo o scarica GoodWe durati meno di 60 s, nessun cambio
-      - action: script.pi30_batteria_da_scaricare
+      - action: script.turn_on
+        target:
+          entity_id: script.pi30_batteria_da_scaricare
+      - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
+        timeout: 120
       - stop: Carica al minimo ma GoodWe in scarica o prelievo dalla rete, scarica
   # ANTI-OSCILLAZIONE: passata a SCARICA da meno di charge_dwell_s, la PI30
   # non torna in CARICA né in PIENA (tutti i rami sotto, tranne l'ultimo,
@@ -721,7 +743,11 @@ actions:
                 value_template: '{{ wait.completed }}'
             then:
               - stop: Batteria piena sui carichi del surplus, transitorio, nessun cambio
-          - action: script.pi30_batteria_da_scaricare
+          - action: script.turn_on
+            target:
+              entity_id: script.pi30_batteria_da_scaricare
+          - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
+            timeout: 120
           - stop: Batteria piena, surplus finito, scarica
       - stop: Batteria piena sui carichi del surplus, nessun cambio
   - if:
@@ -732,9 +758,17 @@ actions:
           - condition: template
             value_template: '{{ surplus_ok }}'
         then:
-          - action: script.pi30_batteria_piena
+          - action: script.turn_on
+            target:
+              entity_id: script.pi30_batteria_piena
+          - wait_template: "{{ is_state('script.pi30_batteria_piena', 'off') }}"
+            timeout: 120
           - stop: Batteria piena e surplus, carichi sulla rete senza ricarica
-      - action: script.pi30_batteria_da_scaricare
+      - action: script.turn_on
+        target:
+          entity_id: script.pi30_batteria_da_scaricare
+      - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
+        timeout: 120
       - stop: Batteria piena e niente surplus, scarica
   # SURPLUS VISIBILE: fuori dalla CARICA si entra solo se l'immissione copre i
   # carichi della PI30 più i 2A, oppure è al limite di immissione (oltre, il
@@ -745,7 +779,11 @@ actions:
       - condition: template
         value_template: '{{ not in_charge and power_known and not surplus_ok }}'
     then:
-      - action: script.pi30_batteria_da_scaricare
+      - action: script.turn_on
+        target:
+          entity_id: script.pi30_batteria_da_scaricare
+      - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
+        timeout: 120
       - stop: Surplus visibile insufficiente, scarica
   # MODULAZIONE (ZONA FERMA): nei quattro rami di CARICA qui sotto la corrente
   # da rete è modulated_current (uno step in su solo con surplus visibile e
@@ -755,7 +793,11 @@ actions:
       - condition: template
         value_template: '{{ goodwe_full }}'
     then:
-      - action: script.pi30_batteria_da_caricare
+      - action: script.turn_on
+        target:
+          entity_id: script.pi30_batteria_da_caricare
+      - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
+        timeout: 120
       - if:
           - condition: template
             value_template: '{{ current_total < 60 }}'
@@ -781,7 +823,11 @@ actions:
           - condition: template
             value_template: '{{ volt_known and voltage >= 55 }}'
         then:
-          - action: script.pi30_batteria_da_caricare
+          - action: script.turn_on
+            target:
+              entity_id: script.pi30_batteria_da_caricare
+          - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
+            timeout: 120
           - if:
               - condition: template
                 value_template: '{{ current_total < 60 }}'
@@ -809,7 +855,11 @@ actions:
               - condition: template
                 value_template: '{{ soc_known and volt_known and soc > 99 and voltage < 53 }}'
             then:
-              - action: script.pi30_batteria_da_caricare
+              - action: script.turn_on
+                target:
+                  entity_id: script.pi30_batteria_da_caricare
+              - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
+                timeout: 120
               - if:
                   - condition: template
                     value_template: '{{ current_total < 60 }}'
@@ -843,7 +893,11 @@ actions:
                           {{ current_utility == 2 and (grid_power < 500 and
                           battery_power < 200) }}
                     then:
-                      - action: script.pi30_batteria_da_caricare
+                      - action: script.turn_on
+                        target:
+                          entity_id: script.pi30_batteria_da_caricare
+                      - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
+                        timeout: 120
                       - if:
                           - condition: template
                             value_template: '{{ current_total < 60 }}'
@@ -873,7 +927,11 @@ actions:
                               {{ sensors_unknown and grid_power < 300 and
                               battery_power < 200 }}
                         then:
-                          - action: script.pi30_batteria_da_caricare
+                          - action: script.turn_on
+                            target:
+                              entity_id: script.pi30_batteria_da_caricare
+                          - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
+                            timeout: 120
                           - if:
                               - condition: template
                                 value_template: '{{ current_utility != 2 }}'
@@ -912,7 +970,11 @@ actions:
                                     action: select.select_option
                                   - delay: '00:00:10'
                             else:
-                              - action: script.pi30_batteria_da_caricare
+                              - action: script.turn_on
+                                target:
+                                  entity_id: script.pi30_batteria_da_caricare
+                              - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
+                                timeout: 120
                               - if:
                                   - condition: template
                                     value_template: '{{ current_utility != 2 }}'
@@ -924,7 +986,11 @@ actions:
                                       option: '2'
                                     action: select.select_option
                 else:
-                  - action: script.pi30_batteria_da_caricare
+                  - action: script.turn_on
+                    target:
+                      entity_id: script.pi30_batteria_da_caricare
+                  - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
+                    timeout: 120
                   - if:
                       - condition: template
                         value_template: '{{ current_utility != 2 }}'

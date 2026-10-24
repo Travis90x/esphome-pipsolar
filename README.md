@@ -395,9 +395,9 @@ more with surplus), `script.pi30_batteria_da_mantenere` (KEEP — used instead o
 DISCHARGE to hold the PI30 battery at the hold voltage with 10A). With KEEP
 and with charging off also
 `number.heltec_pi30_display_pi30_set_battery_bulk_voltage` / `_float_voltage`.
-The utility current is written only when it changes. The scripts are called
-directly (`action: script.pi30_...`) and the automation waits for them, so all
-five must exist. With the PI30 off the grid in CHARGE or FULL:
+The utility current is written only when it changes. The scripts are started
+with `script.turn_on` by entity id and the automation waits for them to go back
+`off`. With the PI30 off the grid in CHARGE or FULL:
 `persistent_notification.create` / `.dismiss` (id `pi30_fuori_rete`).
 
 **The scripts are not the mode.** A script is `on` only while it runs, a few
@@ -695,13 +695,16 @@ charging. The 10-second drops are voltage dips (103 V on 22 Oct at 15:21,
 first check. The automation cannot bring the grid back: check the PI30 AC
 input (breaker or socket) and the inverter display.
 
-**Scripts are waited for.** The mode scripts are called directly
-(`action: script.pi30_...`) and the automation waits for them to finish. With
-`script.turn_on` they started without waiting: a KEEP still running rewrote
+**Scripts are waited for.** The mode scripts are started with
+`script.turn_on` (by entity id) and the automation then waits until the script
+is `off` again (at most 120 s). Without the wait, a KEEP still running rewrote
 SBU, bulk and float at 25.8V and 10A after the automation had already moved
 to CHARGE (three times on 22 Oct 2026 between 09:04 and 09:06, bulk and float
 rewritten 29.0 -> 25.8 every time). The scripts only wait when they write
-something.
+something. **Do not call them as direct actions** (`action: script.pi30_...`):
+that action uses the script's configuration id, which for a script created in
+the UI is not its entity id. On 24 Oct 2026 every run stopped with "unknown
+action" and KEEP did not start when the pack reached 24.0V at 10:20.
 
 **MAX MANUAL CURRENT.** Helper `input_number.pi30_max_manual_current`
 (Settings → Devices & services → Helpers → Create helper → Number, name

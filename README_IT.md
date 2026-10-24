@@ -403,9 +403,9 @@ con surplus), `script.pi30_batteria_da_mantenere` (MANTIENI — usato al posto d
 SCARICA per tenere la batteria PI30 alla tensione di mantenimento con 10A).
 Con MANTIENI e con la ricarica spenta anche
 `number.heltec_pi30_display_pi30_set_battery_bulk_voltage` / `_float_voltage`.
-La corrente da rete viene scritta solo quando cambia. Gli script vengono
-chiamati direttamente (`action: script.pi30_...`) e l'automazione aspetta che
-finiscano, quindi devono esistere tutti e cinque. Con la PI30 fuori rete in
+La corrente da rete viene scritta solo quando cambia. Gli script partono con
+`script.turn_on` per ID entità e l'automazione aspetta che tornino `off`. Con
+la PI30 fuori rete in
 CARICA o PIENA: `persistent_notification.create` / `.dismiss` (id
 `pi30_fuori_rete`).
 
@@ -705,13 +705,16 @@ secondi sono buchi di tensione (103V il 22/10 alle 15:21, 151V il 23/10 alle
 L'automazione non può riportare la rete: controlla l'ingresso AC della PI30
 (interruttore o presa) e il display dell'inverter.
 
-**Script attesi.** Gli script delle modalità vengono chiamati direttamente
-(`action: script.pi30_...`) e l'automazione aspetta che finiscano. Con
-`script.turn_on` partivano senza attesa: un MANTIENI ancora in corsa
-riscriveva SBU, bulk e float a 25.8V e 10A dopo che l'automazione era già
-passata in CARICA (il 22/10/2026 tre volte tra le 09:04 e le 09:06, bulk e
-float riscritti 29.0 -> 25.8 a ogni giro). Gli script aspettano solo quando
-scrivono qualcosa.
+**Script attesi.** Gli script delle modalità partono con `script.turn_on`
+(per ID entità) e poi l'automazione aspetta che lo script torni `off` (al
+massimo 120 s). Senza attesa, un MANTIENI ancora in corsa riscriveva SBU, bulk
+e float a 25.8V e 10A dopo che l'automazione era già passata in CARICA (il
+22/10/2026 tre volte tra le 09:04 e le 09:06, bulk e float riscritti 29.0 ->
+25.8 a ogni giro). Gli script aspettano solo quando scrivono qualcosa. **Non
+chiamarli come azione diretta** (`action: script.pi30_...`): quell'azione usa
+l'ID di configurazione dello script, che per uno script creato da interfaccia
+non è l'ID entità. Il 24/10/2026 ogni esecuzione si fermava con "azione
+sconosciuta" e alle 10:20, con il pacco a 24.0V, MANTIENI non è partito.
 
 **MAX MANUAL CURRENT.** Aiutante `input_number.pi30_max_manual_current`
 (Impostazioni → Dispositivi e servizi → Aiutanti → Crea aiutante → Numero,

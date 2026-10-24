@@ -1,8 +1,7 @@
 alias: PI30 batteria minimo
 description: >-
   MANTENIMENTO a ricarica spenta. L'automazione MAN lo cerca come
-  script.pi30_batteria_minimo (ID entità; prima era
-  script.pi30_keep_battery_live).
+  script.pi30_batteria_minimo (ID entità).
   Usato dall'automazione MAN quando input_boolean.pi30_ricarica_batteria è
   OFF. Uscita SBU, carica "solare + rete", tensioni di bulk e float uguali
   alla tensione di mantenimento input_number.pi30_keep_battery_live

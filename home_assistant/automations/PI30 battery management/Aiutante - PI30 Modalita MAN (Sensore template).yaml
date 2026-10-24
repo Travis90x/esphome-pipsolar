@@ -1,32 +1,29 @@
-# Facoltativo. La modalità in cui l'automazione MAN tiene la PI30, letta
-# dalle due priorità dell'inverter: un valore fisso finché la modalità non
-# cambia, da mettere in dashboard e nello storico al posto degli script.
-# Lo stato on/off di "PI30 batteria da caricare" (e degli altri script) dice
-# solo che lo script sta girando, per pochi istanti a ogni esecuzione
-# dell'automazione, non che la PI30 sia in carica.
+# Facoltativo. La modalità della PI30 come un valore fisso, da mettere in
+# dashboard e nello storico al posto degli script: uno script è "on" solo
+# per pochi istanti mentre gira.
 #
 #   IN CARICA     uscita "rete prima", carica "solare + rete"
 #                 (PI30 batteria da caricare)
 #   PIENA         uscita "rete prima", carica "solo solare"
 #                 (PI30 batteria piena)
-#   IN SCARICA    uscita SBU, carica "solo solare"
-#                 (PI30 batteria da scaricare)
-#   MANTENIMENTO  uscita SBU, carica "solare + rete": batteria scarica tenuta
-#                 alla tensione minima (PI30 batteria da mantenere a ricarica
-#                 accesa, PI30 batteria minimo a ricarica spenta)
+#   IN SCARICA    uscita SBU, la batteria alimenta i carichi
+#                 (PI30 batteria da scaricare, batteria sopra il minimo)
+#   MANTENIMENTO  uscita SBU, batteria scarica tenuta alla tensione minima:
+#                 carichi sulla rete (Line mode), oppure batteria entro 0.3V
+#                 dalla tensione minima ("PI30 keep battery live")
 #   ALTRO         priorità impostate a mano in un'altra combinazione
 #
-# La PI30 senza rete in carica non si vede qui: la segnala la notifica
+# La PI30 senza rete in CARICA non si vede qui: la segnala la notifica
 # "PI30 non sta usando la rete" dell'automazione.
 #
-# Da interfaccia (niente configuration.yaml):
+# NON incollare questo file in un editor YAML. Da interfaccia:
 #   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante >
 #   Template > Sensore
 #   Nome: PI30 Modalità MAN
 #   Unità di misura, classe del dispositivo, classe di stato: vuote
-#   Modello di stato: il template sotto, dopo "state: >-"
+#   Modello di stato: solo il template dopo "state: >-", senza i rientri
 #
-# Oppure, in configuration.yaml (poi riavvia):
+# Oppure, solo in configuration.yaml (poi riavvia):
 template:
   - sensor:
       - name: PI30 Modalità MAN
@@ -35,10 +32,12 @@ template:
         state: >-
           {% set o = states('sensor.heltec_pi30_display_pi30_output_source_priority') | float(-1) %}
           {% set c = states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(-1) %}
+          {% set v = states('sensor.heltec_pi30_battery_voltage') | float(99) %}
+          {% set minimo = states('input_number.pi30_keep_battery_live') | float(25.5) %}
           {% if o == 0 and c == 2 %}IN CARICA
           {% elif o == 0 and c == 3 %}PIENA
-          {% elif o == 2 and c == 3 %}IN SCARICA
-          {% elif o == 2 and c == 2 %}MANTENIMENTO
+          {% elif o == 2 and (is_state('sensor.heltec_pi30_display_pi30_device_mode', 'Line mode') or v <= minimo + 0.3) %}MANTENIMENTO
+          {% elif o == 2 %}IN SCARICA
           {% else %}ALTRO{% endif %}
         availability: >-
           {{ has_value('sensor.heltec_pi30_display_pi30_output_source_priority')

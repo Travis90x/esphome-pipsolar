@@ -1,36 +1,29 @@
 # Aiutanti per "Automazione - PI30 Batteria MAN.yaml".
 #
 # 1) Commutatore "PI30 Ricarica Batteria" (input_boolean.pi30_ricarica_batteria)
-#    Acceso (o assente): la batteria si ricarica, logica normale.
-#    Spento: quando lo spegni l'automazione memorizza bulk e float attuali
-#    della PI30 in "PI30 bulk carica" / "PI30 float carica", poi porta bulk e
-#    float alla tensione di "PI30 keep battery live" (SBU, "solare + rete"):
-#    la batteria non viene ricaricata, ma quando l'inverter passa alla rete il
-#    caricabatterie la tiene a quella tensione, così il BMS non stacca. Quando
-#    torna acceso, l'automazione rimette in bulk e float i valori di
-#    "PI30 bulk carica" / "PI30 float carica", anche se nel frattempo li hai
-#    modificati.
+#    Acceso (o assente): la batteria si ricarica con il surplus, logica
+#    normale. Spento: l'automazione la tiene sempre in SCARICA (PI30
+#    batteria da scaricare): la batteria alimenta i carichi fino alla
+#    tensione minima e lì l'inverter la tiene, senza mai ricaricarla oltre.
 #    Non disattivare l'automazione al posto di questo interruttore.
 #
 # 2) Numeri "PI30 bulk carica" e "PI30 float carica"
 #    (input_number.pi30_bulk_carica, input_number.pi30_float_carica)
-#    Memoria temporanea di bulk e float mentre l'interruttore è spento.
+#    Bulk e float di carica: li scrive sull'inverter PI30 batteria da
+#    caricare a ogni CARICA. Per cambiarli cambia questi due aiutanti, non i
+#    numeri dell'inverter (verrebbero riscritti). Senza: 29.0V e 27.0V.
 #
 # 3) Numero "PI30 keep battery live" (input_number.pi30_keep_battery_live)
-#    Tensione di mantenimento usata da spento: bulk e float vengono portati a
-#    questo valore. La usa anche MANTIENI (script.pi30_batteria_da_mantenere)
-#    da acceso, alla soglia di sottotensione: la batteria resta a questa
-#    tensione finché il surplus non basta per la CARICA. Minimo 24.0V (il PI30 non accetta di meno). Consigliato
-#    25.8V, non 24.0: a 24.0V il pacco è al 2% e la curva LiFePO4 è ripida,
-#    ogni impulso del caricabatterie (circa 14 Wh) lo porta a 24.4V e
-#    l'autoconsumo lo riporta a 23.9V in 20 minuti, un dente di sega di
-#    0.5V ogni 25 minuti per tutto il giorno (storico 7-8/10/2026). A
-#    25.8V (15%) la curva è piatta: lo stesso impulso sposta la tensione
-#    di pochi centesimi e serve ogni qualche ora. Deve restare SOTTO la
+#    Tensione minima: PI30 batteria da scaricare porta bulk e float a questo
+#    valore, così quando l'inverter passa alla rete il caricabatterie tiene
+#    la batteria qui. Minimo 24.0V (il PI30 non accetta di meno), senza:
+#    25.5V. Meglio sopra i 25.5V: a 24.0V il pacco è al 2% e la curva LiFePO4
+#    è ripida, ogni impulso del caricabatterie la sposta di 0.5V (storico
+#    7-8/10/2026); a 25.5-25.8V la curva è piatta. Deve restare SOTTO la
 #    tensione di ritorno a batteria dell'inverter (sensor
 #    ..._battery_redischarge_voltage), altrimenti in SBU la PI30 torna a
 #    scaricare e il caricabatterie la ricarica dalla rete a ogni ciclo.
-#    Cambiarlo con l'interruttore spento lo applica subito.
+#    Cambiarlo lo applica subito.
 #
 # 4) Numero "PI30 Charging Max Temperature"
 #    (input_number.pi30_charging_max_temperature), facoltativo
@@ -39,9 +32,8 @@
 #    per esempio 70°C. Superata, l'automazione abbassa la corrente da rete di
 #    uno step ogni 2 minuti, fino a 2A, senza staccare la carica. Torna a
 #    salire solo sotto il limite meno 5°C (isteresi); in mezzo la corrente
-#    resta dov'è. Vale per ogni carica da rete, anche MANTIENI (10A) e
-#    PI30 batteria minimo (40A). Senza questo aiutante nessun limite di
-#    temperatura.
+#    resta dov'è. Vale per ogni carica da rete, anche per i 10A del
+#    mantenimento. Senza questo aiutante nessun limite di temperatura.
 #    Dopo averlo creato impostalo a 70: da configuration.yaml parte dal
 #    minimo (40), poi Home Assistant ricorda il valore ai riavvii.
 #
@@ -49,12 +41,8 @@
 #    Corrente massima da rete che la modulazione può raggiungere, in A
 #    (MAX MANUAL CURRENT). Gli step sono 2, 10, 20, 30, 40, 50, 60: un valore
 #    in mezzo vale come lo step inferiore (35 = 30). Cambiarlo lo applica
-#    subito, anche abbassando una corrente già più alta. Vale anche per
-#    PI30 batteria minimo a ricarica spenta. Senza questo aiutante: 40A.
-#
-# Senza uno dei tre numeri (o con la tensione di mantenimento sotto 24.0V),
-# da spento l'automazione esegue SCARICA (solo solare) e non tocca bulk e
-# float.
+#    subito, anche abbassando una corrente già più alta. Senza questo
+#    aiutante: 40A.
 #
 # Dalla UI (senza configuration.yaml):
 #   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante
@@ -64,14 +52,15 @@
 #   - Numero: Nome "PI30 float carica", min 24.0, max 29.0, passo 0.1, V,
 #     modalità Campo di inserimento
 #   - Numero: Nome "PI30 keep battery live", min 24.0, max 29.0, passo 0.1, V,
-#     modalità Campo di inserimento, valore consigliato 25.8
+#     modalità Campo di inserimento, valore 25.5
 #   - Numero: Nome "PI30 Charging Max Temperature", min 40, max 90, passo 1,
 #     °C, modalità Campo di inserimento, valore 70
 #   - Numero: Nome "PI30 Max Manual Current", min 2, max 60, passo 1, A,
 #     modalità Campo di inserimento, valore 40
 #   Controlla gli ID entità dopo il salvataggio.
 #
-# Oppure, equivalente, in configuration.yaml (poi riavvia):
+# NON incollare questo file in un editor YAML: oppure, solo in
+# configuration.yaml (poi riavvia):
 input_boolean:
   pi30_ricarica_batteria:
     name: PI30 Ricarica Batteria

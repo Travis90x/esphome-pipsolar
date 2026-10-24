@@ -1,62 +1,96 @@
 alias: PI30 batteria da scaricare
 description: >-
-  SCARICA. Solo solare, SBU: carica da rete disabilitata, la batteria
-  alimenta i carichi. Riporta anche la corrente massima da rete a 2A, così
-  la CARICA successiva riparte dal minimo e sale uno step alla volta: senza
-  questo, il 05/10/2026 alle 10:10 la PI30 è rientrata in CARICA direttamente
-  a 39A (lo step era rimasto a 40 dal giorno prima), 1 kW piazzato sulla rete
-  in un colpo, e 70 secondi dopo era di nuovo in SCARICA.
-  L'automazione MAN lo chiama a ogni esecuzione e aspetta che finisca:
-  senza niente da scrivere finisce subito, le attese ci sono solo
-  attorno alle scritture. Lo stato on/off dello script dice solo che sta
-  girando, non la modalità (vedi l'aiutante PI30 Modalita MAN).
+  IN SCARICA e MANTENIMENTO. Uscita SBU, carica "solare + rete", bulk e
+  float alla tensione minima (aiutante "PI30 keep battery live", senza:
+  25.5V; mai sotto 24.0V), corrente da rete 10A (meno con current_limit, il
+  limite di temperatura dell'automazione PI30 Batteria MAN). La batteria
+  alimenta i carichi finché scende alla tensione di recharge dell'inverter;
+  lì la PI30 passa i carichi sulla rete e il caricabatterie tiene la batteria
+  alla tensione minima, coprendo solo l'autoconsumo dell'inverter (circa
+  50W) e la scarica interna: non la ricarica oltre e non la lascia scendere
+  fino allo stacco del BMS. La tensione minima deve restare sotto la tensione
+  di redischarge dell'inverter, altrimenti in SBU la PI30 torna a scaricare
+  e la rete la ricarica a ogni ciclo. Scrive solo quello che è diverso: senza
+  niente da scrivere finisce subito. Prima bulk e float, poi le priorità, così
+  il caricabatterie non carica mai oltre la tensione minima.
 sequence:
+  - variables:
+      hold: >-
+        {{ [states('input_number.pi30_keep_battery_live') | float(25.5), 24.0] | max | round(1) }}
+      hold_current: >-
+        {{ ([10, current_limit | int(10)] | min) if current_limit is defined else 10 }}
+      bulk_now: "{{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(0) | round(1) }}"
+  # Bulk e float alla tensione minima: scendendo prima il float, salendo
+  # prima il bulk
   - if:
       - condition: template
-        value_template: |-
-          {{ not (
-            states('sensor.heltec_pi30_display_pi30_output_source_priority') | float(0) == 2.0
-            and
-            states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(0) == 3.0
-          ) }}
+        value_template: "{{ hold < bulk_now }}"
     then:
-      - delay:
-          hours: 0
-          minutes: 0
-          seconds: 2
-          milliseconds: 0
-      - action: button.press
+      - if:
+          - condition: template
+            value_template: >-
+              {{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float(0) | round(1) != hold }}
+        then:
+          - action: number.set_value
+            target:
+              entity_id: number.heltec_pi30_display_pi30_set_battery_float_voltage
+            data:
+              value: "{{ hold }}"
+          - delay: "00:00:02"
+      - action: number.set_value
         target:
-          entity_id: button.heltec_pi30_display_pi30_charger_solar_only
-        data: {}
-      - delay:
-          hours: 0
-          minutes: 0
-          seconds: 1
-          milliseconds: 0
-      - action: switch.turn_on
-        target:
-          entity_id: switch.heltec_pi30_display_pi30_output_priority_sbu
-      - delay:
-          hours: 0
-          minutes: 0
-          seconds: 2
-          milliseconds: 0
+          entity_id: number.heltec_pi30_display_pi30_set_battery_bulk_voltage
+        data:
+          value: "{{ hold }}"
+      - delay: "00:00:02"
+    else:
+      - if:
+          - condition: template
+            value_template: "{{ hold != bulk_now }}"
+        then:
+          - action: number.set_value
+            target:
+              entity_id: number.heltec_pi30_display_pi30_set_battery_bulk_voltage
+            data:
+              value: "{{ hold }}"
+          - delay: "00:00:02"
+      - if:
+          - condition: template
+            value_template: >-
+              {{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float(0) | round(1) != hold }}
+        then:
+          - action: number.set_value
+            target:
+              entity_id: number.heltec_pi30_display_pi30_set_battery_float_voltage
+            data:
+              value: "{{ hold }}"
+          - delay: "00:00:02"
+  # Priorità: SBU, carica "solare + rete"
   - if:
       - condition: template
         value_template: >-
-          {{ states('sensor.heltec_pi30_display_pi30_max_utility_charging_current')
-             | int(default=0) != 2 }}
+          {{ not (states('sensor.heltec_pi30_display_pi30_output_source_priority') | float(9) == 2.0
+             and states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(9) == 2.0) }}
+    then:
+      - action: button.press
+        target:
+          entity_id: button.heltec_pi30_display_pi30_charger_solar_utility
+      - delay: "00:00:01"
+      - action: switch.turn_on
+        target:
+          entity_id: switch.heltec_pi30_display_pi30_output_priority_sbu
+      - delay: "00:00:02"
+  # Corrente da rete per il mantenimento
+  - if:
+      - condition: template
+        value_template: >-
+          {{ states('sensor.heltec_pi30_display_pi30_max_utility_charging_current') | int(0) != hold_current }}
     then:
       - action: select.select_option
         target:
           entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
         data:
-          option: '2'
-      - delay:
-          hours: 0
-          minutes: 0
-          seconds: 2
-          milliseconds: 0
+          option: "{{ hold_current | string }}"
+      - delay: "00:00:02"
 mode: queued
 max: 10

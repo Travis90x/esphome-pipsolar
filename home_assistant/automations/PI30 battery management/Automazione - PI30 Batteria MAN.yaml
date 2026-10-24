@@ -1,232 +1,44 @@
 alias: PI30 Batteria MAN
 description: >-
-  Logica umana completa: vedi il README.md principale del repository,
-  sezione "Modulazione dinamica della carica da rete" (README_IT.md per
-  la versione italiana). Lo step massimo raggiungibile dalla modulazione
-  (MAX MANUAL CURRENT, variabile max_manual_current) si imposta con
-  l'aiutante input_number.pi30_max_manual_current ("PI30 Max Manual
-  Current", in A): un valore fuori dagli step 2-10-20-30-40-50-60 vale
-  come lo step inferiore (35 = 30). Senza l'aiutante: 40A. Cambiarlo lo
-  applica subito, anche abbassando una corrente già più alta.
-  MANTENIMENTO ALLA SOTTOTENSIONE. Quando la tensione della batteria PI30
-  scende a sensor.heltec_pi30_display_pi30_battery_under_voltage (la
-  soglia di sottotensione letta dall'inverter), invece di SCARICA viene
-  eseguito MANTIENI (script.pi30_batteria_da_mantenere): SBU, carica
-  "solare + rete" e corrente massima da rete fissa a 10A. In SBU a quella
-  tensione l'inverter è già in Line mode (i carichi vanno sulla rete), ma
-  il suo autoconsumo, circa 50W, esce comunque dalla batteria e la
-  porterebbe fino allo stacco del BMS, che spegne l'inverter (successo il
-  23/09/2026 alle 10:00, il 25/09 alle 22:00 e il 26/09 alle 04:29 ora
-  italiana, sempre a 22.7-22.8V). 2A non bastano: il 26/09 dalle 04:02
-  alle 04:29 l'inverter segnava +2A mentre la batteria scendeva da 23.6V
-  a 22.8V. MANTIENI porta anche bulk e float alla tensione di
-  mantenimento input_number.pi30_keep_battery_live (memorizzando prima
-  quelli di carica in input_number.pi30_bulk_carica / _float_carica): i
-  10A portano la batteria a quella tensione e il caricabatterie la tiene
-  lì, coprendo solo l'autoconsumo dell'inverter. MANTIENI resta attivo
-  senza rilascio a tensione finché il surplus visibile (surplus_ok, vedi
-  sotto) non basta per la CARICA: allora bulk e float di carica tornano
-  al loro posto, la corrente da rete torna a 2A e decidono i rami
-  normali. Prima MANTIENI rilasciava a hold_release_margin_v (0.5V)
-  sopra la soglia verso SCARICA ("solo solare", caricabatterie spento) e
-  l'autoconsumo riportava la batteria alla soglia: un dente di sega
-  24.0-24.5V ogni 25-30 minuti per tutta la notte, alternando MANTIENI e
-  SCARICA (10-11/10 e 13/10/2026). Con bulk e float a 25.0V e "solare +
-  rete" (09/10/2026 18:00-23:00, automazione spenta) la batteria è
-  rimasta tra 24.7V e 25.0V. Il vecchio ciclo resta solo se uno dei tre
-  aiutanti input_number manca o la tensione di mantenimento è sotto 24.0V.
-  Con la ricarica spenta (RICARICA BATTERIA, sotto) la batteria la tiene
-  script.pi30_batteria_minimo e MANTIENI non interviene. Riaccendere la
-  ricarica esce da MANTIENI (se la batteria non è alla soglia).
-  Il mantenimento è il PRIMO controllo di ogni esecuzione e vince su
-  tutti i rami di CARICA e SCARICA: anche una carica a 2A (che non
-  basta) viene sostituita da MANTIENI quando la batteria è alla soglia.
-  L'automazione fa tutto da sola e deve restare sempre attiva:
-  disattivata non protegge la batteria (il 25/09 era disattivata, alla
-  soglia non è intervenuto nulla e il BMS ha spento l'inverter alle
-  22:00). La carica vera resta affidata al surplus, cioè ai rami di
-  CARICA qui sopra. Il trigger sotto_tensione fa intervenire
-  l'automazione entro un minuto dal raggiungimento della soglia, senza
-  aspettare il controllo dei 10 minuti. Se la soglia non è leggibile si
-  usa 24.0V, per sicurezza.
-  CARICA AL MINIMO MA NON BASTA. Se la corrente da rete è già a 2A e il
-  contatore preleva almeno 500W o la batteria GoodWe eroga almeno 200W,
-  viene eseguita SCARICA prima di tutti i rami di CARICA, quindi anche con
-  la GoodWe al 100% o sopra 55V (il "VUOL DIRE CHE" della logica umana nel
-  README). Prima valeva solo nell'ultimo ramo: il 27/09 dalle 18 alle
-  20:48 la GoodWe al 100% erogava oltre 400W e la PI30 è rimasta in CARICA.
-  ANTI-OSCILLAZIONE. Le condizioni di CARICA a 2A (contatore < 500W e
-  GoodWe < 200W) e di SCARICA (il contrario) sono complementari, e il
-  trigger batteria_stabile scatta a ogni variazione dei sensori GoodWe:
-  quando il surplus è al limite (mattina presto, sera) l'automazione
-  passava CARICA -> SCARICA -> CARICA ogni 20-40 secondi, perché in
-  CARICA i carichi della PI30 (100-500W) più i 2A finiscono sulla rete
-  e fanno scattare la soglia, in SCARICA tornano sulla batteria e la
-  soglia rientra (dai sensori GoodWe: il contatore resta vicino allo
-  zero durante l'oscillazione, è la potenza della batteria GoodWe che
-  supera i 200W per qualche secondo a ogni trasferimento dei carichi).
-  Nello storico 27/09-02/10/2026: 20-34 commutazioni a
-  meno di 5 minuti l'una dall'altra OGNI giorno (circa 10 minuti di
-  oscillazione ogni mattina, più la sera del 29/09), ognuna con due
-  scritture di priorità sull'inverter e il trasferimento dei carichi.
-  Quindi, appena passata a SCARICA (SBU + solo solare), la PI30 non
-  torna in CARICA prima di charge_dwell_s (600 s = 10 minuti) dal
-  cambio: il controllo sta subito dopo il "VUOL DIRE CHE", così
-  SCARICA e MANTIENI restano immediati e solo il ritorno in CARICA
-  aspetta. Costo: la carica parte al massimo 10 minuti dopo.
-  BATTERIA PIENA. Ogni ritorno in CARICA con la batteria PI30 piena fa
-  ripartire la fase bulk del caricabatterie: 29.0V raggiunti in un
-  minuto a 15-30A su un pacco al 100% (il 29/09 cinque volte tra le
-  17:15 e le 17:58, l'01/10 alle 17:41), cioè 3.63V per cella con le
-  celle sbilanciate che arrivano alla protezione di sovraccarica del
-  BMS. Per questo, se la PI30 non è in CARICA e il SOC calcolato
-  (sensor.heltec_pi30_display_pi30_battery_soc_calculated) è almeno
-  full_resume_soc (95%), non torna in CARICA ma, se il surplus visibile
-  basta, va in PIENA (script.pi30_batteria_piena: uscita "rete prima" e
-  carica "solo solare"): i carichi della PI30 vanno sul fotovoltaico
-  tagliato e il caricabatterie resta spento. Lasciarla in SCARICA costava
-  il pacco: il 04/10 dalle 16:09 alle 17:10 la PI30 ha erogato 500W ai
-  propri carichi con il contatore a -300W (fotovoltaico tagliato), 0.5
-  kWh di batteria spesi mentre il surplus andava perso. Da PIENA si esce
-  in SCARICA quando il contatore preleva >= 500W o la GoodWe eroga >=
-  200W per 60 secondi; sotto il 95% riprende la logica normale (un solo
-  bulk, non uno ogni 10 minuti). Finché resta in CARICA al float niente
-  cambia. Se il sensore del SOC manca, il controllo non si applica.
-  SURPLUS VISIBILE. Con l'immissione in rete limitata (export_cap_w =
-  300W: oltre, la GoodWe taglia il fotovoltaico e il surplus vero non si
-  vede), fuori dalla CARICA si entra in CARICA o PIENA solo se
-  l'immissione (contatore negativo) copre i carichi della PI30
-  (sensor.heltec_pi30_output_active_power) più i 2A iniziali
-  (entry_charge_w = 60W), oppure è al limite meno export_margin_w (50W):
-  a 250W di immissione il taglio è in corso e il surplus è almeno
-  quello. Altrimenti SCARICA (dal mantenimento: il normale rilascio).
-  Senza questo controllo la sera del 04/10 la PI30 ha tentato sei volte
-  la CARICA con 500W di carichi e 120-240W di immissione, ogni volta
-  rimandata in SCARICA dopo 20-50 secondi; la mattina del 05/10 quattro
-  tentativi tra le 10:00 e le 10:34 con il contatore a zero. Se la
-  GoodWe è al 100% ma l'immissione non è al limite, il surplus è tutto
-  visibile ed è quello: sotto i carichi della PI30, caricare vorrebbe
-  dire prelevare. Il contatore resta inchiodato a -290/-320W tutto il
-  giorno con la GoodWe piena: quello è il segnale di surplus, non il SOC
-  GoodWe, che oscilla tra 99 e 100 (il 04/10 alle 16:09 un 99 di un
-  attimo ha mandato in SCARICA una PI30 al float con il contatore a
-  -311W). In CARICA con la GoodWe sotto il 100%, quindi, non si scarica
-  più per quel motivo: si resta in carica e si scende di uno step solo se
-  il contatore preleva >= 300W o la GoodWe eroga >= 200W; al minimo
-  decide il "VUOL DIRE CHE". Fuori dalla CARICA, con il surplus visibile
-  già verificato, si entra in CARICA dal minimo (2A) anche con la GoodWe
-  sotto il 100%: è il fotovoltaico tagliato. Lo script SCARICA riporta la corrente da
-  rete a 2A, così ogni CARICA riparte dal minimo (il 05/10 alle 10:10 è
-  rientrata direttamente a 39A, lo step era rimasto a 40).
-  GLITCH GOODWE. Un sensore GoodWe "unavailable" o "unknown" da meno di
-  goodwe_glitch_s (600 s) non decide nulla: il 04-05/10/2026 sedici
-  buchi di pochi secondi dell'integrazione GoodWe hanno causato undici
-  cambi di modalità, quattro di notte (CARICA a 2A dal ramo "sensori
-  sconosciuti", con i carichi della PI30 spostati sulla rete). Dopo 10
-  minuti valgono i rami normali per i sensori sconosciuti.
-  SCARICA CONFERMATA. Il "VUOL DIRE CHE" e l'uscita da PIENA aspettano
-  che la condizione duri discharge_confirm_s (60 s): al trasferimento
-  dei carichi sulla rete la batteria GoodWe supera i 200W per qualche
-  secondo (il 05/10 alle 10:11 194W), un transitorio, non una scarica.
-  RICARICA BATTERIA. Con l'aiutante input_boolean.pi30_ricarica_batteria
-  ("Aiutanti - PI30 Ricarica Batteria.yaml") acceso, o assente, la
-  batteria si ricarica con la logica normale. Quando lo spegni
-  l'automazione memorizza bulk e float attuali (sensor
-  ..._battery_bulk_voltage / ..._battery_float_voltage) in
-  input_number.pi30_bulk_carica / input_number.pi30_float_carica, poi
-  finché resta spento esegue sempre PI30 batteria minimo
-  (script.pi30_batteria_minimo): SBU,
-  "solare + rete", bulk e float alla tensione di mantenimento
-  input_number.pi30_keep_battery_live ("PI30 keep battery live", da 24.0V),
-  così la batteria non viene ricaricata ma l'inverter la tiene a quella
-  tensione e non si spegne. Cambiare la tensione di mantenimento la applica
-  subito. Quando l'interruttore torna ON rimette in bulk e float i valori
-  di input_number.pi30_bulk_carica / _float_carica, anche se nel frattempo
-  li hai modificati, e lo rifà più tardi se bulk o float sono ancora alla
-  tensione di mantenimento. Se uno dei tre aiutanti input_number manca o
-  la tensione di mantenimento è sotto 24.0V, da spento esegue SCARICA
-  (solo solare) senza toccare bulk e float. Modalità queued: le esecuzioni
-  restano una alla volta, ma il cambio dell'interruttore non viene perso.
-  LIMITE DI TEMPERATURA. Con l'aiutante
-  input_number.pi30_charging_max_temperature ("PI30 Charging Max
-  Temperature", per esempio 70°C) e il sensore
-  sensor.heltec_pi30_heat_sink_temperature (dissipatore dell'inverter), la
-  modulazione non supera current_cap invece di max_manual_current. Da
-  charging_max_temp in su la corrente da rete scende di uno step ogni
-  thermal_step_s (120 s, il dissipatore è lento), fino a 2A: la carica non
-  si stacca. Isteresi di charging_temp_hysteresis (5°C): tra 65 e 70°C la
-  corrente resta dov'è (gli step in giù per prelievo o scarica GoodWe
-  valgono sempre), sotto 65°C la modulazione risale normalmente, uno step
-  alla volta. Il trigger temperatura_alta fa intervenire l'automazione
-  appena si supera il limite. Senza l'aiutante o con il sensore non
-  disponibile, nessun limite. Vale per ogni carica da rete: anche MANTIENI
-  (10A) e script.pi30_batteria_minimo (40A) ricevono current_cap come
-  current_limit e scendono di step allo stesso modo (MANTIENI da 10A a
-  2A). A 2A alla soglia di sottotensione il pacco può scendere (2A non
-  bastano contro l'autoconsumo), ma a 2A il dissipatore si raffredda e
-  sotto il limite meno l'isteresi si torna a 10A.
-  CARICA DALLA GOODWE. In CARICA sopra 2A, appena la batteria GoodWe
-  (sensor.goodwe_battery_power) eroga più di goodwe_drain_w (250W), la
-  corrente da rete scende subito allo step che annulla quell'energia (più
-  l'eventuale prelievo al contatore), lasciandone al massimo goodwe_idle_w
-  (100W), almeno uno step sotto, minimo 2A: da 40A con 466W dalla GoodWe va
-  a 20A, da 60A con 1.7kW a 2A. Prima andava sempre a 2A e risaliva uno step
-  ogni 20-30 secondi: con la GoodWe piena la corrente faceva un dente di
-  sega 2-40-2A ogni 1-3 minuti (il 22/10/2026 tra le 16 e le 17: 114 cambi
-  di corrente, 20 crolli a 2A). Il trigger goodwe_in_scarica interviene
-  appena si superano i 250W, senza i 10 secondi di batteria_stabile. A 2A,
-  se la GoodWe eroga ancora almeno 200W per 60 s, il "VUOL DIRE CHE" passa
-  a SCARICA. Non vale per MANTIENI né per PI30 batteria minimo: lì la corrente
-  serve a non far staccare il BMS.
-  ZONA FERMA. In CARICA uno step in su arriva solo con surplus visibile:
-  immissione in rete (contatore negativo) almeno pari allo step successivo
-  ((step - corrente attuale) x tensione PI30) o al limite di immissione
-  meno export_margin_w (250W: fotovoltaico tagliato), batteria GoodWe sotto
-  goodwe_idle_w (100W) e corrente ferma da almeno step_up_wait_s (20 s: i
-  sensori GoodWe si aggiornano più lentamente della PI30). Uno step in giù
-  con il contatore che preleva >= 300W o la GoodWe che eroga >= 200W. In
-  mezzo la corrente resta dov'è e non viene riscritta sull'inverter. Prima
-  si saliva con "contatore < 300W e GoodWe < 200W", cioè anche con il
-  contatore a zero e la GoodWe che erogava già 100-199W: la corrente saliva
-  oltre il surplus finché la GoodWe non superava i 250W e poi crollava a
-  2A (prima dei crolli del 21-22/10 il contatore era quasi sempre tra 0 e
-  +80W e la GoodWe saliva da 100 a 300W in 30-40 secondi). E lo stesso
-  valore veniva riscritto sull'inverter a ogni esecuzione.
-  PI30 FUORI RETE. In CARICA e in PIENA (uscita "rete prima") la PI30 deve
-  stare in Line mode. Se sensor.heltec_pi30_display_pi30_device_mode dice
-  altro da line_lost_s (300 s), con le priorità ferme da almeno altrettanto,
-  la PI30 non sta usando la rete: l'automazione crea una notifica
-  persistente (id pi30_fuori_rete), riporta la corrente da rete a 2A (al
-  ritorno della rete la carica riparte dal minimo) e non modula. La notifica
-  sparisce da sola quando la PI30 torna in Line mode. La notifica riporta
-  anche sensor.heltec_pi30_pi30_grid_voltage ("PI30 grid voltage"). Il
-  23/10/2026 l'ingresso AC della PI30 è stato interrotto dalle 14:49:46
-  alle 20:40 (0V, tornato solo 20 secondi alle 17:40), mentre la casa
-  continuava a immettere: la PI30 in CARICA è passata in Battery mode,
-  batteria a -3A (SOC calcolato da 100 a 92% in due ore) con il contatore a
-  -300W, e l'automazione teneva 60A credendola in carica. Le uscite dalla
-  rete di 10 secondi (buchi di tensione: 103V il 22/10 alle 15:21, 151V il
-  23/10 alle 14:27) non contano. MANTIENI resta il primo controllo.
-  SCRIPT ATTESI. Gli script delle modalità partono con script.turn_on (per
-  ID entità) e l'automazione aspetta che lo script torni off (al massimo 120
-  s). Senza attesa: un MANTIENI ancora in corsa
-  riscriveva SBU, bulk e float a 25.8V e 10A dopo che l'automazione era già
-  passata in CARICA (il 22/10/2026 tre volte tra le 09:04 e le 09:06, bulk e
-  float riscritti 29.0 -> 25.8 a ogni giro). NON chiamarli come azione
-  diretta (action: script.pi30_...): quell'azione usa l'ID dello script, che
-  per uno script creato da interfaccia è diverso dall'ID entità; il 24/10
-  ogni esecuzione si fermava con "azione sconosciuta" e alle 10:20 MANTIENI
-  non è partito con la batteria a 24.0V. Gli script aspettano solo
-  quando scrivono qualcosa. Lo stato on/off di uno script dice solo che sta
-  girando, non la modalità: per quella c'è l'aiutante "Aiutante - PI30
-  Modalita MAN (Sensore template).yaml".
-  GOODWE FERMA A 99%. Il BMS della GoodWe può fermare la carica a 99% e
-  restarci per ore: con la regola "SOC > 99" la PI30 restava nel ramo
-  "GoodWe sotto il 100%", dove la corrente può solo scendere, e non
-  saliva mai oltre lo step a cui era. Ora conta come piena (goodwe_full)
-  anche la GoodWe al 99% con la batteria ferma, |sensor.goodwe_battery_power|
-  sotto goodwe_idle_w (100W). Al 99% ma ancora in carica, la GoodWe ha la
-  precedenza come prima.
+  Decide la modalità della PI30 in base al surplus fotovoltaico (contatore e
+  batteria GoodWe) e regola la corrente di carica da rete. Spiegazione
+  completa, con i casi dello storico: README_IT.md, sezione "Modulazione
+  dinamica della carica da rete".
+  TRE SCRIPT, chiamati per ID entità (l'automazione aspetta che finiscano).
+  script.pi30_batteria_da_caricare (IN CARICA): uscita "rete prima", carica
+  "solare + rete", bulk e float di carica; entra a 2A, poi la corrente la
+  regola questa automazione. script.pi30_batteria_piena (PIENA): uscita "rete
+  prima", carica "solo solare": batteria piena, carichi sul surplus, nessun
+  nuovo bulk. script.pi30_batteria_da_scaricare (IN SCARICA e
+  MANTENIMENTO): uscita SBU, carica "solare + rete", bulk e float alla
+  tensione minima, 10A: la batteria alimenta i carichi finché scende alla
+  tensione di recharge, poi la PI30 passa sulla rete e il caricabatterie la
+  tiene alla tensione minima, coprendo solo l'autoconsumo.
+  ORDINE DEI CONTROLLI. 1) Ricarica spenta (input_boolean.pi30_ricarica_batteria
+  off) o batteria PI30 alla soglia di sottotensione: SCARICA. 2) In CARICA o
+  PIENA ma non in Line mode da 5 minuti: la PI30 non usa la rete, notifica
+  (con la tensione di rete letta dalla PI30) e corrente a 2A. 3) In CARICA
+  sopra 2A con la batteria GoodWe che eroga più di 250W: corrente subito allo
+  step che annulla quell'energia. 4) Un sensore GoodWe non disponibile da meno
+  di 10 minuti: nessuna decisione. 5) In CARICA a 2A con prelievo >= 500W o
+  GoodWe >= 200W per 60 s: SCARICA. 6) Passata a SCARICA da meno di 10
+  minuti: resta. 7) SOC calcolato >= 95%: PIENA se c'è surplus; da PIENA si
+  esce in SCARICA con prelievo >= 500W o GoodWe >= 200W per 60 s. 8) Fuori
+  dalla CARICA senza surplus visibile (immissione che copre i carichi della
+  PI30 più 60W, oppure al limite di immissione meno 50W, 250W): SCARICA.
+  9) Altrimenti CARICA: si entra a 2A; uno step in su (2-10-20-30-40-50-60)
+  solo con immissione visibile, batteria GoodWe ferma e corrente ferma da 20
+  s; uno step in giù con prelievo >= 300W o GoodWe >= 200W; in mezzo la
+  corrente resta e non viene riscritta. Con la GoodWe sotto il 100% (e non
+  ferma al 99%), sopra 2A la corrente può solo scendere: la GoodWe ha la
+  precedenza.
+  AIUTANTI. input_number.pi30_bulk_carica e input_number.pi30_float_carica:
+  bulk e float di carica (senza: 29.0V e 27.0V). input_number.pi30_keep_battery_live:
+  tensione minima di SCARICA e MANTENIMENTO (senza: 25.5V; almeno 24.0V e
+  sotto la tensione di redischarge dell'inverter). input_number.pi30_max_manual_current:
+  step massimo (senza: 40A). input_number.pi30_charging_max_temperature,
+  facoltativo: sopra questa temperatura del dissipatore la corrente scende di
+  uno step ogni 2 minuti fino a 2A, con 5°C di isteresi.
 triggers:
   - trigger: homeassistant
     id: avvio
@@ -246,8 +58,6 @@ triggers:
       - sensor.potenza_contatore
       - sensor.goodwe_battery_power
     for:
-      hours: 0
-      minutes: 0
       seconds: 10
   - trigger: template
     id: sotto_tensione
@@ -266,119 +76,51 @@ triggers:
     id: ricarica_batteria
     entity_id: input_boolean.pi30_ricarica_batteria
   - trigger: state
-    id: max_manual_current
-    entity_id: input_number.pi30_max_manual_current
-  - trigger: state
-    id: keep_battery_live
-    entity_id: input_number.pi30_keep_battery_live
+    id: aiutanti
+    entity_id:
+      - input_number.pi30_max_manual_current
+      - input_number.pi30_keep_battery_live
+      - input_number.pi30_bulk_carica
+      - input_number.pi30_float_carica
 actions:
-  # Ricarica batteria appena spenta: memorizza bulk e float di carica, prima
-  # che vengano portati alla tensione di mantenimento (se sono già lì, no)
-  - if:
-      - condition: state
-        entity_id: input_boolean.pi30_ricarica_batteria
-        state: 'off'
-      - condition: template
-        value_template: >-
-          {{ trigger is defined and trigger.id == 'ricarica_batteria'
-             and states('input_number.pi30_bulk_carica') not in ['unknown', 'unavailable']
-             and states('input_number.pi30_float_carica') not in ['unknown', 'unavailable'] }}
-    then:
-      - if:
-          - condition: template
-            value_template: >-
-              {{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(0) >= 24.0 and
-                 states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(0) | round(1) !=
-                 states('input_number.pi30_keep_battery_live') | float(0) | round(1) }}
-        then:
-          - action: input_number.set_value
-            target:
-              entity_id: input_number.pi30_bulk_carica
-            data:
-              value: "{{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float | round(1) }}"
-      - if:
-          - condition: template
-            value_template: >-
-              {{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float(0) >= 24.0 and
-                 states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float(0) | round(1) !=
-                 states('input_number.pi30_keep_battery_live') | float(0) | round(1) }}
-        then:
-          - action: input_number.set_value
-            target:
-              entity_id: input_number.pi30_float_carica
-            data:
-              value: "{{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float | round(1) }}"
   - variables:
-      charging_steps:
-        - 2
-        - 10
-        - 20
-        - 30
-        - 40
-        - 50
-        - 60
+      charging_steps: [2, 10, 20, 30, 40, 50, 60]
       max_manual_current: >-
         {{ [states('input_number.pi30_max_manual_current') | int(40), 2] | max }}
-      soc: >-
-        {{ states('sensor.goodwe_battery_state_of_charge') | float(default=none)
-        }}
-      voltage: '{{ states(''sensor.goodwe_battery_voltage'') | float(default=none) }}'
-      grid_power: '{{ states(''sensor.potenza_contatore'') | float(default=none) }}'
-      battery_power: '{{ states(''sensor.goodwe_battery_power'') | float(default=none) }}'
+      soc: "{{ states('sensor.goodwe_battery_state_of_charge') | float(default=none) }}"
+      voltage: "{{ states('sensor.goodwe_battery_voltage') | float(default=none) }}"
+      grid_power: "{{ states('sensor.potenza_contatore') | float(default=none) }}"
+      battery_power: "{{ states('sensor.goodwe_battery_power') | float(default=none) }}"
       current_utility: >-
-        {{
-        states('sensor.heltec_pi30_display_pi30_max_utility_charging_current') |
-        int(default=0) }}
-      current_total: >-
-        {{ states('sensor.heltec_pi30_display_pi30_max_total_charging_current')
-        | int(default=0) }}
-      soc_known: '{{ soc is not none }}'
-      volt_known: '{{ voltage is not none }}'
-      power_known: '{{ grid_power is not none and battery_power is not none }}'
-      sensors_unknown: '{{ soc is none or voltage is none }}'
-      pi30_voltage: '{{ states(''sensor.heltec_pi30_battery_voltage'') | float(default=none) }}'
+        {{ states('sensor.heltec_pi30_display_pi30_max_utility_charging_current') | int(default=0) }}
+      soc_known: "{{ soc is not none }}"
+      volt_known: "{{ voltage is not none }}"
+      power_known: "{{ grid_power is not none and battery_power is not none }}"
+      sensors_unknown: "{{ soc is none or voltage is none }}"
+      pi30_voltage: "{{ states('sensor.heltec_pi30_battery_voltage') | float(default=none) }}"
       under_voltage: >-
-        {{ states('sensor.heltec_pi30_display_pi30_battery_under_voltage') |
-        float(default=24.0) }}
-      hold_release_margin_v: 0.5
-      hold_active: >-
-        {{ states('sensor.heltec_pi30_display_pi30_output_source_priority') |
-        float(0) == 2.0 and
-        states('sensor.heltec_pi30_display_pi30_charger_source_priority') |
-        float(0) == 2.0 }}
+        {{ states('sensor.heltec_pi30_display_pi30_battery_under_voltage') | float(default=24.0) }}
+      at_threshold: "{{ pi30_voltage is not none and pi30_voltage <= under_voltage }}"
       ricarica_on: "{{ not is_state('input_boolean.pi30_ricarica_batteria', 'off') }}"
-      keep_voltage: "{{ states('input_number.pi30_keep_battery_live') | float(0) | round(1) }}"
-      keep_valid: >-
-        {{ states('input_number.pi30_bulk_carica') not in ['unknown', 'unavailable']
-           and states('input_number.pi30_float_carica') not in ['unknown', 'unavailable']
-           and keep_voltage >= 24.0 }}
-      in_discharge: >-
-        {{ states('sensor.heltec_pi30_display_pi30_output_source_priority') |
-        float(0) == 2.0 and
-        states('sensor.heltec_pi30_display_pi30_charger_source_priority') |
-        float(0) == 3.0 }}
-      discharge_age_s: >-
+      # Modalità attuale, dalle due priorità dell'inverter
+      output_prio: "{{ states('sensor.heltec_pi30_display_pi30_output_source_priority') | float(9) }}"
+      charger_prio: "{{ states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(9) }}"
+      in_charge: "{{ output_prio == 0.0 and charger_prio == 2.0 }}"
+      in_full: "{{ output_prio == 0.0 and charger_prio == 3.0 }}"
+      in_discharge: "{{ output_prio == 2.0 }}"
+      prio_age_s: >-
         {% set o = states.sensor.heltec_pi30_display_pi30_output_source_priority %}
         {% set c = states.sensor.heltec_pi30_display_pi30_charger_source_priority %}
         {{ ([(now() - o.last_changed).total_seconds(), (now() - c.last_changed).total_seconds()] | min)
            if o is not none and c is not none else 999999 }}
       charge_dwell_s: 600
       pi30_soc: >-
-        {{ states('sensor.heltec_pi30_display_pi30_battery_soc_calculated') |
-        float(default=none) }}
+        {{ states('sensor.heltec_pi30_display_pi30_battery_soc_calculated') | float(default=none) }}
       full_resume_soc: 95
-      pi30_full: '{{ pi30_soc is not none and pi30_soc >= full_resume_soc }}'
-      in_charge: >-
-        {{ states('sensor.heltec_pi30_display_pi30_output_source_priority') |
-        float(9) == 0.0 and
-        states('sensor.heltec_pi30_display_pi30_charger_source_priority') |
-        float(9) == 2.0 }}
-      in_full: >-
-        {{ states('sensor.heltec_pi30_display_pi30_output_source_priority') |
-        float(9) == 0.0 and
-        states('sensor.heltec_pi30_display_pi30_charger_source_priority') |
-        float(9) == 3.0 }}
+      pi30_full: "{{ pi30_soc is not none and pi30_soc >= full_resume_soc }}"
       pi30_load_w: "{{ states('sensor.heltec_pi30_output_active_power') | float(0) }}"
+      # Surplus visibile: l'immissione è limitata a export_cap_w, oltre la
+      # GoodWe taglia il fotovoltaico e il surplus vero non si vede.
       export_cap_w: 300
       export_margin_w: 50
       entry_charge_w: 60
@@ -409,10 +151,9 @@ actions:
           {% endif %}
         {% endfor %}
         {{ ns.g }}
-      # LIMITE DI TEMPERATURA: corrente da rete massima per la modulazione.
-      # Dissipatore >= charging_max_temp: uno step in meno ogni
-      # thermal_step_s (minimo 2A, la carica non si stacca); tra
-      # charging_max_temp - charging_temp_hysteresis e charging_max_temp:
+      # LIMITE DI TEMPERATURA: corrente da rete massima. Dissipatore >=
+      # charging_max_temp: uno step in meno ogni thermal_step_s (minimo 2A);
+      # tra charging_max_temp - charging_temp_hysteresis e charging_max_temp:
       # niente step in su; sotto: max_manual_current.
       charging_temp_hysteresis: 5
       thermal_step_s: 120
@@ -421,12 +162,10 @@ actions:
       heat_sink_temp: >-
         {{ states('sensor.heltec_pi30_heat_sink_temperature') | float(default=none) }}
       current_cap: >-
-        {% set ch = states.sensor.heltec_pi30_display_pi30_max_utility_charging_current %}
-        {% set age = (now() - ch.last_changed).total_seconds() if ch is not none else 999999 %}
         {% set lower = charging_steps | select('lt', current_utility) | list %}
         {% if heat_sink_temp is none or charging_max_temp is none %}
           {% set cap = max_manual_current %}
-        {% elif heat_sink_temp >= charging_max_temp and age >= thermal_step_s %}
+        {% elif heat_sink_temp >= charging_max_temp and current_age_s >= thermal_step_s %}
           {% set cap = (lower | max) if lower | length > 0 else charging_steps | min %}
         {% elif heat_sink_temp > charging_max_temp - charging_temp_hysteresis %}
           {% set cap = [current_utility, max_manual_current] | min %}
@@ -434,23 +173,9 @@ actions:
           {% set cap = max_manual_current %}
         {% endif %}
         {{ [cap, charging_steps | min] | max }}
-      # MANTIENI: alla soglia di sottotensione, poi (con keep_valid) finché il
-      # surplus non basta per la CARICA, senza rilascio a tensione: la
-      # batteria resta alla tensione di mantenimento. Con la ricarica spenta
-      # tiene la batteria script.pi30_batteria_minimo. Senza gli aiutanti,
-      # il vecchio ciclo: rilascio a sottotensione + hold_release_margin_v.
-      hold_needed: >-
-        {% set at_threshold = pi30_voltage is not none and pi30_voltage <= under_voltage %}
-        {% if keep_valid %}
-          {{ ricarica_on and (at_threshold or (hold_active and not surplus_ok and
-             not (trigger is defined and trigger.id == 'ricarica_batteria'))) }}
-        {% else %}
-          {{ at_threshold or (hold_active and pi30_voltage is not none and
-             pi30_voltage < under_voltage + hold_release_margin_v) }}
-        {% endif %}
-      # ZONA FERMA: uno step in su solo con surplus visibile e GoodWe ferma,
-      # uno step in giù con prelievo >= 300W o GoodWe >= 200W (o potenze
-      # sconosciute), in mezzo la corrente resta dov'è e non viene riscritta.
+      # MODULAZIONE: uno step in su solo con surplus visibile, GoodWe ferma e
+      # corrente ferma da step_up_wait_s; uno step in giù con prelievo >= 300W
+      # o GoodWe >= 200W (o potenze sconosciute); in mezzo resta dov'è.
       charger_v: >-
         {{ pi30_voltage if pi30_voltage is not none and pi30_voltage > 20 else 26.4 }}
       next_step: >-
@@ -475,6 +200,13 @@ actions:
         {% else %}
           {{ current_utility }}
         {% endif %}
+      # Quando la modulazione può anche salire: GoodWe piena (o >= 55V, o al
+      # 100% sotto 53V), oppure CARICA a 2A senza prelievo né scarica GoodWe.
+      # Altrimenti (GoodWe sotto il 100%) si può solo scendere.
+      modulation_allowed: >-
+        {{ goodwe_full or (volt_known and voltage >= 55) or
+           (soc_known and volt_known and soc > 99 and voltage < 53) or
+           (power_known and current_utility == 2 and grid_power < 500 and battery_power < 200) }}
       # CARICA DALLA GOODWE: lo step più alto che annulla l'energia presa dalla
       # batteria GoodWe e dalla rete, lasciandone al massimo goodwe_idle_w;
       # almeno uno step sotto quello attuale, minimo 2A.
@@ -495,135 +227,28 @@ actions:
       line_lost: >-
         {{ (in_charge or in_full) and
            pi30_device_mode not in ['Line mode', 'unknown', 'unavailable'] and
-           device_mode_age_s >= line_lost_s and discharge_age_s >= line_lost_s }}
+           device_mode_age_s >= line_lost_s and prio_age_s >= line_lost_s }}
+  # 1) SCARICA FORZATA: ricarica spenta, o batteria PI30 alla soglia di
+  # sottotensione (da qualunque modalità: con bulk e float alla tensione
+  # minima il caricabatterie la riporta su).
   - if:
       - condition: template
-        value_template: '{{ hold_needed }}'
+        value_template: "{{ not ricarica_on or at_threshold }}"
     then:
-      # Entrata in MANTIENI: memorizza bulk e float di carica prima che lo
-      # script li porti alla tensione di mantenimento (solo se sopra)
-      - if:
-          - condition: template
-            value_template: '{{ keep_valid and not hold_active }}'
-        then:
-          - if:
-              - condition: template
-                value_template: >-
-                  {{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(0) | round(1) > keep_voltage }}
-            then:
-              - action: input_number.set_value
-                target:
-                  entity_id: input_number.pi30_bulk_carica
-                data:
-                  value: "{{ states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float | round(1) }}"
-          - if:
-              - condition: template
-                value_template: >-
-                  {{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float(0) | round(1) > keep_voltage }}
-            then:
-              - action: input_number.set_value
-                target:
-                  entity_id: input_number.pi30_float_carica
-                data:
-                  value: "{{ states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float | round(1) }}"
-      # Batteria PI30 alla soglia di sottotensione: MANTIENI a 10A, prima di ogni altro ramo
-      - action: script.turn_on
-        target:
-          entity_id: script.pi30_batteria_da_mantenere
-        data:
-          variables:
-            current_limit: "{{ current_cap }}"
-      - wait_template: "{{ is_state('script.pi30_batteria_da_mantenere', 'off') }}"
-        timeout: 120
-      - stop: Batteria PI30 alla soglia di sottotensione, mantenimento
-  # Ricarica batteria tornata ON, o uscita da MANTIENI: rimetti bulk e float
-  # memorizzati. Anche senza il trigger, se bulk o float sono ancora alla
-  # tensione di mantenimento. Sta dopo MANTIENI, che li tiene a quella
-  # tensione finché serve. Prima il bulk, poi il float: il float non supera
-  # mai il bulk. In uscita da MANTIENI la corrente da rete torna a 2A, così
-  # la CARICA riparte dal minimo.
-  - if:
-      - condition: template
-        value_template: '{{ ricarica_on }}'
-      - condition: template
-        value_template: >-
-          {{ (trigger is defined and trigger.id == 'ricarica_batteria')
-             or states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(99) | round(1) ==
-                states('input_number.pi30_keep_battery_live') | float(0) | round(1)
-             or states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float(99) | round(1) ==
-                states('input_number.pi30_keep_battery_live') | float(0) | round(1) }}
-    then:
-      - if:
-          - condition: template
-            value_template: >-
-              {{ states('input_number.pi30_bulk_carica') | float(0) > 24.0 and
-                 states('input_number.pi30_bulk_carica') | float(0) | round(1) !=
-                 states('sensor.heltec_pi30_display_pi30_battery_bulk_voltage') | float(0) | round(1) }}
-        then:
-          - action: number.set_value
-            target:
-              entity_id: number.heltec_pi30_display_pi30_set_battery_bulk_voltage
-            data:
-              value: "{{ states('input_number.pi30_bulk_carica') | float | round(1) }}"
-          - delay: '00:00:02'
-      - if:
-          - condition: template
-            value_template: >-
-              {{ states('input_number.pi30_float_carica') | float(0) > 24.0 and
-                 states('input_number.pi30_float_carica') | float(0) | round(1) !=
-                 states('sensor.heltec_pi30_display_pi30_battery_float_voltage') | float(0) | round(1) }}
-        then:
-          - action: number.set_value
-            target:
-              entity_id: number.heltec_pi30_display_pi30_set_battery_float_voltage
-            data:
-              value: "{{ states('input_number.pi30_float_carica') | float | round(1) }}"
-          - delay: '00:00:02'
-      - if:
-          - condition: template
-            value_template: '{{ hold_active and current_utility != 2 }}'
-        then:
-          - action: select.select_option
-            target:
-              entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
-            data:
-              option: '2'
-  - if:
-      - condition: state
-        entity_id: input_boolean.pi30_ricarica_batteria
-        state: 'off'
-    then:
-      - if:
-          - condition: template
-            value_template: >-
-              {{ states('input_number.pi30_bulk_carica') not in ['unknown', 'unavailable']
-                 and states('input_number.pi30_float_carica') not in ['unknown', 'unavailable']
-                 and states('input_number.pi30_keep_battery_live') | float(0) >= 24.0 }}
-        then:
-          # Ricarica disattivata: bulk e float alla tensione di mantenimento
-          - action: script.turn_on
-            target:
-              entity_id: script.pi30_batteria_minimo
-            data:
-              variables:
-                current_limit: "{{ current_cap }}"
-          - wait_template: "{{ is_state('script.pi30_batteria_minimo', 'off') }}"
-            timeout: 120
-          - stop: Ricarica disattivata, mantenimento
-      # Aiutanti input_number assenti o non validi: SCARICA senza toccare bulk e float
       - action: script.turn_on
         target:
           entity_id: script.pi30_batteria_da_scaricare
+        data:
+          variables:
+            current_limit: "{{ current_cap }}"
       - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
         timeout: 120
-      - stop: Ricarica disattivata, scarica
-  # PI30 FUORI RETE: in CARICA o PIENA ma non in Line mode da line_lost_s, la
-  # PI30 non sta usando la rete (23/10/2026 dalle 14:49, oltre due ore in
-  # Battery mode con il surplus in rete). Avviso, corrente da rete a 2A (al
-  # ritorno della rete la carica riparte dal minimo), nessuna modulazione.
+      - stop: Ricarica spenta o batteria alla soglia di sottotensione, scarica
+  # 2) PI30 FUORI RETE: avviso, corrente da rete a 2A (al ritorno della rete
+  # la carica riparte dal minimo), nessuna modulazione.
   - if:
       - condition: template
-        value_template: '{{ line_lost }}'
+        value_template: "{{ line_lost }}"
     then:
       - action: persistent_notification.create
         data:
@@ -640,57 +265,47 @@ actions:
             display dell'inverter.
       - if:
           - condition: template
-            value_template: '{{ in_charge and current_utility != 2 }}'
+            value_template: "{{ in_charge and current_utility != 2 }}"
         then:
           - action: select.select_option
             target:
               entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
             data:
-              option: '2'
+              option: "2"
       - stop: PI30 in CARICA o PIENA ma non sulla rete, nessuna modulazione
   # In Line mode: togli l'avviso, entro 15 minuti dal ritorno sulla rete o
-  # dall'ultimo cambio di priorità (uscita da MANTIENI o da SCARICA)
+  # dall'ultimo cambio di modalità
   - if:
       - condition: template
         value_template: >-
-          {{ pi30_device_mode == 'Line mode' and
-             [device_mode_age_s, discharge_age_s] | min < 900 }}
+          {{ pi30_device_mode == 'Line mode' and [device_mode_age_s, prio_age_s] | min < 900 }}
     then:
       - action: persistent_notification.dismiss
         data:
           notification_id: pi30_fuori_rete
-  # CARICA DALLA GOODWE: in CARICA sopra 2A con la batteria GoodWe che eroga
-  # più di goodwe_drain_w, la PI30 si sta caricando con l'energia della
-  # GoodWe: corrente da rete subito allo step che annulla quell'energia
-  # (drain_current), senza aspettare gli step. Da lì, se la GoodWe continua a
-  # erogare, si scende ancora; a 2A decide il "VUOL DIRE CHE" (SCARICA dopo
-  # discharge_confirm_s).
+  # 3) CARICA DALLA GOODWE: in CARICA sopra 2A con la batteria GoodWe che
+  # eroga più di goodwe_drain_w, corrente subito a drain_current.
   - if:
       - condition: template
         value_template: >-
-          {{ in_charge and current_utility > 2 and
-             states('sensor.goodwe_battery_power') | float(0) > goodwe_drain_w }}
+          {{ in_charge and current_utility > 2 and power_known and battery_power > goodwe_drain_w }}
     then:
       - action: select.select_option
         target:
           entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
         data:
-          option: '{{ drain_current | string }}'
-      - delay: '00:00:10'
+          option: "{{ drain_current | string }}"
+      - delay: "00:00:10"
       - stop: GoodWe in scarica durante la CARICA, corrente da rete ridotta
-  # GLITCH GOODWE: un sensore GoodWe non disponibile da meno di goodwe_glitch_s
-  # non decide nulla (buchi di pochi secondi dell'integrazione).
+  # 4) GLITCH GOODWE: un sensore GoodWe non disponibile da poco non decide nulla
   - if:
       - condition: template
-        value_template: '{{ goodwe_glitch }}'
+        value_template: "{{ goodwe_glitch }}"
     then:
       - stop: Sensore GoodWe non disponibile da poco, nessuna decisione
-  # "VUOL DIRE CHE" della logica umana: in CARICA già al minimo (2A) ma il
-  # contatore preleva >= 500W o la GoodWe eroga >= 200W -> SCARICA, anche con
-  # GoodWe al 100% (SOC > 99) o tensione GoodWe >= 55V. Sopra 2A decide la
-  # modulazione qui sotto, che scende di uno step a ogni esecuzione. La
-  # condizione deve durare discharge_confirm_s: al trasferimento dei carichi
-  # la batteria GoodWe supera i 200W per qualche secondo.
+  # 5) CARICA AL MINIMO MA NON BASTA ("VUOL DIRE CHE"): in CARICA a 2A con
+  # prelievo >= 500W o GoodWe >= 200W per discharge_confirm_s: SCARICA. Sotto
+  # i 60 s è il trasferimento dei carichi, un transitorio.
   - if:
       - condition: template
         value_template: >-
@@ -704,35 +319,44 @@ actions:
         continue_on_timeout: true
       - if:
           - condition: template
-            value_template: '{{ wait.completed }}'
+            value_template: "{{ wait.completed }}"
         then:
           - stop: Prelievo o scarica GoodWe durati meno di 60 s, nessun cambio
       - action: script.turn_on
         target:
           entity_id: script.pi30_batteria_da_scaricare
+        data:
+          variables:
+            current_limit: "{{ current_cap }}"
       - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
         timeout: 120
       - stop: Carica al minimo ma GoodWe in scarica o prelievo dalla rete, scarica
-  # ANTI-OSCILLAZIONE: passata a SCARICA da meno di charge_dwell_s, la PI30
-  # non torna in CARICA né in PIENA (tutti i rami sotto, tranne l'ultimo,
-  # sono CARICA).
+  # 6) ANTI-OSCILLAZIONE: passata a SCARICA da meno di charge_dwell_s, resta
+  # (lo script tiene aggiornata la tensione minima)
   - if:
       - condition: template
-        value_template: '{{ in_discharge and discharge_age_s < charge_dwell_s }}'
+        value_template: "{{ in_discharge and prio_age_s < charge_dwell_s }}"
     then:
+      - action: script.turn_on
+        target:
+          entity_id: script.pi30_batteria_da_scaricare
+        data:
+          variables:
+            current_limit: "{{ current_cap }}"
+      - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
+        timeout: 120
       - stop: In scarica da meno di 10 minuti, nessun ritorno in carica
-  # BATTERIA PIENA (SOC calcolato >= full_resume_soc). In PIENA si resta finché
-  # il contatore non preleva >= 500W o la GoodWe non eroga >= 200W per 60 s,
-  # poi SCARICA. Fuori dalla CARICA: PIENA se il surplus visibile basta,
-  # altrimenti SCARICA. In CARICA (float): nessun cambio, logica normale.
+  # 7) BATTERIA PIENA (SOC calcolato >= full_resume_soc). In PIENA si resta
+  # finché il contatore non preleva >= 500W o la GoodWe non eroga >= 200W per
+  # 60 s, poi SCARICA. Fuori dalla CARICA: PIENA se c'è surplus, altrimenti
+  # SCARICA. In CARICA (float): logica normale.
   - if:
       - condition: template
-        value_template: '{{ pi30_full and in_full }}'
+        value_template: "{{ pi30_full and in_full }}"
     then:
       - if:
           - condition: template
-            value_template: >-
-              {{ power_known and not (grid_power < 500 and battery_power < 200) }}
+            value_template: "{{ power_known and not (grid_power < 500 and battery_power < 200) }}"
         then:
           - wait_template: >-
               {{ states('sensor.potenza_contatore') | float(999) < 500 and
@@ -741,23 +365,26 @@ actions:
             continue_on_timeout: true
           - if:
               - condition: template
-                value_template: '{{ wait.completed }}'
+                value_template: "{{ wait.completed }}"
             then:
               - stop: Batteria piena sui carichi del surplus, transitorio, nessun cambio
           - action: script.turn_on
             target:
               entity_id: script.pi30_batteria_da_scaricare
+            data:
+              variables:
+                current_limit: "{{ current_cap }}"
           - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
             timeout: 120
           - stop: Batteria piena, surplus finito, scarica
       - stop: Batteria piena sui carichi del surplus, nessun cambio
   - if:
       - condition: template
-        value_template: '{{ pi30_full and not in_charge }}'
+        value_template: "{{ pi30_full and not in_charge }}"
     then:
       - if:
           - condition: template
-            value_template: '{{ surplus_ok }}'
+            value_template: "{{ surplus_ok }}"
         then:
           - action: script.turn_on
             target:
@@ -768,251 +395,84 @@ actions:
       - action: script.turn_on
         target:
           entity_id: script.pi30_batteria_da_scaricare
+        data:
+          variables:
+            current_limit: "{{ current_cap }}"
       - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
         timeout: 120
       - stop: Batteria piena e niente surplus, scarica
-  # SURPLUS VISIBILE: fuori dalla CARICA si entra solo se l'immissione copre i
-  # carichi della PI30 più i 2A, oppure è al limite di immissione (oltre, il
-  # fotovoltaico viene tagliato e il surplus vero non si vede). Altrimenti
-  # SCARICA (dal mantenimento: il normale rilascio). Con i sensori di potenza
-  # sconosciuti decidono i rami sotto ("rete di sicurezza" a 2A).
+  # 8) SURPLUS VISIBILE: fuori dalla CARICA si entra solo se c'è surplus;
+  # altrimenti SCARICA. Con le potenze sconosciute si va in CARICA a 2A
+  # ("rete di sicurezza", qui sotto).
   - if:
       - condition: template
-        value_template: '{{ not in_charge and power_known and not surplus_ok }}'
+        value_template: "{{ not in_charge and power_known and not surplus_ok }}"
     then:
       - action: script.turn_on
         target:
           entity_id: script.pi30_batteria_da_scaricare
+        data:
+          variables:
+            current_limit: "{{ current_cap }}"
       - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
         timeout: 120
       - stop: Surplus visibile insufficiente, scarica
-  # MODULAZIONE (ZONA FERMA): nei quattro rami di CARICA qui sotto la corrente
-  # da rete è modulated_current (uno step in su solo con surplus visibile e
-  # corrente ferma da step_up_wait_s, uno step in giù con prelievo >= 300W o
-  # GoodWe >= 200W, altrimenti ferma) e viene scritta solo se cambia.
+  # 9) CARICA. Lo script rimette bulk e float di carica e, entrando, porta la
+  # corrente da rete a 2A: la modulazione parte dall'esecuzione successiva.
+  - action: script.turn_on
+    target:
+      entity_id: script.pi30_batteria_da_caricare
+  - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
+    timeout: 120
   - if:
       - condition: template
-        value_template: '{{ goodwe_full }}'
+        value_template: "{{ not in_charge }}"
     then:
-      - action: script.turn_on
-        target:
-          entity_id: script.pi30_batteria_da_caricare
-      - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
-        timeout: 120
+      - stop: Entrata in CARICA, corrente da rete al minimo
+  - if:
+      - condition: template
+        value_template: "{{ modulation_allowed }}"
+    then:
       - if:
           - condition: template
-            value_template: '{{ current_total < 60 }}'
+            value_template: "{{ modulated_current | int != current_utility }}"
         then:
-          - target:
-              entity_id: select.heltec_pi30_display_pi30_set_max_total_charging_current
-            data:
-              option: '60'
-            action: select.select_option
-        else: []
-      - if:
-          - condition: template
-            value_template: '{{ modulated_current | int != current_utility }}'
-        then:
-          - target:
+          - action: select.select_option
+            target:
               entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
             data:
-              option: '{{ modulated_current | string }}'
-            action: select.select_option
-          - delay: '00:00:10'
+              option: "{{ modulated_current | string }}"
+          - delay: "00:00:10"
     else:
+      # GoodWe sotto il 100%: si resta in carica e si scende di uno step solo
+      # se qualcosa preleva troppo. Con SOC o tensione GoodWe sconosciuti, o
+      # con le potenze sconosciute, 2A.
       - if:
           - condition: template
-            value_template: '{{ volt_known and voltage >= 55 }}'
+            value_template: >-
+              {{ not power_known or (sensors_unknown and grid_power < 300 and battery_power < 200) }}
         then:
-          - action: script.turn_on
-            target:
-              entity_id: script.pi30_batteria_da_caricare
-          - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
-            timeout: 120
           - if:
               - condition: template
-                value_template: '{{ current_total < 60 }}'
+                value_template: "{{ current_utility != 2 }}"
             then:
-              - target:
-                  entity_id: >-
-                    select.heltec_pi30_display_pi30_set_max_total_charging_current
+              - action: select.select_option
+                target:
+                  entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
                 data:
-                  option: '60'
-                action: select.select_option
-            else: []
-          - if:
-              - condition: template
-                value_template: '{{ modulated_current | int != current_utility }}'
-            then:
-              - target:
-                  entity_id: >-
-                    select.heltec_pi30_display_pi30_set_max_utility_charging_current
-                data:
-                  option: '{{ modulated_current | string }}'
-                action: select.select_option
-              - delay: '00:00:10'
+                  option: "2"
         else:
           - if:
               - condition: template
-                value_template: '{{ soc_known and volt_known and soc > 99 and voltage < 53 }}'
+                value_template: "{{ (grid_power >= 300 or battery_power >= 200) and current_utility > 2 }}"
             then:
-              - action: script.turn_on
+              - action: select.select_option
                 target:
-                  entity_id: script.pi30_batteria_da_caricare
-              - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
-                timeout: 120
-              - if:
-                  - condition: template
-                    value_template: '{{ current_total < 60 }}'
-                then:
-                  - target:
-                      entity_id: >-
-                        select.heltec_pi30_display_pi30_set_max_total_charging_current
-                    data:
-                      option: '60'
-                    action: select.select_option
-                else: []
-              - if:
-                  - condition: template
-                    value_template: '{{ modulated_current | int != current_utility }}'
-                then:
-                  - target:
-                      entity_id: >-
-                        select.heltec_pi30_display_pi30_set_max_utility_charging_current
-                    data:
-                      option: '{{ modulated_current | string }}'
-                    action: select.select_option
-                  - delay: '00:00:10'
-            else:
-              - if:
-                  - condition: template
-                    value_template: '{{ power_known }}'
-                then:
-                  - if:
-                      - condition: template
-                        value_template: >-
-                          {{ current_utility == 2 and (grid_power < 500 and
-                          battery_power < 200) }}
-                    then:
-                      - action: script.turn_on
-                        target:
-                          entity_id: script.pi30_batteria_da_caricare
-                      - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
-                        timeout: 120
-                      - if:
-                          - condition: template
-                            value_template: '{{ current_total < 60 }}'
-                        then:
-                          - target:
-                              entity_id: >-
-                                select.heltec_pi30_display_pi30_set_max_total_charging_current
-                            data:
-                              option: '60'
-                            action: select.select_option
-                        else: []
-                      - if:
-                          - condition: template
-                            value_template: '{{ modulated_current | int != current_utility }}'
-                        then:
-                          - target:
-                              entity_id: >-
-                                select.heltec_pi30_display_pi30_set_max_utility_charging_current
-                            data:
-                              option: '{{ modulated_current | string }}'
-                            action: select.select_option
-                          - delay: '00:00:10'
-                    else:
-                      - if:
-                          - condition: template
-                            value_template: >-
-                              {{ sensors_unknown and grid_power < 300 and
-                              battery_power < 200 }}
-                        then:
-                          - action: script.turn_on
-                            target:
-                              entity_id: script.pi30_batteria_da_caricare
-                          - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
-                            timeout: 120
-                          - if:
-                              - condition: template
-                                value_template: '{{ current_utility != 2 }}'
-                            then:
-                              - target:
-                                  entity_id: >-
-                                    select.heltec_pi30_display_pi30_set_max_utility_charging_current
-                                data:
-                                  option: '2'
-                                action: select.select_option
-                        else:
-                          # GoodWe sotto il 100% (anche un 99 di un attimo) con
-                          # la PI30 in CARICA: si resta in carica, uno step in
-                          # meno solo se qualcosa preleva troppo. Non in CARICA:
-                          # il surplus visibile è già stato verificato sopra,
-                          # quindi CARICA dal minimo (2A).
-                          - if:
-                              - condition: template
-                                value_template: '{{ in_charge }}'
-                            then:
-                              - if:
-                                  - condition: template
-                                    value_template: >-
-                                      {{ (grid_power >= 300 or battery_power >= 200)
-                                         and current_utility > 2 }}
-                                then:
-                                  - target:
-                                      entity_id: >-
-                                        select.heltec_pi30_display_pi30_set_max_utility_charging_current
-                                    data:
-                                      option: >-
-                                        {{ ((charging_steps | select('lt',
-                                        current_utility) | list | max)
-                                            if (charging_steps | select('lt', current_utility) | list | length > 0)
-                                            else (charging_steps | min)) | string }}
-                                    action: select.select_option
-                                  - delay: '00:00:10'
-                            else:
-                              - action: script.turn_on
-                                target:
-                                  entity_id: script.pi30_batteria_da_caricare
-                              - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
-                                timeout: 120
-                              - if:
-                                  - condition: template
-                                    value_template: '{{ current_utility != 2 }}'
-                                then:
-                                  - target:
-                                      entity_id: >-
-                                        select.heltec_pi30_display_pi30_set_max_utility_charging_current
-                                    data:
-                                      option: '2'
-                                    action: select.select_option
-                else:
-                  - action: script.turn_on
-                    target:
-                      entity_id: script.pi30_batteria_da_caricare
-                  - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
-                    timeout: 120
-                  - if:
-                      - condition: template
-                        value_template: '{{ current_utility != 2 }}'
-                    then:
-                      - target:
-                          entity_id: >-
-                            select.heltec_pi30_display_pi30_set_max_utility_charging_current
-                        data:
-                          option: '2'
-                        action: select.select_option
-                  - if:
-                      - condition: template
-                        value_template: '{{ current_total < 60 }}'
-                    then:
-                      - target:
-                          entity_id: >-
-                            select.heltec_pi30_display_pi30_set_max_total_charging_current
-                        data:
-                          option: '60'
-                        action: select.select_option
-                    else: []
+                  entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+                data:
+                  option: >-
+                    {{ (charging_steps | select('lt', current_utility) | list | max) | string }}
+              - delay: "00:00:10"
 mode: queued
 max: 5
 max_exceeded: silent

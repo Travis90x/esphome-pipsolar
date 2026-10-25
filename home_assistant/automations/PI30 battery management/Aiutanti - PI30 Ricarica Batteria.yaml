@@ -28,7 +28,7 @@
 # 4) Numero "PI30 Charging Max Temperature"
 #    (input_number.pi30_charging_max_temperature), facoltativo
 #    Temperatura massima del dissipatore dell'inverter
-#    (sensor.heltec_pi30_heat_sink_temperature) durante la carica da rete,
+#    (sensor.pi30_heat_sink_temperature) durante la carica da rete,
 #    per esempio 70°C. Superata, l'automazione abbassa la corrente da rete di
 #    uno step ogni 2 minuti, fino a 2A, senza staccare la carica. Torna a
 #    salire solo sotto il limite meno 5°C (isteresi); in mezzo la corrente

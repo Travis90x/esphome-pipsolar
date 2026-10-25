@@ -1,0 +1,43 @@
+alias: PI30 SOC ricalibra da tensione
+description: >-
+  Dà un valore di partenza all'aiutante input_number.pi30_battery_soc_calculated
+  dalla tensione della batteria. Lancialo UNA volta, dopo aver creato
+  l'aiutante o se il conteggio si è perso; poi lascia lavorare l'automazione
+  "PI30 SOC batteria", che conta l'energia e si riallinea da sola su pieno,
+  vuoto e tensione. Usa la stessa tabella tensione/SOC dell'automazione, con
+  la tensione compensata per la corrente (10 mOhm), e si rifiuta se la
+  batteria è in carica o tenuta dal caricabatterie: lì la tensione non dice
+  il SOC. Il risultato è preciso sotto il 10% e sopra il 99%, largo a metà
+  carica (la curva è piatta): l'automazione lo affina.
+sequence:
+  - variables:
+      resistance_ohm: 0.010
+      ocv_v: [22.70, 23.40, 24.00, 24.50, 25.00, 25.60, 25.76, 25.96, 26.10, 26.22, 26.30, 26.36, 26.42, 26.47, 26.52, 26.57, 26.63, 26.67, 26.69, 26.71, 26.73, 26.75]
+      ocv_soc: [0, 1, 2, 4, 6, 9, 15, 20, 25, 30, 37, 43, 50, 55, 60, 65, 70, 75, 82, 90, 95, 99]
+      voltage: "{{ states('sensor.pi30_battery_voltage') | float(default=none) }}"
+      current: "{{ states('sensor.pi30_battery_current') | float(default=none) }}"
+  - if:
+      - condition: template
+        value_template: >-
+          {{ voltage is none or current is none or current > 0
+             or is_state('sensor.pi30_device_mode', 'Line mode') }}
+    then:
+      - stop: Batteria in carica, tenuta dalla rete o letture mancanti
+  - action: input_number.set_value
+    target:
+      entity_id: input_number.pi30_battery_soc_calculated
+    data:
+      value: >-
+        {% set v = voltage - current * resistance_ohm %}
+        {% set ns = namespace(r=none) %}
+        {% if v <= ocv_v[0] %}{% set ns.r = ocv_soc[0] %}
+        {% elif v >= ocv_v[-1] %}{% set ns.r = ocv_soc[-1] %}
+        {% else %}
+          {% for i in range(1, ocv_v | length) %}
+            {% if ns.r is none and v <= ocv_v[i] %}
+              {% set ns.r = ocv_soc[i-1] + (ocv_soc[i] - ocv_soc[i-1]) * (v - ocv_v[i-1]) / (ocv_v[i] - ocv_v[i-1]) %}
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+        {{ ns.r | round(1) }}
+mode: single

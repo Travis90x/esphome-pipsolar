@@ -1,0 +1,26 @@
+# Aiutante 1 di 2 per "Automazione - PI30 SOC batteria.yaml".
+#
+# Il valore grezzo che l'automazione scrive. L'ID entità DEVE essere
+# input_number.pi30_battery_soc_calculated: lo usano l'automazione, lo script
+# "PI30 SOC ricalibra da tensione" e l'Aiutante 2.
+#
+# Dall'interfaccia:
+#   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante > Numero
+#   Nome: PI30 battery SOC calculated
+#   Icona: mdi:battery-unknown   Minimo: 0   Massimo: 100   Passo: 0.1
+#   Unità di misura: %   Modalità di visualizzazione: Campo di inserimento
+# Dopo il salvataggio apri l'aiutante, icona ingranaggio, e controlla che l'ID
+# entità sia input_number.pi30_battery_soc_calculated. Valore iniziale: lancia
+# una volta lo script "PI30 SOC ricalibra da tensione", oppure scrivi a mano
+# 100 se la batteria è piena.
+#
+# Oppure, uguale, in configuration.yaml (poi riavvia):
+input_number:
+  pi30_battery_soc_calculated:
+    name: PI30 battery SOC calculated
+    icon: mdi:battery-unknown
+    min: 0
+    max: 100
+    step: 0.1
+    unit_of_measurement: "%"
+    mode: box

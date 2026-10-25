@@ -22,6 +22,10 @@
 #   Nome: PI30 Modalità MAN
 #   Unità di misura, classe del dispositivo, classe di stato: vuote
 #   Modello di stato: solo il template dopo "state: >-", senza i rientri
+# Dopo il salvataggio apri l'aiutante, icona ingranaggio, e controlla che l'ID
+# entità sia sensor.pi30_modalita_man. Se l'avevi già con l'ID vecchio
+# (sensor.heltec_pi30_display_pi30_modalita_man), cambia lì l'ID entità e
+# incolla il modello di stato nuovo (usa gli ID nuovi del firmware).
 #
 # Oppure, solo in configuration.yaml (poi riavvia):
 template:
@@ -30,15 +34,15 @@ template:
         unique_id: pi30_modalita_man
         icon: mdi:battery-sync
         state: >-
-          {% set o = states('sensor.heltec_pi30_display_pi30_output_source_priority') | float(-1) %}
-          {% set c = states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(-1) %}
-          {% set v = states('sensor.heltec_pi30_battery_voltage') | float(99) %}
+          {% set o = states('sensor.pi30_output_source_priority') | float(-1) %}
+          {% set c = states('sensor.pi30_charger_source_priority') | float(-1) %}
+          {% set v = states('sensor.pi30_battery_voltage') | float(99) %}
           {% set minimo = states('input_number.pi30_keep_battery_live') | float(25.5) %}
-          {% if o == 0 and c == 2 and is_state('binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode', 'on') %}PIENA
+          {% if o == 0 and c == 2 and is_state('binary_sensor.pi30_charging_to_floating_mode', 'on') %}PIENA
           {% elif o == 0 and c == 2 %}IN CARICA
-          {% elif o == 2 and (is_state('sensor.heltec_pi30_display_pi30_device_mode', 'Line mode') or v <= minimo + 0.3) %}MANTENIMENTO
+          {% elif o == 2 and (is_state('sensor.pi30_device_mode', 'Line mode') or v <= minimo + 0.3) %}MANTENIMENTO
           {% elif o == 2 %}IN SCARICA
           {% else %}ALTRO{% endif %}
         availability: >-
-          {{ has_value('sensor.heltec_pi30_display_pi30_output_source_priority')
-             and has_value('sensor.heltec_pi30_display_pi30_charger_source_priority') }}
+          {{ has_value('sensor.pi30_output_source_priority')
+             and has_value('sensor.pi30_charger_source_priority') }}

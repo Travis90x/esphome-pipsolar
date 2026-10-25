@@ -72,15 +72,15 @@ triggers:
   - trigger: template
     id: sotto_tensione
     value_template: >-
-      {{ states('sensor.heltec_pi30_battery_voltage') | float(99) <=
-      states('sensor.heltec_pi30_display_pi30_battery_under_voltage') |
+      {{ states('sensor.pi30_battery_voltage') | float(99) <=
+      states('sensor.pi30_battery_under_voltage') |
       float(24.0) }}
     for:
       minutes: 1
   - trigger: template
     id: temperatura_alta
     value_template: >-
-      {{ states('sensor.heltec_pi30_heat_sink_temperature') | float(0) >=
+      {{ states('sensor.pi30_heat_sink_temperature') | float(0) >=
       states('input_number.pi30_charging_max_temperature') | float(999) }}
   - trigger: state
     id: ricarica_batteria
@@ -102,27 +102,27 @@ actions:
       grid_power: "{{ states('sensor.potenza_contatore') | float(default=none) }}"
       battery_power: "{{ states('sensor.goodwe_battery_power') | float(default=none) }}"
       current_utility: >-
-        {{ states('sensor.heltec_pi30_display_pi30_max_utility_charging_current') | int(default=0) }}
+        {{ states('sensor.pi30_max_utility_charging_current') | int(default=0) }}
       soc_known: "{{ soc is not none }}"
       power_known: "{{ grid_power is not none and battery_power is not none }}"
       sensors_unknown: "{{ soc is none or voltage is none }}"
-      pi30_voltage: "{{ states('sensor.heltec_pi30_battery_voltage') | float(default=none) }}"
+      pi30_voltage: "{{ states('sensor.pi30_battery_voltage') | float(default=none) }}"
       under_voltage: >-
-        {{ states('sensor.heltec_pi30_display_pi30_battery_under_voltage') | float(default=24.0) }}
+        {{ states('sensor.pi30_battery_under_voltage') | float(default=24.0) }}
       at_threshold: "{{ pi30_voltage is not none and pi30_voltage <= under_voltage }}"
       ricarica_on: "{{ not is_state('input_boolean.pi30_ricarica_batteria', 'off') }}"
       # Modalità attuale, dalle due priorità dell'inverter
-      output_prio: "{{ states('sensor.heltec_pi30_display_pi30_output_source_priority') | float(9) }}"
-      charger_prio: "{{ states('sensor.heltec_pi30_display_pi30_charger_source_priority') | float(9) }}"
+      output_prio: "{{ states('sensor.pi30_output_source_priority') | float(9) }}"
+      charger_prio: "{{ states('sensor.pi30_charger_source_priority') | float(9) }}"
       in_charge: "{{ output_prio == 0.0 and charger_prio == 2.0 }}"
       in_discharge: "{{ output_prio == 2.0 }}"
       prio_age_s: >-
-        {% set o = states.sensor.heltec_pi30_display_pi30_output_source_priority %}
-        {% set c = states.sensor.heltec_pi30_display_pi30_charger_source_priority %}
+        {% set o = states.sensor.pi30_output_source_priority %}
+        {% set c = states.sensor.pi30_charger_source_priority %}
         {{ ([(now() - o.last_changed).total_seconds(), (now() - c.last_changed).total_seconds()] | min)
            if o is not none and c is not none else 999999 }}
       charge_dwell_s: 600
-      pi30_load_w: "{{ states('sensor.heltec_pi30_output_active_power') | float(0) }}"
+      pi30_load_w: "{{ states('sensor.pi30_output_active_power') | float(0) }}"
       # Surplus visibile: l'immissione è limitata a export_cap_w, oltre la
       # GoodWe taglia il fotovoltaico e il surplus vero non si vede.
       export_cap_w: 300
@@ -142,7 +142,7 @@ actions:
       # Fuori dalla CARICA si entra solo con la GoodWe piena e surplus visibile
       charge_ok: "{{ goodwe_full and surplus_ok }}"
       current_age_s: >-
-        {% set ch = states.sensor.heltec_pi30_display_pi30_max_utility_charging_current %}
+        {% set ch = states.sensor.pi30_max_utility_charging_current %}
         {{ (now() - ch.last_changed).total_seconds() if ch is not none else 999999 }}
       goodwe_glitch_s: 600
       goodwe_glitch: >-
@@ -165,7 +165,7 @@ actions:
       charging_max_temp: >-
         {{ states('input_number.pi30_charging_max_temperature') | float(default=none) }}
       heat_sink_temp: >-
-        {{ states('sensor.heltec_pi30_heat_sink_temperature') | float(default=none) }}
+        {{ states('sensor.pi30_heat_sink_temperature') | float(default=none) }}
       thermal_cap: >-
         {% set lower = charging_steps | select('lt', current_utility) | list %}
         {% set hot = charging_max_temp is not none and
@@ -236,9 +236,9 @@ actions:
       # PI30 FUORI RETE: in CARICA (uscita "rete prima") la PI30 deve stare in
       # Line mode; da line_lost_s in un altro modo non usa la rete.
       line_lost_s: 300
-      pi30_device_mode: "{{ states('sensor.heltec_pi30_display_pi30_device_mode') }}"
+      pi30_device_mode: "{{ states('sensor.pi30_device_mode') }}"
       device_mode_age_s: >-
-        {% set m = states.sensor.heltec_pi30_display_pi30_device_mode %}
+        {% set m = states.sensor.pi30_device_mode %}
         {{ (now() - m.last_changed).total_seconds() if m is not none else 0 }}
       line_lost: >-
         {{ in_charge and
@@ -284,7 +284,7 @@ actions:
             La PI30 è in CARICA (uscita "rete prima") ma è in {{ pi30_device_mode }} da
             {{ (device_mode_age_s / 60) | round(0) | int }} minuti: la batteria
             alimenta i carichi invece di caricarsi.
-            {%- set gv = states('sensor.heltec_pi30_pi30_grid_voltage') %}
+            {%- set gv = states('sensor.pi30_grid_voltage') %}
             {%- if is_number(gv) %} Tensione di rete letta dalla PI30: {{ gv | float | round(0) | int }}V.{% endif %}
             Controlla l'ingresso AC della PI30 (interruttore o presa) e il
             display dell'inverter.
@@ -294,7 +294,7 @@ actions:
         then:
           - action: select.select_option
             target:
-              entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+              entity_id: select.pi30_set_max_utility_charging_current
             data:
               option: "2"
       - stop: PI30 in CARICA ma non sulla rete, nessuna modulazione
@@ -380,7 +380,7 @@ actions:
     then:
       - action: select.select_option
         target:
-          entity_id: select.heltec_pi30_display_pi30_set_max_utility_charging_current
+          entity_id: select.pi30_set_max_utility_charging_current
         data:
           option: "{{ modulated_current | string }}"
       - delay: "00:00:10"

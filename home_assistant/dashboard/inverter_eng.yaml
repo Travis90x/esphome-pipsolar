@@ -1,256 +1,343 @@
-type: sections
-visible:
-  - user: f0e6ae5b825d422898b6b950b6b2e43a
-  - user: d4d1f35aef604ed39ac1de70ed507db0
-max_columns: 4
-path: electrical
-icon: mdi:battery-charging-high
-cards: []
-sections:
-  - type: grid
-    cards:
-      - type: entities
-        title: Automations
-        show_header_toggle: false
-        state_color: true
-        entities:
-          - entity: automation.ups_accumulo
-          - entity: switch.ups
-          - entity: sensor.ups_power
-          - entity: automation.ups
-          - type: divider
-          - entity: script.pi30_batteria_da_scaricare
-          - entity: script.pi30_batteria_da_caricare
-      - color: state
-        type: entities
-        title: Output Priority (POP)
-        show_header_toggle: false
-        entities:
-          - entity: sensor.heltec_pi30_display_pi30_output_source_priority
-            name: Priority read from inverter
-          - type: divider
-          - entity: switch.heltec_pi30_display_pi30_output_priority_utility
-            name: 0 Utility first (USB)
-          - entity: switch.heltec_pi30_display_pi30_output_priority_solar
-            name: 1 Solar first (SUB)
-          - entity: switch.heltec_pi30_display_pi30_output_priority_sbu
-            name: 2 SBU
-      - type: entities
-        title: Charging Priority (PCP)
-        show_header_toggle: false
-        entities:
-          - entity: sensor.heltec_pi30_display_pi30_charger_source_priority
-            name: Priority read from inverter
-          - type: divider
-          - entity: button.heltec_pi30_display_pi30_charger_solar_first
-            name: 1 SOLAR FIRST
-          - entity: button.heltec_pi30_display_pi30_charger_solar_utility
-            name: 2 SOLAR + UTILITY
-          - entity: button.heltec_pi30_display_pi30_charger_solar_only
-            name: 3 SOLAR ONLY
-      - type: entities
-        title: Inverter Status
-        show_header_toggle: false
-        state_color: true
-        entities:
-          - entity: sensor.heltec_pi30_display_pi30_device_mode
-            name: Operating mode
-          - entity: binary_sensor.heltec_pi30_display_pi30_load_on
-            name: Load active
-          - entity: binary_sensor.heltec_pi30_display_pi30_charging
-            name: Charging
-          - entity: binary_sensor.heltec_pi30_display_pi30_ac_charging
-            name: Charging from grid
-          - entity: binary_sensor.heltec_pi30_display_pi30_scc_charging
-            name: Charging from solar
-          - entity: binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode
-            name: In float mode
-  - type: grid
-    cards:
-      - type: entities
-        title: Battery
-        show_header_toggle: false
-        entities:
-          - entity: number.heltec_pi30_display_pi30_set_battery_recharge_voltage
-            name: Battery Recharge Voltage from Grid (PBCV)
-          - entity: sensor.heltec_pi30_display_pi30_battery_recharge_voltage
-            name: Battery Recharge Voltage from Grid (PBCV)
-          - type: divider
-          - entity: number.heltec_pi30_display_pi30_set_battery_redischarge_voltage
-            name: Battery Redischarge Voltage (PBDV)
-          - entity: sensor.heltec_pi30_display_pi30_battery_redischarge_voltage
-            name: Battery Redischarge Voltage (PBDV)
-          - type: divider
-          - entity: number.heltec_pi30_display_pi30_set_battery_under_voltage
-            name: Battery Cut-off (PSDV)
-          - entity: sensor.heltec_pi30_display_pi30_battery_under_voltage
-            name: Battery Cut-off (PSDV)
-          - type: divider
-          - entity: number.heltec_pi30_display_pi30_set_battery_bulk_voltage
-            name: Bulk / C.V. (PCVV)
-          - entity: sensor.heltec_pi30_display_pi30_battery_bulk_voltage
-            name: Bulk / C.V. (PCVV)
-          - type: divider
-          - entity: number.heltec_pi30_display_pi30_set_battery_float_voltage
-            name: Float (PBFT)
-          - entity: sensor.heltec_pi30_display_pi30_battery_float_voltage
-            name: Float (PBFT)
-          - type: divider
-          - entity: select.heltec_pi30_display_pi30_set_max_total_charging_current
-            name: Max total charging current
-          - entity: sensor.heltec_pi30_display_pi30_max_total_charging_current
-            name: Max total charging current
-          - entity: select.heltec_pi30_display_pi30_set_max_utility_charging_current
-            name: Max charging current from grid
-          - entity: sensor.heltec_pi30_display_pi30_max_utility_charging_current
-            name: Max charging current from grid
-      - type: entities
-        title: Command Console
-        show_header_toggle: false
-        entities:
-          - entity: text.heltec_pi30_pi30_manual_command
-            name: Command (without CRC)
-          - entity: button.heltec_pi30_pi30_send_manual_command
-            name: Send
-      - type: entities
-        title: Configuration
-        show_header_toggle: false
-        state_color: true
-        entities:
-          - entity: switch.heltec_pi30_display_pi30_input_voltage_range_ups
-            name: PGR (ON= UPS 170–280V / OFF= APL 90–280V)
-          - entity: switch.heltec_pi30_display_pi30_pv_power_balance
-            name: >-
-              Power balance (PSPB) // ON= +self-consumption -relay-stress // OFF=
-              battery protection
-          - entity: switch.heltec_pi30_display_pi30_pv_ok_condition_for_parallel
-            name: Inverter in parallel
-  - type: grid
-    cards:
-      - type: entities
-        title: Battery
-        show_header_toggle: false
-        entities:
-          - entity: sensor.heltec_pi30_battery_voltage
-            name: PI30 battery voltage
-          - entity: sensor.heltec_pi30_battery_soc
-            name: PI30 battery SoC
-          - entity: sensor.heltec_pi30_display_pi30_battery_soc_calculated
-            name: PI30 battery SoC calculated (energy count)
-          - entity: sensor.heltec_pi30_heat_sink_temperature
-            name: PI30 heat sink temperature
-          - entity: sensor.heltec_pi30_battery_power
-            name: PI30 battery power
-          - entity: sensor.heltec_pi30_output_active_power
-            name: PI30 output active power
-          - entity: sensor.heltec_pi30_battery_current
-            name: PI30 battery current
-          - type: divider
-          - entity: sensor.heltec_pi30_batteria_potenza_carica
-          - entity: sensor.heltec_pi30_batteria_energia_caricata
-          - entity: sensor.heltec_pi30_batteria_energia_caricata_giornaliera
-          - entity: sensor.heltec_pi30_batteria_potenza_scarica
-          - entity: sensor.heltec_pi30_batteria_energia_scaricata
-          - entity: sensor.heltec_pi30_batteria_energia_scaricata_giornaliera
-      - type: entities
-        title: Inverter
-        show_header_toggle: false
-        entities:
-          - entity: sensor.heltec_pi30_pi30_grid_voltage
-            name: PI30 grid voltage
-          - entity: sensor.heltec_pi30_pi30_grid_frequency
-            name: PI30 grid frequency
-          - entity: sensor.heltec_pi30_pi30_output_voltage
-            name: PI30 output voltage
-          - entity: sensor.heltec_pi30_pi30_output_frequency
-            name: PI30 output frequency
-          - entity: sensor.heltec_pi30_pi30_output_apparent_power
-            name: PI30 output apparent power
-          - entity: sensor.heltec_pi30_pi30_load_percent
-            name: PI30 load percent
-          - entity: sensor.heltec_pi30_pi30_bus_voltage
-            name: PI30 bus voltage
-          - entity: sensor.heltec_pi30_pi30_battery_charging_current
-            name: PI30 battery charging current
-          - entity: sensor.heltec_pi30_pi30_battery_discharge_current
-            name: PI30 battery discharge current
-          - entity: sensor.heltec_pi30_pi30_pv_voltage
-            name: PI30 PV voltage
-          - entity: sensor.heltec_pi30_pi30_pv_current
-            name: PI30 PV current
-          - entity: sensor.heltec_pi30_pi30_pv_power
-            name: PI30 PV power
-  - type: grid
-    cards:
-      - type: entities
-        title: Read Commands
-        show_header_toggle: false
-        entities:
-          - entity: button.heltec_pi30_display_pi30_aggiorna_adesso_qpiri_qpigs_qmod
-            name: Refresh now (QPIRI / QPIGS / QMOD)
-          - type: divider
-          - entity: button.heltec_pi30_display_pi30_qpi_protocollo
-            name: QPI - protocol
-          - entity: button.heltec_pi30_display_pi30_qid_numero_di_serie
-            name: QID - serial number
-          - entity: button.heltec_pi30_display_pi30_qvfw_firmware
-            name: QVFW - firmware
-          - entity: button.heltec_pi30_display_pi30_qdi_valori_di_default
-            name: QDI - default values
-          - entity: button.heltec_pi30_display_pi30_qmchgcr_correnti_di_carica_ammesse
-            name: QMCHGCR - allowed charging currents
-          - entity: >-
-              button.heltec_pi30_display_pi30_qmuchgcr_correnti_di_carica_da_rete_ammesse
-            name: QMUCHGCR - allowed grid charging currents
-      - color: state
-        type: entities
-        title: Raw Data
-        show_header_toggle: false
-        entities:
-          - entity: switch.heltec_pi30_display_pi30_cattura_trame_grezze
-            name: Capture raw data
-          - entity: sensor.heltec_pi30_display_pi30_last_tx
-            name: Sent
-          - entity: sensor.heltec_pi30_display_pi30_last_rx
-            name: Received
-      - type: entities
-        title: Polling Responses
-        show_header_toggle: false
-        entities:
-          - entity: sensor.heltec_pi30_display_pi30_last_qpiri
-            name: QPIRI
-          - entity: sensor.heltec_pi30_display_pi30_last_qpigs
-            name: QPIGS
-          - entity: sensor.heltec_pi30_display_pi30_last_qmod
-            name: QMOD
-  - type: grid
-    cards:
-      - color: state
-        type: entities
-        title: ESP32
-        show_header_toggle: false
-        entities:
-          - entity: binary_sensor.heltec_pi30_display_pi30_switch_on
-            name: Inverter on
-          - type: divider
-          - entity: sensor.heltec_esp_ip_address
-            name: IP Address
-          - entity: sensor.heltec_esp_connected_ssid
-            name: SSID
-          - entity: sensor.heltec_esp_connected_bssid
-            name: BSSID
-          - entity: sensor.heltec_wifi_signal_db
-            name: WiFi dBm
-          - entity: sensor.heltec_wifi_signal_2
-            name: WiFi Signal %
-  - type: grid
-    cards:
-      - type: logbook
-        title: Mode
-        target:
-          entity_id:
-            - sensor.heltec_pi30_display_pi30_device_mode
-        grid_options:
-          columns: 12
-          rows: 8
-        name_detail: auto
+# Generic dashboard for the PI30 inverter with this repository's firmware
+# (examples/esp32/heltec-pi30), without GoodWe: the inverter and its battery.
+# It uses the scripts and helpers in "home_assistant/automations/PI30 battery
+# management" (manual CHARGE and DISCHARGE/HOLD) and the automation in
+# "home_assistant/automations/PI30 battery SOC". Rows whose entity you did not
+# create show "Entity not found": delete them or create the entity.
+# To import: Settings > Dashboards > Add dashboard > New dashboard from
+# scratch, open it, pencil at the top right, three dots > Raw configuration
+# editor, replace everything with this file and save. To add it as a view to
+# a dashboard you already have, copy only the block under "views:".
+title: PI30 inverter
+views:
+  - type: sections
+    title: PI30 inverter
+    path: inverter
+    icon: mdi:solar-power-variant
+    max_columns: 4
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Overview
+          - type: gauge
+            entity: sensor.pi30_battery_soc_calculated
+            name: Battery SOC (energy counting)
+            min: 0
+            max: 100
+            needle: true
+            severity:
+              red: 0
+              yellow: 15
+              green: 40
+          - type: tile
+            entity: sensor.pi30_device_mode
+            name: Device mode
+          - type: tile
+            entity: sensor.pi30_battery_voltage
+            name: Battery voltage
+          - type: tile
+            entity: sensor.pi30_battery_power
+            name: Battery power
+          - type: tile
+            entity: sensor.pi30_pv_power
+            name: Solar power
+          - type: tile
+            entity: sensor.pi30_output_active_power
+            name: Output power
+          - type: tile
+            entity: sensor.pi30_grid_voltage
+            name: Grid voltage
+          - type: tile
+            entity: sensor.pi30_heat_sink_temperature
+            name: Heat sink temperature
+      - type: grid
+        cards:
+          - type: heading
+            heading: Battery management
+          - type: entities
+            title: Battery management
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: script.pi30_batteria_da_caricare
+                name: 'CHARGE: output from grid, charge solar + grid'
+              - entity: script.pi30_batteria_da_scaricare
+                name: 'DISCHARGE and HOLD: SBU output, then battery held at the minimum voltage'
+              - &id001
+                type: divider
+              - entity: input_number.pi30_keep_battery_live
+                name: Minimum voltage to hold
+              - entity: input_number.pi30_bulk_carica
+                name: Bulk while charging
+              - entity: input_number.pi30_float_carica
+                name: Float while charging
+              - *id001
+              - entity: automation.pi30_soc_batteria
+                name: Battery SOC automation
+              - entity: script.pi30_soc_ricalibra_da_tensione
+                name: Recalibrate SOC from voltage (once)
+              - entity: input_number.pi30_battery_soc_calculated
+                name: Calculated SOC (raw value)
+              - entity: sensor.pi30_battery_soc
+                name: Inverter SOC (from voltage)
+          - type: entities
+            title: Battery energy
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: sensor.pi30_battery_charge_energy_today
+                name: Charged today
+              - entity: sensor.pi30_battery_discharge_energy_today
+                name: Discharged today
+              - entity: sensor.pi30_battery_charge_energy
+                name: Charged in total
+              - entity: sensor.pi30_battery_discharge_energy
+                name: Discharged in total
+              - *id001
+              - entity: sensor.pi30_battery_charge_power
+                name: Charge power
+              - entity: sensor.pi30_battery_discharge_power
+                name: Discharge power
+              - entity: sensor.pi30_battery_current
+                name: Battery current
+      - type: grid
+        cards:
+          - type: heading
+            heading: Last 24 hours
+          - type: history-graph
+            title: Last 24 hours
+            hours_to_show: 24
+            entities:
+              - entity: sensor.pi30_battery_soc_calculated
+                name: Battery SOC (energy counting)
+              - entity: sensor.pi30_battery_voltage
+                name: Battery voltage
+            grid_options:
+              columns: 12
+          - type: history-graph
+            title: Power, last 24 hours
+            hours_to_show: 24
+            entities:
+              - entity: sensor.pi30_battery_power
+                name: Battery power
+              - entity: sensor.pi30_pv_power
+                name: Solar power
+              - entity: sensor.pi30_output_active_power
+                name: Output power
+            grid_options:
+              columns: 12
+          - type: logbook
+            title: Mode changes
+            hours_to_show: 48
+            target:
+              entity_id:
+                - sensor.pi30_device_mode
+            grid_options:
+              columns: 12
+              rows: 6
+      - type: grid
+        cards:
+          - type: entities
+            title: Output priority (POP)
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: sensor.pi30_output_source_priority
+                name: Priority read from the inverter
+              - *id001
+              - entity: switch.pi30_output_priority_utility
+                name: 0 Utility first (USB)
+              - entity: switch.pi30_output_priority_solar
+                name: 1 Solar first (SUB)
+              - entity: switch.pi30_output_priority_sbu
+                name: 2 SBU
+          - type: entities
+            title: Charger priority (PCP)
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: sensor.pi30_charger_source_priority
+                name: Priority read from the inverter
+              - *id001
+              - entity: button.pi30_charger_solar_first
+                name: 1 Solar first
+              - entity: button.pi30_charger_solar_utility
+                name: 2 Solar + utility
+              - entity: button.pi30_charger_solar_only
+                name: 3 Solar only
+          - type: entities
+            title: Inverter status
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: sensor.pi30_device_mode
+                name: Device mode
+              - entity: binary_sensor.pi30_load_on
+                name: Load on
+              - entity: binary_sensor.pi30_charging
+                name: Charging
+              - entity: binary_sensor.pi30_ac_charging
+                name: Grid charging
+              - entity: binary_sensor.pi30_scc_charging
+                name: Solar charging
+              - entity: binary_sensor.pi30_charging_to_floating_mode
+                name: Float
+      - type: grid
+        cards:
+          - type: entities
+            title: Battery settings
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: select.pi30_set_max_total_charging_current
+                name: Max total charging current (set)
+              - entity: sensor.pi30_max_total_charging_current
+                name: Max total charging current (read)
+              - entity: select.pi30_set_max_utility_charging_current
+                name: Max grid charging current (set)
+              - entity: sensor.pi30_max_utility_charging_current
+                name: Max grid charging current (read)
+              - *id001
+              - entity: number.pi30_set_battery_bulk_voltage
+                name: Bulk / C.V. (PCVV) (set)
+              - entity: sensor.pi30_battery_bulk_voltage
+                name: Bulk / C.V. (PCVV) (read)
+              - entity: number.pi30_set_battery_float_voltage
+                name: Float (PBFT) (set)
+              - entity: sensor.pi30_battery_float_voltage
+                name: Float (PBFT) (read)
+              - *id001
+              - entity: number.pi30_set_battery_recharge_voltage
+                name: Back to grid (PBCV) (set)
+              - entity: sensor.pi30_battery_recharge_voltage
+                name: Back to grid (PBCV) (read)
+              - entity: number.pi30_set_battery_redischarge_voltage
+                name: Back to battery (PBDV) (set)
+              - entity: sensor.pi30_battery_redischarge_voltage
+                name: Back to battery (PBDV) (read)
+              - entity: number.pi30_set_battery_under_voltage
+                name: Battery cut-off (PSDV) (set)
+              - entity: sensor.pi30_battery_under_voltage
+                name: Battery cut-off (PSDV) (read)
+          - type: entities
+            title: Configuration
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: switch.pi30_input_voltage_range_ups
+                name: Input range UPS 170-280V (OFF = APL 90-280V)
+              - entity: switch.pi30_pv_power_balance
+                name: 'Power balance (PSPB): ON more self-consumption, OFF protects the battery'
+              - entity: switch.pi30_pv_ok_condition_for_parallel
+                name: Parallel inverters
+          - type: entities
+            title: Command console
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: text.pi30_manual_command
+                name: Command (no CRC)
+              - entity: button.pi30_send_manual_command
+                name: Send
+      - type: grid
+        cards:
+          - type: entities
+            title: Inverter
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: sensor.pi30_grid_voltage
+                name: Grid voltage
+              - entity: sensor.pi30_grid_frequency
+                name: Grid frequency
+              - entity: sensor.pi30_output_voltage
+                name: Output voltage
+              - entity: sensor.pi30_output_frequency
+                name: Output frequency
+              - entity: sensor.pi30_output_apparent_power
+                name: Output apparent power
+              - entity: sensor.pi30_output_active_power
+                name: Output power
+              - entity: sensor.pi30_load_percent
+                name: Load
+              - entity: sensor.pi30_bus_voltage
+                name: Bus voltage
+              - *id001
+              - entity: sensor.pi30_battery_voltage
+                name: Battery voltage
+              - entity: sensor.pi30_battery_charging_current
+                name: Charging current
+              - entity: sensor.pi30_battery_discharge_current
+                name: Discharge current
+              - entity: sensor.pi30_heat_sink_temperature
+                name: Heat sink temperature
+              - *id001
+              - entity: sensor.pi30_pv_voltage
+                name: Solar voltage
+              - entity: sensor.pi30_pv_current
+                name: Solar current
+              - entity: sensor.pi30_pv_power
+                name: Solar power
+          - type: entities
+            title: ESP32
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: binary_sensor.pi30_switch_on
+                name: Inverter on
+              - *id001
+              - entity: sensor.pi30_ip_address
+                name: IP address
+              - entity: sensor.pi30_wifi_ssid
+                name: SSID
+              - entity: sensor.pi30_wifi_bssid
+                name: BSSID
+              - entity: sensor.pi30_wifi_signal
+                name: WiFi signal dBm
+              - entity: sensor.pi30_wifi_signal_percent
+                name: WiFi signal %
+      - type: grid
+        cards:
+          - type: entities
+            title: Read commands
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: button.pi30_refresh_now
+                name: Refresh now (QPIRI / QPIGS / QMOD)
+              - *id001
+              - entity: button.pi30_qpi_protocol
+                name: QPI - protocol
+              - entity: button.pi30_qid_serial_number
+                name: QID - serial number
+              - entity: button.pi30_qvfw_firmware
+                name: QVFW - firmware
+              - entity: button.pi30_qdi_defaults
+                name: QDI - defaults
+              - entity: button.pi30_qmchgcr_charging_currents
+                name: QMCHGCR - allowed charging currents
+              - entity: button.pi30_qmuchgcr_utility_charging_currents
+                name: QMUCHGCR - allowed grid charging currents
+          - type: entities
+            title: Raw data
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: switch.pi30_raw_frame_capture
+                name: Raw frame capture
+              - entity: sensor.pi30_last_tx
+                name: Sent
+              - entity: sensor.pi30_last_rx
+                name: Received
+          - type: entities
+            title: Polling replies
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: sensor.pi30_last_qpiri
+                name: QPIRI
+              - entity: sensor.pi30_last_qpigs
+                name: QPIGS
+              - entity: sensor.pi30_last_qmod
+                name: QMOD

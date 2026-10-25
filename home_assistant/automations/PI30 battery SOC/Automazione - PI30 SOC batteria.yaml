@@ -1,0 +1,253 @@
+alias: PI30 SOC batteria
+description: >-
+  Calcola il SOC reale del pacco LiFePO4 8S contando l'energia che entra
+  ed esce, invece di leggerlo dalla tensione: la curva tensione/SOC del
+  LiFePO4 è troppo piatta a metà carica e si sposta con la corrente. Scrive
+  nell'aiutante input_number.pi30_battery_soc_calculated (vedi "Aiutante 1"
+  qui accanto); "Aiutante 2" è il sensore arrotondato
+  sensor.pi30_battery_soc_calculated per le dashboard.
+  CONTEGGIO. Ogni minuto (e all'avvio di Home Assistant) legge le potenze di
+  carica e scarica della batteria dal firmware (sensor.pi30_battery_charge_power
+  e sensor.pi30_battery_discharge_power) e le moltiplica per il tempo reale
+  trascorso dall'esecuzione precedente, al massimo 5 minuti (dopo
+  un'interruzione non integra ore di storia sconosciuta):
+    SOC += carica_kW * charge_efficiency * ore / capacity_kwh * 100
+    SOC -= (scarica_kW + idle_drain_w / 1000) * ore / capacity_kwh * 100
+  COSTANTI, misurate su questo pacco (cicli pieno -> vuoto -> pieno di
+  settembre e ottobre 2026): capacity_kwh 3.9 (155Ah x 25.6V),
+  charge_efficiency 0.91, idle_drain_w = consumo dell'inverter che la PI30
+  non riporta: 65W fino a 150W di scarica riportata (0A compreso), 15W
+  sopra. Con questi valori i cicli si chiudono entro +-2 punti. Ricontrollale
+  se cambi pacco o inverter: le ancore scrivono nel Registro i due contatori
+  di energia, quindi un ciclo pieno -> vuoto -> pieno ridà i numeri.
+  CARICA FANTASMA. Fino a small_charge_w (60W, circa 2A) la carica non viene
+  contata: è il consumo della PI30 o un offset della sua lettura (misurato:
+  +1A per ore con la batteria che scendeva).
+  MANTENIMENTO E FLOAT: CONTEGGIO FERMO. Quando il caricabatterie tiene la
+  batteria alla tensione di float programmata (float o pieno a 27.5V, oppure
+  il MANTENIMENTO della PI30 Batteria MAN: SBU, carichi sulla rete, bulk e
+  float alla tensione minima), la tensione è almeno quella di float - 0.1V,
+  niente si scarica e la carica è sotto i 60W: il caricabatterie copre lui
+  il consumo dell'inverter, quindi il SOC non si muove né in su né in giù e
+  la correzione da tensione è spenta (la tensione è quella imposta dal
+  caricabatterie, non quella di riposo). Sotto i 27.2V serve in più il Line
+  mode (carichi sulla rete), così una batteria in Battery mode che alimenta
+  pochi watt riportando 0A non viene scambiata per mantenimento.
+  Il conteggio da solo non arriva mai a 100 o a 0: salendo si ferma a 99,
+  scendendo a 1. Da un 100 ancorato può scendere; una carica contata (oltre
+  60W) porta un 100 a 99, perché una batteria che prende energia non è piena.
+  CORREZIONE DA TENSIONE. Ogni minuto la tensione, compensata per la corrente
+  reale (riportata + consumo nascosto, 10 mOhm), diventa un intervallo di SOC
+  dalla tabella misurata ocv_v / ocv_soc (+-0.15V, la PI30 legge a passi di
+  0.1V). Dentro l'intervallo non succede niente; fuori, il SOC va verso il
+  bordo più vicino con costante di tempo 5 minuti. Solo quando la tensione è
+  affidabile: scarica o riposo (corrente >= -30A), non in mantenimento, e
+  caricabatterie spento da almeno 60 minuti (potenza di carica 0 da 60 minuti
+  oppure binary_sensor.pi30_ac_charging e pi30_scc_charging spenti da 60
+  minuti), altrimenti la carica superficiale fa sembrare la batteria più
+  piena. Sopra il 70% l'intervallo è largo 25-30 punti e comanda il
+  conteggio; sotto il 10% è di pochi punti e comanda la tensione. Vicino agli
+  estremi l'intervallo arriva a 0 o 100, così non sposta un'ancora.
+  ANCORE. Solo questi due trigger scrivono esattamente 100 e 0, sulla
+  tensione compensata (tensione - corrente x 9.5 mOhm):
+    - full_hold -> 100%: tensione >= il più alto tra float - 0.1V e 27.2V
+      (3.40V per cella), con corrente <= 2A (il float della PI30 riporta +2A
+      per ore), per 5 minuti. La tensione di pieno tenuta senza carica vera
+      viene dalla batteria stessa. Il flag "charging to floating mode"
+      dell'inverter non viene usato: resta alzato tutta la notte.
+    - empty_hold -> 0%: tensione <= under voltage + 0.2V per 1 minuto.
+  Ogni ancora scrive nel Registro le letture su cui è scattata. Se la
+  batteria è già piena o vuota quando importi l'automazione, l'ancora aspetta
+  il prossimo episodio: lancia una volta lo script "PI30 SOC ricalibra da
+  tensione".
+  Le costanti delle ancore sono in trigger_variables, le altre in actions >
+  variables; full_floor_v è in tutte e due, tienile uguali.
+trigger_variables:
+  tail_current_a: 2
+  internal_resistance_ohm: 0.0095
+  full_margin_v: 0.1
+  full_floor_v: 27.2
+  empty_margin_v: 0.2
+triggers:
+  - trigger: time_pattern
+    id: cadence
+    minutes: /1
+  - trigger: homeassistant
+    id: startup
+    event: start
+  - trigger: template
+    id: full_hold
+    value_template: >-
+      {% set voltage = states('sensor.pi30_battery_voltage') | float(default=none) %}
+      {% set current = states('sensor.pi30_battery_current') | float(default=none) %}
+      {% set float_voltage = states('sensor.pi30_battery_float_voltage') | float(default=none) %}
+      {% set full_threshold = ([float_voltage - full_margin_v, full_floor_v] | max) if float_voltage is not none else full_floor_v %}
+      {{ voltage is not none and current is not none
+         and current <= tail_current_a
+         and (voltage - current * internal_resistance_ohm) >= full_threshold }}
+    for: "00:05:00"
+  - trigger: template
+    id: empty_hold
+    value_template: >-
+      {% set voltage = states('sensor.pi30_battery_voltage') | float(default=none) %}
+      {% set current = states('sensor.pi30_battery_current') | float(default=none) %}
+      {% set under_voltage = states('sensor.pi30_battery_under_voltage') | float(default=none) %}
+      {{ voltage is not none and current is not none and under_voltage is not none
+         and (voltage - current * internal_resistance_ohm) <= (under_voltage + empty_margin_v) }}
+    for: "00:01:00"
+conditions: []
+actions:
+  - variables:
+      capacity_kwh: 3.9
+      charge_efficiency: 0.91
+      max_dt_hours: "{{ 5 / 60 }}"
+      correction_resistance_ohm: 0.010
+      idle_drain_light_w: 65
+      idle_drain_heavy_w: 15
+      light_load_w: 150
+      correction_band_v: 0.15
+      correction_tau_min: 5
+      correction_max_current_a: 30
+      correction_rest_min: 60
+      small_charge_w: 60
+      full_floor_v: 27.2
+      ocv_v: [22.70, 23.40, 24.00, 24.50, 25.00, 25.60, 25.76, 25.96, 26.10, 26.22, 26.30, 26.36, 26.42, 26.47, 26.52, 26.57, 26.63, 26.67, 26.69, 26.71, 26.73, 26.75]
+      ocv_soc: [0, 1, 2, 4, 6, 9, 15, 20, 25, 30, 37, 43, 50, 55, 60, 65, 70, 75, 82, 90, 95, 99]
+      voltage: >-
+        {{ states('sensor.pi30_battery_voltage') | float(default=none)
+        }}
+      current: >-
+        {{ states('sensor.pi30_battery_current') | float(default=none)
+        }}
+      charge_kw: >-
+        {% set p = states('sensor.pi30_battery_charge_power') | float(default=none) %}
+        {% set unit = state_attr('sensor.pi30_battery_charge_power', 'unit_of_measurement') %}
+        {{ none if p is none else (p if unit == 'kW' else p / 1000) }}
+      discharge_kw: >-
+        {% set p = states('sensor.pi30_battery_discharge_power') | float(default=none) %}
+        {% set unit = state_attr('sensor.pi30_battery_discharge_power', 'unit_of_measurement') %}
+        {{ none if p is none else (p if unit == 'kW' else p / 1000) }}
+      idle_drain_w: >-
+        {{ idle_drain_light_w if discharge_kw is none or discharge_kw * 1000 <= light_load_w
+           else idle_drain_heavy_w }}
+      charging: >-
+        {{ charge_kw is not none and charge_kw * 1000 > small_charge_w }}
+      float_voltage: >-
+        {{ states('sensor.pi30_battery_float_voltage') | float(default=none) }}
+      holding: >-
+        {{ not charging and voltage is not none and float_voltage is not none
+           and voltage >= float_voltage - 0.1
+           and discharge_kw is not none and discharge_kw == 0
+           and (voltage >= full_floor_v
+                or is_state('sensor.pi30_device_mode', 'Line mode')) }}
+      soc_now: >-
+        {{ states('input_number.pi30_battery_soc_calculated') |
+        float(default=50) }}
+      dt_hours: >-
+        {% set last = this.attributes.last_triggered if this is not none else none %}
+        {% set ts = as_timestamp(last, default=none) if last is not none else none %}
+        {{ 0 if ts is none else ([(now().timestamp() - ts) / 3600, max_dt_hours] | min) }}
+      charger_off_long_enough: >-
+        {% set rest_s = correction_rest_min * 60 %}
+        {% set s = states.sensor.pi30_battery_charge_power %}
+        {% set zero_long = s is not none and (s.state | float(default=1)) == 0
+           and (now() - s.last_changed).total_seconds() >= rest_s %}
+        {% set ac = states.binary_sensor.pi30_ac_charging %}
+        {% set scc = states.binary_sensor.pi30_scc_charging %}
+        {% set flags_off_long = ac is not none and scc is not none
+           and ac.state == 'off' and scc.state == 'off'
+           and (now() - ac.last_changed).total_seconds() >= rest_s
+           and (now() - scc.last_changed).total_seconds() >= rest_s %}
+        {{ charge_kw is not none and not charging and (zero_long or flags_off_long) }}
+      voltage_band: >-
+        {% macro soc_at(v) -%}
+          {%- set ns = namespace(r=none) -%}
+          {%- if v <= ocv_v[0] -%}{%- set ns.r = ocv_soc[0] -%}
+          {%- elif v >= ocv_v[-1] -%}{%- set ns.r = ocv_soc[-1] -%}
+          {%- else -%}
+            {%- for i in range(1, ocv_v | length) -%}
+              {%- if ns.r is none and v <= ocv_v[i] -%}
+                {%- set ns.r = ocv_soc[i-1] + (ocv_soc[i] - ocv_soc[i-1]) * (v - ocv_v[i-1]) / (ocv_v[i] - ocv_v[i-1]) -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+          {{- ns.r -}}
+        {%- endmacro %}
+        {% if voltage is none or current is none or not charger_off_long_enough
+              or holding or current < -correction_max_current_a %}
+          {{ none }}
+        {% else %}
+          {% set real_current = ([current, 0] | min) - idle_drain_w / voltage %}
+          {% set v_ocv = voltage - real_current * correction_resistance_ohm %}
+          {% set lo = soc_at(v_ocv - correction_band_v) | float %}
+          {% set hi = soc_at(v_ocv + correction_band_v) | float %}
+          {{ [0 if lo <= 3 else lo, 100 if hi >= 99 else hi] }}
+        {% endif %}
+      readings: >-
+        V={{ states('sensor.pi30_battery_voltage') }}V
+        I={{ states('sensor.pi30_battery_current') }}A
+        float={{ states('sensor.pi30_battery_float_voltage') }}V
+        under={{ states('sensor.pi30_battery_under_voltage') }}V
+        charged={{ states('sensor.pi30_battery_charge_energy') }}
+        discharged={{ states('sensor.pi30_battery_discharge_energy') }}
+        soc_before={{ states('input_number.pi30_battery_soc_calculated') }}
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: full_hold
+        sequence:
+          - target:
+              entity_id: input_number.pi30_battery_soc_calculated
+            data:
+              value: 100
+            action: input_number.set_value
+          - action: logbook.log
+            data:
+              name: PI30 SOC batteria
+              entity_id: input_number.pi30_battery_soc_calculated
+              message: "ancorato a 100% dopo 5 min alla soglia di pieno ({{ readings }})"
+      - conditions:
+          - condition: trigger
+            id: empty_hold
+        sequence:
+          - target:
+              entity_id: input_number.pi30_battery_soc_calculated
+            data:
+              value: 0
+            action: input_number.set_value
+          - action: logbook.log
+            data:
+              name: PI30 SOC batteria
+              entity_id: input_number.pi30_battery_soc_calculated
+              message: "ancorato a 0% dopo 1 min alla soglia di vuoto ({{ readings }})"
+    default:
+      - if:
+          - condition: template
+            value_template: "{{ charge_kw is none or discharge_kw is none or dt_hours <= 0 }}"
+        then:
+          - stop: Potenza batteria non disponibile o nessun tempo trascorso
+      - target:
+          entity_id: input_number.pi30_battery_soc_calculated
+        data:
+          value: >-
+            {% set charge_in = charge_kw if charging else 0 %}
+            {% set drain_kw = discharge_kw + (0 if charging or holding else idle_drain_w / 1000) %}
+            {% set delta = (charge_in * charge_efficiency - drain_kw) * dt_hours / capacity_kwh * 100 %}
+            {% if delta > 0 %}
+              {% set counted = [soc_now + delta, 99] | min %}
+            {% elif delta < 0 %}
+              {% set counted = [soc_now + delta, [1, soc_now] | min] | max %}
+            {% else %}
+              {% set counted = soc_now %}
+            {% endif %}
+            {% if voltage_band is none %}
+              {{ counted | round(3) }}
+            {% else %}
+              {% set target = [[counted, voltage_band[0]] | max, voltage_band[1]] | min %}
+              {% set gain = 1 - e ** (-(dt_hours * 60) / correction_tau_min) %}
+              {% set corrected = counted + gain * (target - counted) %}
+              {{ [[corrected, [1, counted] | min] | max, [99, counted] | max] | min | round(3) }}
+            {% endif %}
+        action: input_number.set_value
+mode: single
+max_exceeded: silent

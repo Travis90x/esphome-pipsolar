@@ -1,24 +1,25 @@
 # =====================================================================
-# HELTEC WiFi Kit 32 V3  -  INVERTER PI30
-# Variante basata sul componente CORE `pipsolar` di ESPHome.
+# HELTEC WiFi Kit 32 V3 - INVERTER PI30
+# Versione: 2026-10-25 18:48
 #
-# Nessun external_components: `pipsolar` fa parte di ESPHome, quindi
-# questo file si compila con l'add-on ESPHome di Home Assistant senza
-# installare nulla.
+# Componente CORE `pipsolar` di ESPHome: nessun external_components, si
+# compila con l'add-on ESPHome di Home Assistant senza installare nulla.
 #
-# Differenze rispetto a heltec-pi30-display.yaml (versione standalone):
-#   + protocollo gestito dal componente ufficiale (CRC, framing, stato)
-#   + lettura non bloccante, senza script con delay
-#   + i setpoint diventano `output` con `number`/azioni native
-#   - niente console per comandi arbitrari
-#   - la tensione di bulk (PCVV) non e' esposta dal componente core
+# NOMI DELLE ENTITÀ. Il nome del dispositivo in Home Assistant è "PI30"
+# (friendly_name) e ogni entità ha un nome corto senza ripeterlo, quindi
+# gli ID sono tutti "<dominio>.pi30_<nome>":
+#   sensor.pi30_battery_voltage, number.pi30_set_battery_recharge_voltage,
+#   button.pi30_charger_solar_utility, switch.pi30_output_priority_sbu ...
+# Le automazioni, gli script e le dashboard del repository
+# (home_assistant/) usano questi ID. Il nome host resta "heltec-inverter",
+# così Home Assistant e l'OTA trovano il dispositivo come prima.
 #
 # Cablaggio: vedi heltec-pi30-display.yaml
 # =====================================================================
 
 esphome:
   name: "heltec-inverter"
-  friendly_name: Heltec PI30 Display
+  friendly_name: PI30
 
 esp32:
   board: heltec_wifi_kit_32_V3
@@ -54,6 +55,15 @@ wifi:
 
 captive_portal:
 
+time:
+  - platform: sntp
+    id: sntp_zone_time
+    timezone: Europe/Rome
+
+# =====================================================================
+# UART E COMPONENTE PIPSOLAR
+# =====================================================================
+
 uart:
   - id: uart_0
     tx_pin: GPIO5
@@ -63,10 +73,10 @@ uart:
     parity: NONE
     stop_bits: 1
     rx_buffer_size: 512
-    # Intercetta il traffico senza sottrarre byte al componente
-    # (dummy_receiver: false). Serve a rivedere le risposte ai comandi
-    # che pipsolar non pubblica: QPI, QID, QVFW, QDI, QMCHGCR, QMUCHGCR,
-    # e l'ACK/NAK di ogni scrittura.
+    # Copia il traffico senza sottrarre byte al componente
+    # (dummy_receiver: false), per rivedere le risposte che pipsolar non
+    # pubblica (QPI, QID, QVFW, QDI, QMCHGCR, QMUCHGCR) e l'ACK/NAK di ogni
+    # scrittura. Pubblica solo con "raw frame capture" acceso.
     debug:
       direction: BOTH
       dummy_receiver: false
@@ -76,18 +86,15 @@ uart:
         - lambda: |-
             if (!id(g_sniff))
               return;
-
-            // La trama e' payload + CRC(2) + CR: i byte di CRC sono spesso
-            // ASCII stampabili e finirebbero in coda al testo.
+            // Trama = payload + CRC(2) + CR: i byte di CRC sono spesso ASCII
+            // stampabili e finirebbero in coda al testo.
             size_t n = bytes.size();
             if (n >= 3 && bytes[n - 1] == 0x0D)
               n -= 3;
-
             std::string t;
             for (size_t i = 0; i < n; i++)
               if (bytes[i] >= 0x20 && bytes[i] <= 0x7E)
                 t += (char) bytes[i];
-
             if (direction == UART_DIRECTION_TX)
               id(ts_last_tx).publish_state(t);
             else
@@ -96,96 +103,98 @@ uart:
 pipsolar:
   uart_id: uart_0
   id: inverter0
-  # Default 1s: a 2400 baud un giro completo dura circa 1s, quindi la
-  # UART non e' mai ferma e Home Assistant riceve un aggiornamento al
-  # secondo per ogni sensore. A 5s il giro occupa ~1s e lascia 4s liberi.
-  #
-  # Non serve una coda fatta a mano: il componente e' gia' seriale.
-  # loop() invia qualcosa solo in STATE_IDLE, i comandi in scrittura
-  # hanno la precedenza sui poll, e c'e' una coda di 10 slot con timeout
-  # di 5s (COMMAND_QUEUE_LENGTH / COMMAND_TIMEOUT). Le richieste non
-  # possono accavallarsi.
+  # A 2400 baud un giro completo di polling dura circa 1s: ogni 5s la UART
+  # resta libera 4s su 5. Il componente è già seriale (comandi in coda con
+  # precedenza sui poll), le richieste non si accavallano.
   update_interval: 5s
 
+globals:
+  # Cattura delle trame grezze, spenta di default: accesa pubblica due
+  # stati per ogni comando.
+  - id: g_sniff
+    type: bool
+    restore_value: true
+    initial_value: "false"
+
 # =====================================================================
-# SENSORI DALL'INVERTER
+# SENSORI
 # =====================================================================
 
 sensor:
   - platform: pipsolar
     pipsolar_id: inverter0
-    # ---- QPIGS ----
+    # ---- QPIGS: misure ----
     grid_voltage:
-      name: "PI30 grid voltage"
+      name: "grid voltage"
     grid_frequency:
-      name: "PI30 grid frequency"
+      name: "grid frequency"
     ac_output_voltage:
-      name: "PI30 output voltage"
+      name: "output voltage"
     ac_output_frequency:
-      name: "PI30 output frequency"
+      name: "output frequency"
     ac_output_apparent_power:
-      name: "PI30 output apparent power"
+      name: "output apparent power"
     ac_output_active_power:
-      name: "PI30 output active power"
+      name: "output active power"
       id: pip_out_w
     output_load_percent:
-      name: "PI30 load percent"
+      name: "load percent"
     bus_voltage:
-      name: "PI30 bus voltage"
+      name: "bus voltage"
     battery_voltage:
-      name: "PI30 battery voltage"
+      name: "battery voltage"
       id: pip_batt_v
     battery_charging_current:
-      name: "PI30 battery charging current"
+      name: "battery charging current"
       id: pip_batt_chg
+    battery_discharge_current:
+      name: "battery discharge current"
+      id: pip_batt_dis
     battery_capacity_percent:
-      name: "PI30 battery SoC"
+      name: "battery SoC"
       id: pip_soc
     inverter_heat_sink_temperature:
-      name: "PI30 heat sink temperature"
+      name: "heat sink temperature"
       id: pip_temp
     pv_input_current_for_battery:
-      name: "PI30 PV current"
+      name: "PV current"
     pv_input_voltage:
-      name: "PI30 PV voltage"
-    battery_discharge_current:
-      name: "PI30 battery discharge current"
-      id: pip_batt_dis
+      name: "PV voltage"
     pv_charging_power:
-      name: "PI30 PV power"
-    # ---- QPIRI ----
+      name: "PV power"
+    # ---- QPIRI: impostazioni lette dall'inverter ----
     battery_recharge_voltage:
-      name: "PI30 battery recharge voltage"
+      name: "battery recharge voltage"
       id: pip_recharge_v
     battery_under_voltage:
-      name: "PI30 battery under voltage"
+      name: "battery under voltage"
       id: pip_under_v
     battery_bulk_voltage:
-      name: "PI30 battery bulk voltage"
+      name: "battery bulk voltage"
       id: pip_bulk_v
     battery_float_voltage:
-      name: "PI30 battery float voltage"
+      name: "battery float voltage"
       id: pip_float_v
     battery_redischarge_voltage:
-      name: "PI30 battery redischarge voltage"
-      # Il componente pipsolar di ESPHome non dà unità né classe a questo
-      # sensore (a differenza delle altre tensioni QPIRI): senza, Home
-      # Assistant lo mostra come numero puro e non lo grafica come tensione.
+      name: "battery redischarge voltage"
+      # Il componente pipsolar non dà unità né classe a questo sensore (a
+      # differenza delle altre tensioni QPIRI).
       unit_of_measurement: V
       device_class: voltage
       state_class: measurement
     current_max_ac_charging_current:
-      name: "PI30 max utility charging current"
+      name: "max utility charging current"
     current_max_charging_current:
-      name: "PI30 max total charging current"
+      name: "max total charging current"
     output_source_priority:
-      name: "PI30 output source priority"
+      name: "output source priority"
     charger_source_priority:
-      name: "PI30 charger source priority"
+      name: "charger source priority"
 
-  # Corrente e potenza di batteria: derivate, come nella versione standalone
+  # ---- Batteria: corrente, potenza ed energia ----
+  # Positiva in carica, negativa in scarica.
   - platform: template
-    name: "PI30 battery current"
+    name: "battery current"
     id: pip_batt_a
     unit_of_measurement: "A"
     device_class: current
@@ -198,7 +207,8 @@ sensor:
       return id(pip_batt_chg).state - id(pip_batt_dis).state;
 
   - platform: template
-    name: "PI30 battery power"
+    name: "battery power"
+    id: pip_batt_w
     unit_of_measurement: "W"
     device_class: power
     state_class: measurement
@@ -209,53 +219,104 @@ sensor:
         return {};
       return id(pip_batt_a).state * id(pip_batt_v).state;
 
+  # Potenze sempre positive, una per verso: le usano il conteggio del SOC
+  # (automazione "PI30 SOC batteria") e i contatori di energia qui sotto.
+  - platform: template
+    name: "battery charge power"
+    id: pip_chg_w
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: |-
+      if (!id(pip_batt_w).has_state())
+        return {};
+      return std::max(id(pip_batt_w).state, 0.0f);
+
+  - platform: template
+    name: "battery discharge power"
+    id: pip_dis_w
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: |-
+      if (!id(pip_batt_w).has_state())
+        return {};
+      return std::max(-id(pip_batt_w).state, 0.0f);
+
+  # Energia totale (per la dashboard Energia di Home Assistant): integrata
+  # qui e salvata in flash, sopravvive ai riavvii.
+  - platform: integration
+    name: "battery charge energy"
+    sensor: pip_chg_w
+    time_unit: h
+    integration_method: left
+    restore: true
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 3
+    filters:
+      - multiply: 0.001
+
+  - platform: integration
+    name: "battery discharge energy"
+    sensor: pip_dis_w
+    time_unit: h
+    integration_method: left
+    restore: true
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 3
+    filters:
+      - multiply: 0.001
+
+  # Energia di oggi (si azzera a mezzanotte)
+  - platform: total_daily_energy
+    name: "battery charge energy today"
+    id: pip_chg_kwh_today
+    power_id: pip_chg_w
+    restore: true
+    unit_of_measurement: "kWh"
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.001
+
+  - platform: total_daily_energy
+    name: "battery discharge energy today"
+    id: pip_dis_kwh_today
+    power_id: pip_dis_w
+    restore: true
+    unit_of_measurement: "kWh"
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.001
+
+  # ---- WiFi ----
   - platform: wifi_signal
-    name: "WiFi Signal dB"
+    name: "WiFi signal"
     id: wifi_signal_db
-    unit_of_measurement: "dBm"
-    device_class: signal_strength
     update_interval: 10s
     entity_category: diagnostic
 
   - platform: copy
     source_id: wifi_signal_db
     id: wifi_signal_percentage
-    name: "WiFi Signal %"
+    name: "WiFi signal percent"
     unit_of_measurement: "%"
     entity_category: diagnostic
     filters:
       - lambda: return std::min(std::max(2.0f * (x + 100.0f), 0.0f), 100.0f);
 
-  # Energia giornaliera calcolata in Home Assistant (PAGE 4)
-  - platform: homeassistant
-    id: display_battery_charge_power
-    entity_id: sensor.heltec_pi30_batteria_potenza_carica
-    internal: true
-
-  - platform: homeassistant
-    id: display_battery_charge_energy
-    entity_id: sensor.heltec_pi30_batteria_energia_caricata_giornaliera
-    internal: true
-
-  - platform: homeassistant
-    id: display_battery_discharge_power
-    entity_id: sensor.heltec_pi30_batteria_potenza_scarica
-    internal: true
-
-  - platform: homeassistant
-    id: display_battery_discharge_energy
-    entity_id: sensor.heltec_pi30_batteria_energia_scaricata_giornaliera
-    internal: true
-
-# =====================================================================
-# TEXT SENSOR / BINARY SENSOR / SWITCH
-# =====================================================================
-
 text_sensor:
   - platform: pipsolar
     pipsolar_id: inverter0
     device_mode:
-      name: "PI30 device mode"
+      name: "device mode"
       filters:
         map:
           - P -> Power on
@@ -264,90 +325,72 @@ text_sensor:
           - B -> Battery mode
           - F -> Fault
           - D -> Shutdown
-
-    # Risposte grezze dei comandi che il componente interroga da solo.
-    # Sostituiscono il vecchio sensore "PI30 last reply" per questi
-    # comandi: il CRC e' gia' verificato e rimosso dal componente.
+    # Risposte grezze dei comandi che il componente interroga da solo (CRC
+    # già verificato e tolto). QFLAG e QPIWS allungherebbero il giro di un
+    # comando ciascuno: aggiungili solo se servono.
     last_qpiri:
-      name: "PI30 last QPIRI"
+      name: "last QPIRI"
       entity_category: diagnostic
     last_qpigs:
-      name: "PI30 last QPIGS"
+      name: "last QPIGS"
       entity_category: diagnostic
     last_qmod:
-      name: "PI30 last QMOD"
+      name: "last QMOD"
       entity_category: diagnostic
-    # Ogni entita' aggiunge il proprio comando al giro di polling.
-    # QPIRI/QPIGS/QMOD sono gia' interrogati per i sensori, quindi non
-    # costano nulla; QFLAG e QPIWS invece allungherebbero il giro di un
-    # comando ciascuno. Scommentali solo se ti servono davvero.
-    # last_qflag:
-    #   name: "PI30 last QFLAG"
-    #   entity_category: diagnostic
-    # last_qpiws:
-    #   name: "PI30 last QPIWS"
-    #   entity_category: diagnostic
 
   - platform: template
-    name: "PI30 last TX"
+    name: "last TX"
     id: ts_last_tx
     update_interval: never
     entity_category: diagnostic
 
   - platform: template
-    name: "PI30 last RX"
+    name: "last RX"
     id: ts_last_rx
     update_interval: never
     entity_category: diagnostic
 
   - platform: wifi_info
     ip_address:
-      name: ESP IP Address
+      name: "IP address"
       id: ip_address
     ssid:
-      name: ESP Connected SSID
+      name: "WiFi SSID"
       id: wifi_ssid
     bssid:
-      name: ESP Connected BSSID
+      name: "WiFi BSSID"
     mac_address:
-      name: ESP Mac Wifi Address
+      name: "MAC address"
     dns_address:
-      name: ESP DNS Address
+      name: "DNS address"
 
 binary_sensor:
   - platform: pipsolar
     pipsolar_id: inverter0
     load_status:
-      name: "PI30 load on"
+      name: "load on"
     charging_status:
-      name: "PI30 charging"
+      name: "charging"
     scc_charging_status:
-      name: "PI30 SCC charging"
+      name: "SCC charging"
     ac_charging_status:
-      name: "PI30 AC charging"
+      name: "AC charging"
     charging_to_floating_mode:
-      name: "PI30 charging to floating mode"
+      name: "charging to floating mode"
     switch_on:
-      name: "PI30 switch on"
+      name: "switch on"
       entity_category: diagnostic
     configuration_status:
-      name: "PI30 configuration changed"
+      name: "configuration changed"
       entity_category: diagnostic
 
-
-globals:
-  # Cattura delle trame grezze. Spenta di default: da accesa pubblica due
-  # stati per ogni comando, e a 5s di polling sono circa 1,2 al secondo
-  # verso Home Assistant.
-  - id: g_sniff
-    type: bool
-    restore_value: true
-    initial_value: "false"
-
+# =====================================================================
+# COMANDI
+# =====================================================================
 
 switch:
   - platform: template
-    name: "PI30 cattura trame grezze"
+    name: "raw frame capture"
     id: sw_sniff
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
@@ -357,37 +400,31 @@ switch:
     turn_off_action:
       - lambda: id(g_sniff) = false;
 
+  # Priorità di uscita (POP): lo stato reale è "output source priority"
   - platform: pipsolar
     pipsolar_id: inverter0
     output_source_priority_utility:
-      name: "PI30 output priority: Utility"
+      name: "output priority utility"
     output_source_priority_solar:
-      name: "PI30 output priority: Solar"
+      name: "output priority solar"
     output_source_priority_battery:
-      name: "PI30 output priority: SBU"
+      name: "output priority SBU"
     input_voltage_range:
-      name: "PI30 input voltage range (UPS)"
+      name: "input voltage range UPS"
     pv_ok_condition_for_parallel:
-      name: "PI30 PV OK condition for parallel"
+      name: "PV OK condition for parallel"
     pv_power_balance:
-      name: "PI30 PV power balance"
-
-# =====================================================================
-# SETPOINT SCRIVIBILI
-# Il componente espone gli `output`; li rendo comodi con dei `number`.
-# =====================================================================
+      name: "PV power balance"
 
 output:
   - platform: pipsolar
     pipsolar_id: inverter0
-    # ATTENZIONE: le possible_values di default del componente sono per
-    # unita' a 48V. write_state() confronta il valore con questa lista e
-    # scarta in silenzio tutto cio' che non vi compare, quindi per un
-    # banco a 24V vanno dichiarate esplicitamente.
+    # Le possible_values di default del componente sono per unità a 48V e
+    # write_state() scarta in silenzio tutto il resto: per un banco a 24V
+    # vanno dichiarate qui.
     battery_recharge_voltage:
       id: out_recharge_v
-      # Verificato sul campo: accetta i decimali (PBCV23.6 -> ACK),
-      # non solo i passi da 0.5 del manuale.
+      # Verificato: accetta i decimali (PBCV23.6 -> ACK).
       possible_values:
         [22.0, 22.1, 22.2, 22.3, 22.4, 22.5, 22.6, 22.7, 22.8, 22.9, 23.0,
          23.1, 23.2, 23.3, 23.4, 23.5, 23.6, 23.7, 23.8, 23.9, 24.0, 24.1,
@@ -410,78 +447,24 @@ output:
          28.4, 28.5, 28.6, 28.7, 28.8, 28.9, 29.0, 29.1, 29.2]
     battery_redischarge_voltage:
       id: out_redischarge_v
-      # Verificato sul campo: solo passi da 0.5 (i decimali rispondono
-      # NAK), e lo 0.0 del manuale non e' accettato da questa unita'.
+      # Verificato: solo passi da 0.5 (i decimali rispondono NAK), e lo 0.0
+      # del manuale non è accettato da questa unità.
       possible_values:
-        [24.0, 24.5, 25.0, 25.5, 26.0, 26.5, 27.0, 27.5, 28.0, 28.5,
-         29.0]
+        [24.0, 24.5, 25.0, 25.5, 26.0, 26.5, 27.0, 27.5, 28.0, 28.5, 29.0]
     current_max_ac_charging_current:
       id: out_max_ac_charge_a
       possible_values: [2, 10, 20, 30, 40, 50, 60, 70, 80]
-    # current_max_charging_current non e' dichiarato: il suo comando
-    # "MCHGC0%02.0f" non funziona su questo inverter. Vedi il select
-    # "PI30 set max total charging current", che accoda MNCHGC.
+    # current_max_charging_current non è dichiarato: il suo comando
+    # "MCHGC0%02.0f" non funziona su questo inverter (vedi "set max total
+    # charging current", che accoda MNCHGC).
     charger_source_priority:
       id: out_charger_priority
       possible_values: [0, 1, 2, 3]
 
+# Tensioni: valore libero entro i limiti, un comando per ogni modifica
 number:
   - platform: template
-    name: "PI30 set battery float voltage"
-    unit_of_measurement: "V"
-    device_class: voltage
-    min_value: 24.0
-    max_value: 29.0
-    step: 0.1
-    mode: BOX
-    optimistic: true
-    restore_value: true
-    initial_value: 27.5
-    entity_category: config
-    set_action:
-      - output.pipsolar.set_level:
-          id: out_float_v
-          value: !lambda return roundf(x * 10.0f) / 10.0f;
-
-  - platform: template
-    name: "PI30 set battery under voltage"
-    unit_of_measurement: "V"
-    device_class: voltage
-    min_value: 21.0
-    max_value: 24.0
-    step: 0.1
-    mode: box
-    optimistic: true
-    restore_value: true
-    initial_value: 23.9
-    entity_category: config
-    set_action:
-      - output.pipsolar.set_level:
-          id: out_under_v
-          value: !lambda return roundf(x * 10.0f) / 10.0f;
-
-  - platform: template
-    name: "PI30 set battery recharge voltage"
-    unit_of_measurement: "V"
-    device_class: voltage
-    min_value: 22.0
-    max_value: 26.0
-    step: 0.1
-    mode: box
-    optimistic: true
-    restore_value: true
-    initial_value: 23.5
-    entity_category: config
-    set_action:
-      - output.pipsolar.set_level:
-          id: out_recharge_v
-          value: !lambda return roundf(x * 10.0f) / 10.0f;
-
-  # Il componente pipsolar non espone la tensione di bulk come output,
-  # quindi il comando PCVV viene accodato direttamente. Il CRC lo calcola
-  # comunque il componente.
-  - platform: template
-    name: "PI30 set battery bulk voltage"
+    name: "set battery bulk voltage"
     unit_of_measurement: "V"
     device_class: voltage
     min_value: 24.0
@@ -492,6 +475,8 @@ number:
     restore_value: true
     initial_value: 29.0
     entity_category: config
+    # Il componente non espone il bulk come output: PCVV viene accodato
+    # direttamente (il CRC lo calcola comunque il componente).
     set_action:
       - lambda: |-
           char buf[16];
@@ -500,7 +485,41 @@ number:
           id(inverter0).queue_command(buf);
 
   - platform: template
-    name: "PI30 set battery redischarge voltage"
+    name: "set battery float voltage"
+    unit_of_measurement: "V"
+    device_class: voltage
+    min_value: 24.0
+    max_value: 29.0
+    step: 0.1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 27.0
+    entity_category: config
+    set_action:
+      - output.pipsolar.set_level:
+          id: out_float_v
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
+
+  - platform: template
+    name: "set battery recharge voltage"
+    unit_of_measurement: "V"
+    device_class: voltage
+    min_value: 22.0
+    max_value: 26.0
+    step: 0.1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 25.5
+    entity_category: config
+    set_action:
+      - output.pipsolar.set_level:
+          id: out_recharge_v
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
+
+  - platform: template
+    name: "set battery redischarge voltage"
     unit_of_measurement: "V"
     device_class: voltage
     min_value: 24.0
@@ -509,33 +528,40 @@ number:
     mode: box
     optimistic: true
     restore_value: true
-    initial_value: 24.5
+    initial_value: 26.5
     entity_category: config
     set_action:
       - output.pipsolar.set_level:
           id: out_redischarge_v
           value: !lambda return roundf(x * 2.0f) / 2.0f;
 
-# =====================================================================
-# SETPOINT A VALORI DISCRETI
-#
-# Il protocollo ammette solo valori precisi (es. 2/10/20...80 A), e
-# PipsolarOutput::write_state() scarta in silenzio tutto il resto.
-# Un `number` non sa esprimerlo: con step fisso propone valori invalidi
-# e, peggio, ogni click sulle frecce invia subito un comando.
-# Con un `select` una scelta = un comando, e i valori sono solo quelli
-# accettati dall'inverter.
-# =====================================================================
+  - platform: template
+    name: "set battery under voltage"
+    unit_of_measurement: "V"
+    device_class: voltage
+    min_value: 21.0
+    max_value: 24.0
+    step: 0.1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 24.0
+    entity_category: config
+    set_action:
+      - output.pipsolar.set_level:
+          id: out_under_v
+          value: !lambda return roundf(x * 10.0f) / 10.0f;
 
+# Correnti: solo i valori accettati dall'inverter, una scelta = un comando
 select:
   - platform: template
-    name: "PI30 set max utility charging current"
+    name: "set max utility charging current"
     id: sel_max_ac_charge
     optimistic: true
     restore_value: true
     entity_category: config
-    initial_option: "10"
-    # Massimo reale di questo inverter: 60 A (non gli 80 del listino
+    initial_option: "2"
+    # Massimo reale di questo inverter: 60A (non gli 80 del listino
     # QMUCHGCR generico).
     options: ["2", "10", "20", "30", "40", "50", "60"]
     set_action:
@@ -544,17 +570,15 @@ select:
           value: !lambda return atof(x.c_str());
 
   - platform: template
-    name: "PI30 set max total charging current"
+    name: "set max total charging current"
     id: sel_max_charge
     optimistic: true
     restore_value: true
     entity_category: config
-    initial_option: "20"
-    # Verificato sul campo: la forma giusta per questo inverter e'
-    # MNCHGC<mnnn> del manuale Voltronic, cioe' "MNCHGC0080" per 80 A.
-    # Il componente ha invece "MCHGC0%02.0f" cablato nel sorgente, che
-    # oltre i 50 A veniva rifiutato: percio' il comando viene accodato
-    # a mano. Il CRC lo calcola comunque il componente.
+    initial_option: "60"
+    # Verificato: questo inverter vuole MNCHGC<mnnn> ("MNCHGC0080" per 80A).
+    # Il "MCHGC0%02.0f" del componente oltre i 50A viene rifiutato, quindi
+    # il comando è accodato a mano.
     options: ["10", "20", "30", "40", "50", "60", "70", "80"]
     set_action:
       - lambda: |-
@@ -563,34 +587,13 @@ select:
           ESP_LOGI("PI30", "invio %s", buf);
           id(inverter0).queue_command(buf);
 
-
-# =====================================================================
-# CONSOLE COMANDI MANUALI
-#
-# Pipsolar::queue_command() e' pubblico, quindi si possono ancora
-# inviare comandi arbitrari senza toccare la UART a mano.
-#
-# LIMITE IMPORTANTE: per i comandi in coda il componente verifica solo
-# lunghezza e CRC della risposta e controlla se e' "(ACK". Il contenuto
-# NON viene pubblicato da nessuna parte. Quindi:
-#
-#   - comandi di SCRITTURA (POP.., PCP.., PBCV.., F50, PGR..): l'esito
-#     si vede nel log come "command successful" / "command not successful"
-#   - comandi di LETTURA (QPI, QID, QVFW, QDI, QMCHGCR, QMUCHGCR): la
-#     risposta NON arriva in Home Assistant. Per vederla, abilita il
-#     debug della UART (vedi il blocco `uart:` in cima) e guarda il log
-#     ESPHome: il componente non ruba i byte, li stampa e basta.
-#
-#   - QPIRI / QPIGS / QMOD / QFLAG / QPIWS non serve inviarli a mano: il
-#     componente li interroga da solo (update_interval di default 1 s) e
-#     il testo grezzo e' nei text sensor "PI30 last Q..." qui sopra.
-#
-# Il CRC viene calcolato dal componente: scrivi il comando senza CRC.
-# =====================================================================
-
+# Comando manuale: il CRC lo calcola il componente. Per i comandi in coda
+# il componente controlla solo l'"(ACK": l'esito delle scritture si vede nel
+# log ("command successful"), la risposta delle letture con "raw frame
+# capture" acceso ("last RX").
 text:
   - platform: template
-    name: "PI30 manual command"
+    name: "manual command"
     id: txt_cmd
     optimistic: true
     mode: text
@@ -600,7 +603,7 @@ text:
 
 button:
   - platform: template
-    name: "PI30 send manual command"
+    name: "send manual command"
     entity_category: config
     on_press:
       - lambda: |-
@@ -612,94 +615,77 @@ button:
           ESP_LOGI("PI30", "invio comando manuale: %s", c.c_str());
           id(inverter0).queue_command(c);
 
-  # -------------------------------------------------------------------
-  # PRIORITA' CARICA (PCP)
-  #
-  # Pulsanti e non switch: uno switch dovrebbe conoscere il proprio
-  # stato, ma qui lo stato reale e' uno solo per tutti e tre e lo
-  # pubblica gia' "PI30 charger source priority", letto da QPIRI.
-  #
-  # PCP00 (solo rete) non c'e': questo inverter risponde NAK.
-  # -------------------------------------------------------------------
-
+  # Priorità di carica (PCP). Pulsanti e non switch: lo stato reale è uno
+  # solo, "charger source priority". PCP00 (solo rete) risponde NAK su
+  # questo inverter.
   - platform: template
-    name: "PI30 charger SOLAR FIRST"
+    name: "charger solar first"
     on_press:
       - output.pipsolar.set_level:
           id: out_charger_priority
           value: 1.0
 
   - platform: template
-    name: "PI30 charger SOLAR + UTILITY"
+    name: "charger solar + utility"
     on_press:
       - output.pipsolar.set_level:
           id: out_charger_priority
           value: 2.0
 
   - platform: template
-    name: "PI30 charger SOLAR ONLY"
+    name: "charger solar only"
     on_press:
       - output.pipsolar.set_level:
           id: out_charger_priority
           value: 3.0
 
-  # -------------------------------------------------------------------
-  # LETTURE MANUALI
-  # -------------------------------------------------------------------
-
-  # Rimette needs_update=true su tutti i comandi in polling: e' il modo
-  # corretto di "rimandare QPIRI/QPIGS/QMOD" con questo componente.
-  # Inviarli con queue_command non servirebbe: check_incoming_length_(4)
-  # accetta solo risposte di 4 byte, cioe' (ACK e (NAK, quindi una
-  # risposta lunga verrebbe scartata come "response length not OK".
+  # Rilegge subito QPIRI, QPIGS e QMOD (rimette in coda i poll)
   - platform: template
-    name: "PI30 aggiorna adesso (QPIRI QPIGS QMOD)"
+    name: "refresh now"
     entity_category: config
     on_press:
       - lambda: id(inverter0).update();
 
-  # Comandi che il componente NON interroga. Vengono inviati davvero, ma
-  # la risposta non arriva in Home Assistant: si legge nel log ESPHome,
-  # dopo aver scommentato il blocco `debug:` sotto `uart:`.
-
+  # Letture che il componente non interroga: la risposta si vede in
+  # "last RX" con "raw frame capture" acceso.
   - platform: template
-    name: "PI30 QPI (protocollo)"
+    name: "QPI protocol"
     entity_category: config
     on_press:
       - lambda: id(inverter0).queue_command("QPI");
 
   - platform: template
-    name: "PI30 QID (numero di serie)"
+    name: "QID serial number"
     entity_category: config
     on_press:
       - lambda: id(inverter0).queue_command("QID");
 
   - platform: template
-    name: "PI30 QVFW (firmware)"
+    name: "QVFW firmware"
     entity_category: config
     on_press:
       - lambda: id(inverter0).queue_command("QVFW");
 
   - platform: template
-    name: "PI30 QDI (valori di default)"
+    name: "QDI defaults"
     entity_category: config
     on_press:
       - lambda: id(inverter0).queue_command("QDI");
 
   - platform: template
-    name: "PI30 QMCHGCR (correnti di carica ammesse)"
+    name: "QMCHGCR charging currents"
     entity_category: config
     on_press:
       - lambda: id(inverter0).queue_command("QMCHGCR");
 
   - platform: template
-    name: "PI30 QMUCHGCR (correnti di carica da rete ammesse)"
+    name: "QMUCHGCR utility charging currents"
     entity_category: config
     on_press:
       - lambda: id(inverter0).queue_command("QMUCHGCR");
 
 # =====================================================================
-# DISPLAY
+# DISPLAY (SSD1306 128x64): sette pagine a rotazione ogni 4s
 # =====================================================================
 
 interval:
@@ -708,11 +694,6 @@ interval:
       - display.page.show_next: my_display
       - component.update: my_display
 
-time:
-  - platform: sntp
-    id: sntp_zone_time
-    timezone: Europe/Rome
-
 i2c:
   - id: bus_a
     sda: GPIO17
@@ -720,7 +701,8 @@ i2c:
     scan: false
 
 image:
-  - file: solar_power.bmp
+  - platform: file
+    file: solar_power.bmp
     id: solar_icon
     resize: 65x50
     type: BINARY
@@ -769,13 +751,11 @@ display:
       - id: page1
         lambda: |-
           auto now = id(sntp_zone_time).now();
-
           if (!now.is_valid()) {
             it.printf(it.get_width() / 2, it.get_height() / 2, id(arial),
                       TextAlign::CENTER, "Ora non disponibile");
             return;
           }
-
           const char *giorno = "---";
           switch (now.day_of_week) {
             case 1: giorno = "Domenica"; break;
@@ -786,7 +766,6 @@ display:
             case 6: giorno = "Venerdì"; break;
             case 7: giorno = "Sabato"; break;
           }
-
           const char *mese = "---";
           switch (now.month) {
             case 1: mese = "Gen"; break;
@@ -802,10 +781,8 @@ display:
             case 11: mese = "Nov"; break;
             case 12: mese = "Dic"; break;
           }
-
           it.printf(0, 0, id(arial), TextAlign::TOP_LEFT, "Travis90x");
           it.image(10, 16, id(solar_icon));
-
           it.printf(it.get_width(), it.get_height() - 48, id(arial),
                     TextAlign::BASELINE_RIGHT, "%s", giorno);
           it.strftime(it.get_width(), it.get_height() - 36, id(arial),
@@ -823,18 +800,15 @@ display:
           it.printf(20, 0, id(arial), TextAlign::TOP_LEFT, "SSID:");
           it.printf(it.get_width(), 0, id(arial), TextAlign::TOP_RIGHT,
                     "%s", id(wifi_ssid).state.c_str());
-
           it.printf(0, it.get_height() - 37, id(arial),
                     TextAlign::BASELINE_LEFT, "IP");
           it.printf(it.get_width(), it.get_height() - 37, id(arial),
                     TextAlign::BASELINE_RIGHT, "%s", id(ip_address).state.c_str());
-
           it.printf(0, it.get_height() - 25, id(arial),
                     TextAlign::BASELINE_LEFT, "WiFi Signal");
           it.printf(it.get_width(), it.get_height() - 25, id(arial),
                     TextAlign::BASELINE_RIGHT, "%.0f%%",
                     id(wifi_signal_percentage).state);
-
           it.printf(0, it.get_height() - 13, id(arial),
                     TextAlign::BASELINE_LEFT, "WiFi");
           it.printf(it.get_width(), it.get_height() - 13, id(arial),
@@ -845,78 +819,63 @@ display:
           it.printf(0, 0, id(icon_font), TextAlign::TOP_LEFT, "󱊣");
           it.printf(it.get_width() / 2, 0, id(arial), TextAlign::TOP_CENTER,
                     "BATTERIA");
-
           it.printf(0, it.get_height() - 37, id(arial),
                     TextAlign::BASELINE_LEFT, "Tensione");
           it.printf(it.get_width(), it.get_height() - 37, id(arial),
                     TextAlign::BASELINE_RIGHT, "%.2f V", id(pip_batt_v).state);
-
           it.printf(0, it.get_height() - 25, id(arial),
                     TextAlign::BASELINE_LEFT, "SOC");
           it.printf(it.get_width(), it.get_height() - 25, id(arial),
                     TextAlign::BASELINE_RIGHT, "%.0f%%", id(pip_soc).state);
-
           it.printf(0, it.get_height() - 13, id(arial),
                     TextAlign::BASELINE_LEFT, "Temp.");
           it.printf(it.get_width(), it.get_height() - 13, id(arial),
                     TextAlign::BASELINE_RIGHT, "%.0f°C", id(pip_temp).state);
-
           it.printf(0, it.get_height() - 1, id(arial),
                     TextAlign::BASELINE_LEFT, "Power");
           it.printf(it.get_width(), it.get_height() - 1, id(arial),
                     TextAlign::BASELINE_RIGHT, "%.0f W", id(pip_out_w).state);
 
+      # Energia di oggi, calcolata sul dispositivo
       - id: page4
         lambda: |-
           it.printf(0, 0, id(icon_font), TextAlign::TOP_LEFT, "󱊥");
           it.printf(it.get_width() / 2, 0, id(arial), TextAlign::TOP_CENTER,
                     "BATTERIA");
-
           it.printf(0, it.get_height() - 37, id(arial),
                     TextAlign::BASELINE_LEFT, "Carica");
           it.printf(it.get_width(), it.get_height() - 37, id(arial),
-                    TextAlign::BASELINE_RIGHT, "%.0f W",
-                    id(display_battery_charge_power).state);
-
+                    TextAlign::BASELINE_RIGHT, "%.0f W", id(pip_chg_w).state);
           it.printf(0, it.get_height() - 25, id(arial),
                     TextAlign::BASELINE_LEFT, "Caricata");
           it.printf(it.get_width(), it.get_height() - 25, id(arial),
-                    TextAlign::BASELINE_RIGHT, "%.2f kWh",
-                    id(display_battery_charge_energy).state);
-
+                    TextAlign::BASELINE_RIGHT, "%.2f kWh", id(pip_chg_kwh_today).state);
           it.printf(0, it.get_height() - 13, id(arial),
                     TextAlign::BASELINE_LEFT, "Scarica");
           it.printf(it.get_width(), it.get_height() - 13, id(arial),
-                    TextAlign::BASELINE_RIGHT, "%.0f W",
-                    id(display_battery_discharge_power).state);
-
+                    TextAlign::BASELINE_RIGHT, "%.0f W", id(pip_dis_w).state);
           it.printf(0, it.get_height() - 1, id(arial),
                     TextAlign::BASELINE_LEFT, "Scaricata");
           it.printf(it.get_width(), it.get_height() - 1, id(arial),
-                    TextAlign::BASELINE_RIGHT, "%.2f kWh",
-                    id(display_battery_discharge_energy).state);
+                    TextAlign::BASELINE_RIGHT, "%.2f kWh", id(pip_dis_kwh_today).state);
 
       - id: page5
         lambda: |-
           it.printf(0, 0, id(icon_font), TextAlign::TOP_LEFT, "󱊦");
           it.printf(it.get_width() / 2, 0, id(arial), TextAlign::TOP_CENTER,
                     "SETTAGGI");
-
           it.printf(0, it.get_height() - 37, id(arial),
                     TextAlign::BASELINE_LEFT, "Bulk");
           it.printf(it.get_width(), it.get_height() - 37, id(arial),
                     TextAlign::BASELINE_RIGHT, "%.1f V", id(pip_bulk_v).state);
-
           it.printf(0, it.get_height() - 25, id(arial),
                     TextAlign::BASELINE_LEFT, "Float");
           it.printf(it.get_width(), it.get_height() - 25, id(arial),
                     TextAlign::BASELINE_RIGHT, "%.1f V", id(pip_float_v).state);
-
           it.printf(0, it.get_height() - 13, id(arial),
                     TextAlign::BASELINE_LEFT, "Ricarica");
           it.printf(it.get_width(), it.get_height() - 13, id(arial),
                     TextAlign::BASELINE_RIGHT, "%.1f V", id(pip_recharge_v).state);
-
           it.printf(0, it.get_height() - 1, id(arial),
                     TextAlign::BASELINE_LEFT, "Stop");
           it.printf(it.get_width(), it.get_height() - 1, id(arial),

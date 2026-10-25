@@ -1,0 +1,30 @@
+# Aiutante 2 di 2 per "Automazione - PI30 SOC batteria.yaml".
+#
+# Il SOC calcolato come un normale sensore di batteria (arrotondato all'unità)
+# per dashboard e grafici. Legge l'Aiutante 1: crea prima quello.
+#
+# Dall'interfaccia:
+#   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante >
+#   Template > Sensore
+#   Nome: PI30 battery SOC calculated
+#   Modello di stato:
+#     {{ states('input_number.pi30_battery_soc_calculated') | float(0) | round(0) }}
+#   Unità di misura: %   Classe del dispositivo: Batteria
+#   Classe di stato: Misura
+# Dopo il salvataggio apri l'aiutante, icona ingranaggio, e controlla che l'ID
+# entità sia sensor.pi30_battery_soc_calculated (lo usano le dashboard). Se
+# avevi già questo sensore con l'ID vecchio
+# (sensor.heltec_pi30_display_pi30_battery_soc_calculated), cambia lì l'ID
+# entità invece di crearne uno nuovo: la cronologia resta.
+#
+# Oppure, uguale, in configuration.yaml (poi riavvia):
+template:
+  - sensor:
+      - name: PI30 battery SOC calculated
+        unique_id: pi30_battery_soc_calculated
+        unit_of_measurement: "%"
+        device_class: battery
+        state_class: measurement
+        state: >-
+          {{ states('input_number.pi30_battery_soc_calculated') | float(0) | round(0) }}
+        availability: "{{ has_value('input_number.pi30_battery_soc_calculated') }}"

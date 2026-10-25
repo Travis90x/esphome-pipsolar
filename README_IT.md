@@ -84,7 +84,7 @@ grafici di tensione batteria).
 
 | File | Gestione protocollo | Righe |
 | :--- | :---------------- | ----: |
-| [`heltec-pi30-display-pipsolar.yaml`](examples/esp32/heltec-pi30/heltec-pi30-display-pipsolar.yaml) | componente core `pipsolar` | 648 |
+| [`heltec-pi30-display-pipsolar.yaml`](examples/esp32/heltec-pi30/heltec-pi30-display-pipsolar.yaml) | componente core `pipsolar` | 906 |
 | [`heltec-pi30-display.yaml`](examples/esp32/heltec-pi30/heltec-pi30-display.yaml) | standalone, pilotato da script | 1794 |
 
 **Parti da quello `pipsolar`.** Delega framing, CRC e polling al componente
@@ -100,9 +100,9 @@ validati e compilati a mano contro ESPHome 2026.6.5 (ESP32-S3, arduino).
 
 [`Personal-heltec-pi30-display-pipsolar.yaml`](examples/esp32/heltec-pi30/Personal-heltec-pi30-display-pipsolar.yaml)
 è una terza variante, personale, di quello `pipsolar` (nome dispositivo
-`heltec-inverter`, friendly name `Heltec PI30 Display`) — è la
+`heltec-inverter`, friendly name `PI30`) — è la
 configurazione che produce davvero la nomenclatura delle entità
-(`sensor.heltec_pi30_battery_voltage`, `sensor.heltec_pi30_display_pi30_*`,
+(`sensor.pi30_battery_voltage`, `sensor.pi30_*`,
 …) su cui sono costruite le automazioni Home Assistant descritte più sotto.
 
 ## Requisiti
@@ -261,22 +261,37 @@ linkati da ciascuna sottosezione qui sotto.
 Entrambe le automazioni sotto assumono la nomenclatura delle entità
 prodotta da
 [`Personal-heltec-pi30-display-pipsolar.yaml`](examples/esp32/heltec-pi30/Personal-heltec-pi30-display-pipsolar.yaml)
-(nome dispositivo `heltec-inverter`, friendly name `Heltec PI30 Display`,
+(nome dispositivo `heltec-inverter`, friendly name `PI30`,
 vedi "Gli esempi Heltec PI30 con display" sopra):
-`sensor.heltec_pi30_battery_voltage`, `sensor.heltec_pi30_battery_current`
+`sensor.pi30_battery_voltage`, `sensor.pi30_battery_current`
 (positiva in carica, negativa in scarica), e la famiglia
-`sensor.heltec_pi30_display_pi30_*` — i setpoint QPIRI riletti dall'inverter
+`sensor.pi30_*` — i setpoint QPIRI riletti dall'inverter
 (tensione di float/under/recharge/redischarge/bulk, correnti massime di
 carica, ecc.) insieme alle loro controparti scrivibili
-`number.heltec_pi30_display_pi30_set_*` / `select.heltec_pi30_display_pi30_set_*`.
+`number.pi30_set_*` / `select.pi30_set_*`.
+
+Tutte le entità del firmware hanno ID `<dominio>.pi30_<nome>` (per esempio
+`number.pi30_set_battery_recharge_voltage`, `button.pi30_charger_solar_utility`,
+`sensor.pi30_battery_charge_energy_today`): il friendly name `PI30` più un
+nome corto in inglese. **Se vieni dal firmware precedente** (entità
+`…heltec_pi30_display_pi30_…`, `…heltec_pi30_pi30_…`, `sensor.heltec_pi30_…`):
+dopo l'aggiornamento Home Assistant crea le entità nuove e lascia le vecchie
+"non disponibili"; eliminale da Impostazioni > Dispositivi e servizi >
+ESPHome > dispositivo PI30 (oppure dall'elenco Entità, filtro "non
+disponibili"). La cronologia delle entità nuove parte da zero. Le
+automazioni, gli script e le dashboard di questo repository usano già gli ID
+nuovi.
 
 [`home_assistant/dashboard/inverter_ita.yaml`](home_assistant/dashboard/inverter_ita.yaml)
 e [`inverter_eng.yaml`](home_assistant/dashboard/inverter_eng.yaml) sono
-sezioni di dashboard Lovelace già pronte (italiano / inglese) che coprono
-priorità della sorgente di uscita, modalità del dispositivo, setpoint di
-corrente di carica, tensioni di batteria, i sensori SOC descritti sotto, e
-diagnostica (cattura grezza dei frame TX/RX). Incollale nella modalità YAML
-di una dashboard.
+dashboard complete (italiano / inglese) per chi ha solo l'inverter e la sua
+batteria, senza GoodWe: panoramica con il SOC calcolato, gestione batteria
+(CARICA e SCARICA/MANTIENI a mano con i due script, tensione minima, bulk e
+float di carica, SOC), energia caricata e scaricata, grafici delle ultime 24
+ore, priorità, impostazioni batteria, configurazione, console comandi,
+diagnostica. Si importano da Impostazioni > Dashboard > Aggiungi dashboard >
+Nuova dashboard da zero, poi matita, tre puntini > Editor di configurazione,
+e si incolla il file.
 
 ### Modulazione dinamica della carica da rete
 
@@ -306,14 +321,14 @@ Sensori letti:
 | `sensor.goodwe_battery_voltage` | tensione GoodWe |
 | `sensor.potenza_contatore` | potenza al contatore (negativa = immissione) |
 | `sensor.goodwe_battery_power` | potenza batteria GoodWe (positiva = eroga) |
-| `sensor.heltec_pi30_display_pi30_output_source_priority` / `_charger_source_priority` | le due priorità, cioè la modalità attuale |
-| `sensor.heltec_pi30_display_pi30_max_utility_charging_current` | corrente di carica da rete confermata dal PI30 |
-| `sensor.heltec_pi30_display_pi30_device_mode` | Line mode / Battery mode |
-| `sensor.heltec_pi30_battery_voltage` | tensione batteria PI30 |
-| `sensor.heltec_pi30_display_pi30_battery_under_voltage` | soglia di sottotensione dell'inverter (24.0V se non leggibile) |
-| `sensor.heltec_pi30_display_pi30_battery_soc_calculated` | SOC calcolato (sezione successiva) |
-| `sensor.heltec_pi30_output_active_power` | carichi della PI30 |
-| `sensor.heltec_pi30_pi30_grid_voltage` | tensione di rete letta dalla PI30 (solo per la notifica) |
+| `sensor.pi30_output_source_priority` / `_charger_source_priority` | le due priorità, cioè la modalità attuale |
+| `sensor.pi30_max_utility_charging_current` | corrente di carica da rete confermata dal PI30 |
+| `sensor.pi30_device_mode` | Line mode / Battery mode |
+| `sensor.pi30_battery_voltage` | tensione batteria PI30 |
+| `sensor.pi30_battery_under_voltage` | soglia di sottotensione dell'inverter (24.0V se non leggibile) |
+| `sensor.pi30_battery_soc_calculated` | SOC calcolato (sezione successiva) |
+| `sensor.pi30_output_active_power` | carichi della PI30 |
+| `sensor.pi30_grid_voltage` | tensione di rete letta dalla PI30 (solo per la notifica) |
 
 #### Schema
 
@@ -515,7 +530,7 @@ piena era un dente di sega 2-40-2A ogni 1-3 minuti (il 22/10 tra le 16 e le
 riscritto sull'inverter a ogni esecuzione.
 
 **Limite di temperatura.** Con `input_number.pi30_charging_max_temperature`
-(per esempio 70°C) e `sensor.heltec_pi30_heat_sink_temperature`: dal limite in
+(per esempio 70°C) e `sensor.pi30_heat_sink_temperature`: dal limite in
 su la corrente da rete scende di uno step ogni 2 minuti fino a 2A, senza
 staccare la carica; tra il limite meno 5°C e il limite resta dov'è; sotto
 risale normalmente. Con il limite impostato e la temperatura illeggibile vale
@@ -576,23 +591,25 @@ triggers:
 ### SOC reale via conteggio dell'energia (tensione + energia entrata/uscita)
 
 File: [`home_assistant/automations/PI30 battery SOC/`](<home_assistant/automations/PI30 battery SOC/>)
-- `Automation - PI30 Battery SOC Energy Counting.yaml`
-- `Script - PI30 Battery SOC Recalibrate from Voltage.yaml`
+- `Automazione - PI30 SOC batteria.yaml`
+- `Script - PI30 SOC ricalibra da tensione.yaml`
+- `Aiutante 1 - PI30 SOC calcolato (Numero).yaml`
+- `Aiutante 2 - PI30 SOC calcolato (Sensore template).yaml`
 
 Il pacco LiFePO4 8S ha una curva Volt/SOC molto piatta tra il 20% e l'80%
 circa: pochi centesimi di volt corrispondono a decine di punti percentuali
 di SOC. In più quella curva si sposta in base a quanta corrente sta
 assorbendo o erogando la batteria in quel momento (caduta resistiva
 interna). Un sensore SOC basato solo sulla tensione istantanea (come
-`sensor.heltec_pi30_battery_soc`, letto dal protocollo PI30) è quindi
+`sensor.pi30_battery_soc`, letto dal protocollo PI30) è quindi
 impreciso proprio nel mezzo della curva, dove serve di più.
 
 **Come funziona.** Invece di leggere il SOC dalla tensione, si conta
 l'energia che entra ed esce dal pacco rispetto alla sua capacità utile in
 kWh: una volta al minuto (e all'avvio, e ogni volta che esegui
 l'automazione a mano) legge la potenza di carica e di scarica della
-batteria (`sensor.heltec_pi30_batteria_potenza_carica` e
-`sensor.heltec_pi30_batteria_potenza_scarica`, gli stessi due sensori su cui
+batteria (`sensor.pi30_battery_charge_power` e
+`sensor.pi30_battery_discharge_power`, gli stessi due sensori su cui
 sono costruiti i contatori di kWh totali) e la moltiplica per il tempo reale
 trascorso dall'esecuzione precedente. 26.6V a 5A per quattro ore non dicono
 nulla sul SOC; 0.5 kWh mossi in quattro ore sì. Il conteggio puro deriva nel
@@ -606,7 +623,7 @@ del sensore corrente):
   di pieno **e** il pacco non è sotto spinta (`current <= tail_current_a`,
   `0` di default: fermo o in scarica), **entrambe vere ininterrottamente
   per 5 minuti**. La soglia di pieno è la *più alta* tra la tensione di
-  float (`sensor.heltec_pi30_display_pi30_battery_float_voltage` meno 0.1V
+  float (`sensor.pi30_battery_float_voltage` meno 0.1V
   di margine) e un pavimento fisso di **27.2V** (`full_floor_v`, 3.40V per
   cella × 8). Il pavimento serve perché la tensione di float è quella che
   qualcuno ha programmato sull'inverter: con un float di 26.8V o meno,
@@ -630,7 +647,7 @@ del sensore corrente):
   metà carica resta vicino alla tensione di carica per un minuto o due
   prima di rilassarsi alla sua tensione a riposo.
   Il flag *charging to floating mode* dell'inverter
-  (`binary_sensor.heltec_pi30_display_pi30_charging_to_floating_mode`)
+  (`binary_sensor.pi30_charging_to_floating_mode`)
   è volutamente **escluso** da questo aggancio: descrive lo stadio del
   carica-batterie, non lo stato della batteria, e il PI30 lo tiene
   acceso dopo il tramonto, per tutta la notte mentre il pacco si
@@ -641,7 +658,7 @@ del sensore corrente):
   carica.
 - **0%** (trigger `empty_hold`) quando `voltage_ocv` scende sotto la
   tensione di under-voltage
-  (`sensor.heltec_pi30_display_pi30_battery_under_voltage`) più 0.2V di
+  (`sensor.pi30_battery_under_voltage`) più 0.2V di
   margine, ininterrottamente per 1 minuto, arrivando a 0% un po' prima
   che sia il BMS stesso a staccare la batteria. Il minuto di tenuta
   ignora l'abbassamento dovuto a un picco di carico (lo spunto di un
@@ -660,7 +677,7 @@ a un pacco pieno
 di iniziare a contare in discesa da 100 nel momento in cui esce corrente,
 invece di essere riscritto a 100 ogni 2 minuti finché la tensione resta
 alta. Se il pacco è già pieno (o vuoto) quando carichi l'automazione per
-la prima volta, l'aggancio aspetta l'episodio successivo: imposta l'helper
+la prima volta, l'aggancio aspetta l'episodio successivo: imposta l'aiutante
 Number a mano una volta, come descritto nel setup qui sotto.
 
 Tra i due estremi il SOC si muove solo con l'energia mossa:
@@ -733,67 +750,86 @@ pena: un 100 stantio (da un aggancio sbagliato precedente, o messo a mano)
 non deve restare lì mentre il pacco assorbe 5A per ore. Solo i due agganci
 qui sopra scrivono esattamente 100 e esattamente 0.
 
-**Setup — 2 helper, tutto da UI, niente `configuration.yaml`:**
+**Setup — 2 aiutanti, tutto da UI, niente `configuration.yaml`:**
 
-Prerequisito: i sensori di potenza di carica e di scarica della batteria
-`sensor.heltec_pi30_batteria_potenza_carica` e
-`sensor.heltec_pi30_batteria_potenza_scarica` (W o kW, entrambi ≥ 0), più,
-per le note di taratura che gli agganci scrivono nel Registro, i due
-contatori di kWh totali `sensor.heltec_pi30_batteria_energia_caricata` e
-`sensor.heltec_pi30_batteria_energia_scaricata` costruiti su di essi.
+Prerequisito: niente. I sensori di potenza di carica e di scarica della
+batteria (`sensor.pi30_battery_charge_power` e
+`sensor.pi30_battery_discharge_power`, W, entrambi ≥ 0) e i due contatori
+di kWh totali (`sensor.pi30_battery_charge_energy` e
+`sensor.pi30_battery_discharge_energy`, più quelli di oggi
+`sensor.pi30_battery_charge_energy_today` e
+`sensor.pi30_battery_discharge_energy_today`) li calcola il firmware
+ESPHome. Gli aiutanti di Home Assistant che facevano lo stesso lavoro
+(`sensor.heltec_pi30_batteria_potenza_carica` e simili) non servono più e
+si possono eliminare.
 
-Entrambi gli helper sono nella stessa cartella dell'automazione, ciascuno
+Entrambi gli aiutanti sono nella stessa cartella dell'automazione, ciascuno
 con la ricetta da UI e l'equivalente per `configuration.yaml`:
-`Helper 1 - PI30 Battery SOC calculated (Number).yaml` e
-`Helper 2 - PI30 Battery SOC calculated (Template sensor).yaml`.
+`Aiutante 1 - PI30 SOC calcolato (Numero).yaml` e
+`Aiutante 2 - PI30 SOC calcolato (Sensore template).yaml`.
 
-1. **Helper "Numero"** (Impostazioni → Dispositivi e servizi → Helper →
-   Crea helper → Numero): Nome `PI30 battery SOC calculated`, icona
+1. **Aiutante "Numero"** (Impostazioni > Dispositivi e servizi > Aiutanti >
+   Crea aiutante > Numero): Nome `PI30 battery SOC calculated`, icona
    `mdi:battery-unknown`, min `0`, max `100`, passo `0.1`, unità `%`. Crea
    `input_number.pi30_battery_soc_calculated`, il contenitore del valore
    grezzo su cui scrive l'automazione. **L'entity id deve essere
-   esattamente quello**: apri l'helper, icona ingranaggio, controlla "ID
+   esattamente quello**: apri l'aiutante, icona ingranaggio, controlla "ID
    entità" e correggilo se il nome ha prodotto qualcos'altro. Se l'editor
    dell'automazione mostra "entità non trovata" accanto a
-   `input_number.pi30_battery_soc_calculated`, questo helper manca e niente
+   `input_number.pi30_battery_soc_calculated`, questo aiutante manca e niente
    può funzionare — e il SOC che stai guardando è un altro sensore, quasi
-   certamente `sensor.heltec_pi30_battery_soc` dell'inverter, che è basato
+   certamente `sensor.pi30_battery_soc` dell'inverter, che è basato
    sulla tensione e resta beato al 100% per ore. Al primo salvataggio
    impostalo a un
-   valore vicino a quello letto da `sensor.heltec_pi30_battery_soc` —
+   valore vicino a quello letto da `sensor.pi30_battery_soc` —
    l'automazione lo riaggancerà comunque la prima volta che il pacco
    completa una carica (o si svuota). L'automazione ci scrive 3 decimali:
    il passo `0.1` riguarda solo lo slider, `set_value` non ne è limitato.
-2. **Helper "Sensore basato su modello"** (Impostazioni → Dispositivi e
-   servizi → Helper → Crea helper → Template → Sensor): Nome `Heltec PI30
-   Display PI30 battery SOC calculated`, unità `%`, classe dispositivo
+2. **Aiutante "Sensore template"** (Impostazioni > Dispositivi e servizi >
+   Aiutanti > Crea aiutante > Template > Sensore): Nome `PI30 battery SOC
+   calculated`, unità `%`, classe dispositivo
    `Batteria`, classe di stato `Misurazione`, e come **Stato**:
    ```
    {{ states('input_number.pi30_battery_soc_calculated') | float(default=0) | round(0) }}
    ```
-   Crea `sensor.heltec_pi30_display_pi30_battery_soc_calculated`, il
+   Crea `sensor.pi30_battery_soc_calculated`, il
    sensore batteria vero e proprio usato dalle dashboard in
    `home_assistant/dashboard`, utilizzabile nei grafici come qualunque
-   altro sensore SOC. Crealo dopo l'helper Numero (legge quell'entity_id).
+   altro sensore SOC. Crealo dopo l'aiutante Numero (legge quell'entity_id).
 
-Poi importa `Automation - PI30 Battery SOC Energy Counting.yaml`
-(Impostazioni → Automazioni → Modifica in YAML) per fare l'integrazione e
-la ricalibrazione descritte sopra.
+Poi importa `Automazione - PI30 SOC batteria.yaml`
+(Impostazioni > Automazioni e scene > Crea automazione > Crea nuova
+automazione, tre puntini > Modifica in YAML) per fare l'integrazione e
+la ricalibrazione descritte sopra. Se avevi già l'automazione del SOC,
+incolla il file al posto del suo YAML invece di crearne una nuova: l'ID
+entità resta quello che hai.
 
-Facoltativamente, subito dopo aver creato l'helper Numero, lancia **una
-volta sola** `Script - PI30 Battery SOC Recalibrate from Voltage.yaml`
-(Impostazioni → Automazioni e scene → Script → Modifica in YAML, poi
-eseguilo) così il contatore non parte da 0%: interpola linearmente la
-tensione compensata tra i due estremi reali e imposta subito l'helper
-Numero a quella stima. È una retta, non la vera curva del LiFePO4: va bene
-come punto di partenza, non come sostituto del conteggio quotidiano.
+**Mantenimento e float: conteggio fermo.** Quando il caricabatterie tiene
+la batteria alla tensione di float programmata — il float a pacco pieno,
+oppure il MANTENIMENTO di "PI30 Batteria MAN" (SBU, carichi sulla rete,
+bulk e float alla tensione minima) — il SOC non si muove: tensione almeno
+float − 0.1V, niente scarica, carica sotto i 60W e, sotto i 27.2V, Line
+mode. Lì il caricabatterie copre il consumo dell'inverter, quindi il
+consumo nascosto (65W) non va sottratto: prima il conteggio scendeva a 0
+in poche ore mentre il pacco restava fermo a 25.5V. Anche la correzione da
+tensione è spenta, perché la tensione è quella imposta dal caricabatterie.
+
+Facoltativamente, subito dopo aver creato l'aiutante Numero, lancia **una
+volta sola** `Script - PI30 SOC ricalibra da tensione.yaml`
+(Impostazioni > Automazioni e scene > Script > Aggiungi script > Crea
+nuovo script, tre puntini > Modifica in YAML, poi eseguilo) così il
+contatore non parte da 0%: legge la tensione compensata sulla stessa
+tabella tensione/SOC dell'automazione e imposta subito l'aiutante Numero.
+Non fa niente se la batteria è in carica o in Line mode, perché lì la
+tensione non dice il SOC. È preciso agli estremi e largo a metà carica: va
+bene come punto di partenza, non come sostituto del conteggio quotidiano.
 **Non rilanciarlo di routine**: farlo ogni volta che la tensione sale un
 po' riporta il sensore a essere basato sulla sola tensione istantanea,
 vanificando il senso del conteggio dell'energia (vedi l'avviso nella descrizione
 dello script stesso).
 
 **Correzione con la tensione.** Il conteggio da solo non sa da dove è partito:
-se è partito sbagliato (un 100 stantio, un helper creato a metà scarica)
+se è partito sbagliato (un 100 stantio, un aiutante creato a metà scarica)
 resterebbe sbagliato fino alla carica completa successiva. Quindi ogni minuto
 la tensione, compensata per la corrente reale (quella riportata più i 50 W di
 consumo nascosto) con la resistenza a regime misurata su questo pacco (10
@@ -808,7 +844,7 @@ tensione è affidabile, e solo quando è chiaramente in disaccordo:
 - **Affidabile** vuol dire in scarica o a riposo (un +1/+2A fantasma vale
   0A), al massimo 30A, non in float, con il caricatore spento da almeno 60
   minuti: potenza di carica al massimo 60 W e o 0 W invariati da 60 minuti o
-  entrambi i flag di carica (`binary_sensor.heltec_pi30_display_pi30_ac_charging`
+  entrambi i flag di carica (`binary_sensor.pi30_ac_charging`
   e `..._scc_charging`) spenti da 60 minuti. Subito dopo una carica la carica
   superficiale fa sembrare il pacco più pieno (con 30 minuti, il 26/09 un
   pacco al 7% circa leggeva 25.8V dopo 1.5 ore di carica e il conteggio veniva
@@ -999,7 +1035,7 @@ interna tarata come sopra) è considerata sufficientemente buona e stabile
 così com'è.
 
 Questo sensore è pensato per affiancare, non sostituire subito,
-`sensor.heltec_pi30_battery_soc` e l'automazione di carica dinamica sopra
+`sensor.pi30_battery_soc` e l'automazione di carica dinamica sopra
 (che oggi usa soprattutto SOC/tensione Goodwe). Una volta verificato per
 qualche giorno contro il comportamento reale della batteria, può essere
 usato al posto di (o insieme a) gli altri sensori SOC nelle condizioni di

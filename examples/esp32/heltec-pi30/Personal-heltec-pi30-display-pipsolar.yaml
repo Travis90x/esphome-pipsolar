@@ -168,6 +168,12 @@ sensor:
       id: pip_float_v
     battery_redischarge_voltage:
       name: "PI30 battery redischarge voltage"
+      # Il componente pipsolar di ESPHome non dà unità né classe a questo
+      # sensore (a differenza delle altre tensioni QPIRI): senza, Home
+      # Assistant lo mostra come numero puro e non lo grafica come tensione.
+      unit_of_measurement: V
+      device_class: voltage
+      state_class: measurement
     current_max_ac_charging_current:
       name: "PI30 max utility charging current"
     current_max_charging_current:

@@ -140,6 +140,12 @@ sensor:
       name: "Battery float voltage"
     battery_redischarge_voltage:
       name: "Battery redischarge voltage"
+      # ESPHome's pipsolar component gives this sensor no unit or class
+      # (unlike the other QPIRI voltages), so Home Assistant shows a plain
+      # number; set them here.
+      unit_of_measurement: V
+      device_class: voltage
+      state_class: measurement
     current_max_ac_charging_current:
       name: "Max AC charging current"
     current_max_charging_current:

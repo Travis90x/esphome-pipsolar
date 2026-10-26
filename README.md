@@ -788,7 +788,12 @@ Then import `Automazione - PI30 SOC batteria.yaml` (Settings → Automations
 & scenes → Create automation → Create new automation, three dots → Edit in
 YAML) to do the integration and re-anchoring above. If you already have
 the SOC automation, paste the file over its YAML instead of creating a new
-one: its entity id stays the same.
+one: its entity id stays the same. The dashboards in
+`home_assistant/dashboard` expect the entity ids
+`automation.pi30_battery_soc_coulomb_counting` for this automation and
+`script.pi30_battery_soc_recalibrate` for the recalibration script below:
+the names produce different ones, so after creating them set the entity id
+from the gear icon.
 
 **Hold and float: counting frozen.** While the charger holds the battery
 at the programmed float voltage — float on a full pack, or the

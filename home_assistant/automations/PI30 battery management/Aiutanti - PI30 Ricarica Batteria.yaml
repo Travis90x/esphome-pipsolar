@@ -59,7 +59,7 @@
 #   - Numero: Nome "PI30 batteria tensione di mantenimento", min 24.0,
 #     max 29.0, passo 0.1, V, modalità Campo di inserimento, valore 25.5
 #     ID entità input_number.pi30_keep_battery_live
-#   - Numero: Nome "PI30 temperatura massima carica", min 40, max 90, passo 1,
+#   - Numero: Nome "PI30 temperatura massima carica", min 40, max 80, passo 1,
 #     °C, modalità Campo di inserimento, valore 70
 #     ID entità input_number.pi30_charging_max_temperature
 #   - Numero: Nome "PI30 corrente massima manuale", min 2, max 60, passo 1, A,
@@ -77,11 +77,12 @@
 input_boolean:
   pi30_battery_recharge:
     name: PI30 Ricarica Batteria
-    icon: mdi:battery-charging
+    icon: mdi:battery-charging-high
 
 input_number:
   pi30_charge_bulk_voltage:
     name: PI30 bulk carica
+    icon: mdi:battery-heart
     min: 24.0
     max: 29.2
     step: 0.1
@@ -89,6 +90,7 @@ input_number:
     mode: box
   pi30_charge_float_voltage:
     name: PI30 float carica
+    icon: mdi:battery-heart-outline
     min: 24.0
     max: 29.0
     step: 0.1
@@ -105,7 +107,7 @@ input_number:
     name: PI30 temperatura massima carica
     icon: mdi:thermometer-alert
     min: 40
-    max: 90
+    max: 80
     step: 1
     unit_of_measurement: "°C"
     mode: box

@@ -806,7 +806,11 @@ Poi importa `Automazione - PI30 SOC batteria.yaml`
 automazione, tre puntini > Modifica in YAML) per fare l'integrazione e
 la ricalibrazione descritte sopra. Se avevi già l'automazione del SOC,
 incolla il file al posto del suo YAML invece di crearne una nuova: l'ID
-entità resta quello che hai.
+entità resta quello che hai. Le dashboard in `home_assistant/dashboard`
+usano gli ID entità `automation.pi30_battery_soc_coulomb_counting` per
+questa automazione e `script.pi30_battery_soc_recalibrate` per lo script
+di ricalibrazione qui sotto: i nomi ne producono altri, quindi dopo averli
+creati imposta l'ID entità dall'icona ingranaggio.
 
 **Mantenimento e float: conteggio fermo.** Quando il caricabatterie tiene
 la batteria alla tensione di float programmata — il float a pacco pieno,

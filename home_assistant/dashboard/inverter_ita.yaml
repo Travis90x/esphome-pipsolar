@@ -73,9 +73,9 @@ views:
               - entity: input_number.pi30_charge_float_voltage
                 name: Float in carica
               - *id001
-              - entity: automation.pi30_soc_batteria
+              - entity: automation.pi30_battery_soc_coulomb_counting
                 name: Automazione SOC batteria
-              - entity: script.pi30_soc_ricalibra_da_tensione
+              - entity: script.pi30_battery_soc_recalibrate
                 name: Ricalibra SOC da tensione (una volta)
               - entity: input_number.pi30_battery_soc_calculated
                 name: SOC calcolato (valore grezzo)

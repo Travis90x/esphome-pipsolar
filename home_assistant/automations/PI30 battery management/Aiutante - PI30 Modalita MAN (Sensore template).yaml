@@ -10,7 +10,8 @@
 #                 (PI30 batteria da scaricare, batteria sopra il minimo)
 #   MANTENIMENTO  uscita SBU, batteria scarica tenuta alla tensione minima:
 #                 carichi sulla rete (Line mode), oppure batteria entro 0.3V
-#                 dalla tensione minima ("PI30 keep battery live")
+#                 dalla tensione minima
+#                 ("PI30 batteria tensione di mantenimento")
 #   ALTRO         priorità impostate a mano in un'altra combinazione
 #
 # La PI30 senza rete in CARICA non si vede qui: la segnala la notifica
@@ -22,15 +23,18 @@
 #   Nome: PI30 Modalità MAN
 #   Unità di misura, classe del dispositivo, classe di stato: vuote
 #   Modello di stato: solo il template dopo "state: >-", senza i rientri
-# Dopo il salvataggio apri l'aiutante, icona ingranaggio, e controlla che l'ID
-# entità sia sensor.pi30_modalita_man. Se l'avevi già con l'ID vecchio
+# Dopo il salvataggio apri l'aiutante, icona ingranaggio, e cambia l'ID
+# entità in sensor.pi30_man_mode (il nome italiano ne produce un altro, che
+# l'automazione non trova). Se l'avevi già con l'ID vecchio
 # (sensor.heltec_pi30_display_pi30_modalita_man), cambia lì l'ID entità e
 # incolla il modello di stato nuovo (usa gli ID nuovi del firmware).
 #
-# Oppure, solo in configuration.yaml (poi riavvia):
+# Oppure, solo in configuration.yaml (poi riavvia). default_entity_id fissa
+# l'ID entità, che altrimenti verrebbe dal nome:
 template:
   - sensor:
       - name: PI30 Modalità MAN
+        default_entity_id: sensor.pi30_man_mode
         unique_id: pi30_modalita_man
         icon: mdi:battery-sync
         state: >-

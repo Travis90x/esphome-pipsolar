@@ -839,7 +839,7 @@ views:
                 name: PI30 SOC batteria
               - entity: input_number.pi30_battery_soc_calculated
                 name: PI30 SOC calcolato (valore grezzo)
-              - entity: script.pi30_battery_soc_ricalibra_da_tensione
+              - entity: script.pi30_battery_soc_recalibrate
                 name: PI30 SOC ricalibra da tensione (una volta)
               - entity: sensor.pi30_battery_soc
                 name: PI30 SOC dell'inverter (da tensione)
@@ -898,13 +898,13 @@ views:
             show_header_toggle: false
             entities:
               - entity: automation.pi30_battery_charging_intelligent_modulation
-              - entity: input_boolean.pi30_ricarica_batteria
+              - entity: input_boolean.pi30_battery_recharge
               - type: divider
-              - entity: script.pi30_batteria_da_caricare
+              - entity: script.pi30_battery_charge
                 name: CARICA (POP00 PCP02)
-              - entity: script.pi30_batteria_da_scaricare
+              - entity: script.pi30_battery_discharge
                 name: SCARICA e MANTIENI (POP02 PCP02)
-              - entity: sensor.pi30_modalita_man
+              - entity: sensor.pi30_man_mode
           - color: state
             type: entities
             title: Priorita' uscita (POP)
@@ -1001,8 +1001,8 @@ views:
               - entity: sensor.pi30_battery_float_voltage
                 name: Float (PBFT)
               - type: divider
-              - entity: input_number.pi30_bulk_carica
-              - entity: input_number.pi30_float_carica
+              - entity: input_number.pi30_charge_bulk_voltage
+              - entity: input_number.pi30_charge_float_voltage
               - entity: input_number.pi30_keep_battery_live
               - entity: input_number.pi30_charging_max_temperature
           - type: entities

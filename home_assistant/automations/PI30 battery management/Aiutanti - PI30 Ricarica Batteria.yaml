@@ -1,6 +1,6 @@
 # Aiutanti per "Automazione - PI30 Batteria MAN.yaml".
 #
-# 1) Commutatore "PI30 Ricarica Batteria" (input_boolean.pi30_ricarica_batteria)
+# 1) Commutatore "PI30 Ricarica Batteria" (input_boolean.pi30_battery_recharge)
 #    Acceso (o assente): la batteria si ricarica con il surplus, logica
 #    normale. Spento: l'automazione la tiene sempre in SCARICA (PI30
 #    batteria da scaricare): la batteria alimenta i carichi fino alla
@@ -8,12 +8,13 @@
 #    Non disattivare l'automazione al posto di questo interruttore.
 #
 # 2) Numeri "PI30 bulk carica" e "PI30 float carica"
-#    (input_number.pi30_bulk_carica, input_number.pi30_float_carica)
+#    (input_number.pi30_charge_bulk_voltage, input_number.pi30_charge_float_voltage)
 #    Bulk e float di carica: li scrive sull'inverter PI30 batteria da
 #    caricare a ogni CARICA. Per cambiarli cambia questi due aiutanti, non i
 #    numeri dell'inverter (verrebbero riscritti). Senza: 29.0V e 27.0V.
 #
-# 3) Numero "PI30 keep battery live" (input_number.pi30_keep_battery_live)
+# 3) Numero "PI30 batteria tensione di mantenimento"
+#    (input_number.pi30_keep_battery_live)
 #    Tensione minima: PI30 batteria da scaricare porta bulk e float a questo
 #    valore, così quando l'inverter passa alla rete il caricabatterie tiene
 #    la batteria qui. Minimo 24.0V (il PI30 non accetta di meno), senza:
@@ -25,7 +26,7 @@
 #    scaricare e il caricabatterie la ricarica dalla rete a ogni ciclo.
 #    Cambiarlo lo applica subito.
 #
-# 4) Numero "PI30 Charging Max Temperature"
+# 4) Numero "PI30 temperatura massima carica"
 #    (input_number.pi30_charging_max_temperature), facoltativo
 #    Temperatura massima del dissipatore dell'inverter
 #    (sensor.pi30_heat_sink_temperature) durante la carica da rete,
@@ -37,7 +38,8 @@
 #    Dopo averlo creato impostalo a 70: da configuration.yaml parte dal
 #    minimo (40), poi Home Assistant ricorda il valore ai riavvii.
 #
-# 5) Numero "PI30 Max Manual Current" (input_number.pi30_max_manual_current)
+# 5) Numero "PI30 corrente massima manuale"
+#    (input_number.pi30_max_manual_current)
 #    Corrente massima da rete che la modulazione può raggiungere, in A
 #    (MAX MANUAL CURRENT). Gli step sono 2, 10, 20, 30, 40, 50, 60: un valore
 #    in mezzo vale come lo step inferiore (35 = 30). Cambiarlo lo applica
@@ -47,37 +49,45 @@
 # Dalla UI (senza configuration.yaml):
 #   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante
 #   - Commutatore: Nome "PI30 Ricarica Batteria"
+#     ID entità input_boolean.pi30_battery_recharge
 #   - Numero: Nome "PI30 bulk carica", min 24.0, max 29.2, passo 0.1, V,
 #     modalità Campo di inserimento, valore 29.0
+#     ID entità input_number.pi30_charge_bulk_voltage
 #   - Numero: Nome "PI30 float carica", min 24.0, max 29.0, passo 0.1, V,
 #     modalità Campo di inserimento, valore 27.0
-#   - Numero: Nome "PI30 keep battery live", min 24.0, max 29.0, passo 0.1, V,
-#     modalità Campo di inserimento, valore 25.5
-#   - Numero: Nome "PI30 Charging Max Temperature", min 40, max 90, passo 1,
+#     ID entità input_number.pi30_charge_float_voltage
+#   - Numero: Nome "PI30 batteria tensione di mantenimento", min 24.0,
+#     max 29.0, passo 0.1, V, modalità Campo di inserimento, valore 25.5
+#     ID entità input_number.pi30_keep_battery_live
+#   - Numero: Nome "PI30 temperatura massima carica", min 40, max 90, passo 1,
 #     °C, modalità Campo di inserimento, valore 70
-#   - Numero: Nome "PI30 Max Manual Current", min 2, max 60, passo 1, A,
+#     ID entità input_number.pi30_charging_max_temperature
+#   - Numero: Nome "PI30 corrente massima manuale", min 2, max 60, passo 1, A,
 #     modalità Campo di inserimento, valore 40
-#   Dopo il salvataggio controlla l'ID entità (aiutante > icona ingranaggio) e
-#   imposta il valore indicato: un Numero appena creato parte dal suo minimo
-#   (24.0V per bulk e float, cioè nessuna carica; 2A per la corrente massima).
+#     ID entità input_number.pi30_max_manual_current
+#   I nomi sono in italiano, gli ID entità no: il nome da solo produce un ID
+#   diverso. Dopo il salvataggio apri ogni aiutante, icona ingranaggio, scrivi
+#   l'ID entità indicato e imposta il valore indicato: un Numero appena creato
+#   parte dal suo minimo (24.0V per bulk e float, cioè nessuna carica; 2A per
+#   la corrente massima).
 #
 # NON incollare questo file in un editor YAML: oppure, solo in
 # configuration.yaml (poi riavvia e imposta una volta i valori qui sopra: senza
 # `initial` Home Assistant li ricorda ai riavvii):
 input_boolean:
-  pi30_ricarica_batteria:
+  pi30_battery_recharge:
     name: PI30 Ricarica Batteria
     icon: mdi:battery-charging
 
 input_number:
-  pi30_bulk_carica:
+  pi30_charge_bulk_voltage:
     name: PI30 bulk carica
     min: 24.0
     max: 29.2
     step: 0.1
     unit_of_measurement: V
     mode: box
-  pi30_float_carica:
+  pi30_charge_float_voltage:
     name: PI30 float carica
     min: 24.0
     max: 29.0
@@ -85,14 +95,14 @@ input_number:
     unit_of_measurement: V
     mode: box
   pi30_keep_battery_live:
-    name: PI30 keep battery live
+    name: PI30 batteria tensione di mantenimento
     min: 24.0
     max: 29.0
     step: 0.1
     unit_of_measurement: V
     mode: box
   pi30_charging_max_temperature:
-    name: PI30 Charging Max Temperature
+    name: PI30 temperatura massima carica
     icon: mdi:thermometer-alert
     min: 40
     max: 90
@@ -100,7 +110,7 @@ input_number:
     unit_of_measurement: "°C"
     mode: box
   pi30_max_manual_current:
-    name: PI30 Max Manual Current
+    name: PI30 corrente massima manuale
     icon: mdi:current-dc
     min: 2
     max: 60

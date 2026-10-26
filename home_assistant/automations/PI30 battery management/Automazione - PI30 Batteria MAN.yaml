@@ -5,10 +5,10 @@ description: >-
   completa, con i casi dello storico: README_IT.md, sezione "Modulazione
   dinamica della carica da rete".
   DUE SCRIPT, chiamati per ID entità (l'automazione aspetta che finiscano).
-  script.pi30_batteria_da_caricare (IN CARICA): uscita "rete prima", carica
+  script.pi30_battery_charge (IN CARICA): uscita "rete prima", carica
   "solare + rete", bulk e float di carica; la batteria passa da sola da bulk
   a float e, piena, resta in float con i carichi sul surplus. Entra a 2A.
-  script.pi30_batteria_da_scaricare (IN SCARICA e MANTENIMENTO): uscita SBU,
+  script.pi30_battery_discharge (IN SCARICA e MANTENIMENTO): uscita SBU,
   carica "solare + rete", bulk e float alla tensione minima, 10A: la batteria
   alimenta i carichi finché scende alla tensione di recharge, poi la PI30
   passa sulla rete e il caricabatterie la tiene alla tensione minima, coprendo
@@ -17,8 +17,8 @@ description: >-
   (< 200W) e immissione che copre i carichi della PI30 più 60W, oppure al
   limite di immissione meno 50W (250W). Senza surplus: SCARICA.
   CORRENTE IN CARICA. Sale di uno step (2-10-20-30-40-50-60, fino a "PI30
-  Max Manual Current") solo con la GoodWe piena, immissione visibile, GoodWe
-  ferma e corrente ferma da 20 s; appena il contatore preleva >= 300W o la
+  corrente massima manuale") solo con la GoodWe piena, immissione
+  visibile, GoodWe ferma e corrente ferma da 20 s; appena il contatore preleva >= 300W o la
   GoodWe eroga >= 200W scende SUBITO allo step che smette di prelevare (al
   massimo 100W); scende subito a 2A se manca una lettura (SOC o tensione
   GoodWe, tensione batteria PI30); scende gradualmente, uno step ogni 2
@@ -26,7 +26,7 @@ description: >-
   2A con lo stesso prelievo per 60 s: SCARICA. GoodWe scesa al 98-99% in
   CARICA (oscilla tra 99 e 100): non sale e non esce. GoodWe sotto il 98%:
   subito 2A, poi SCARICA dopo 60 s, perché sta ricaricando e ha la precedenza.
-  ORDINE DEI CONTROLLI. 1) Ricarica spenta (input_boolean.pi30_ricarica_batteria
+  ORDINE DEI CONTROLLI. 1) Ricarica spenta (input_boolean.pi30_battery_recharge
   off) o batteria PI30 alla soglia di sottotensione: SCARICA. 2) In CARICA ma
   non in Line mode da 5 minuti: la PI30 non usa la rete, notifica (con la
   tensione di rete letta dalla PI30) e corrente a 2A. 3) Un sensore GoodWe non
@@ -36,7 +36,7 @@ description: >-
   prelievo >= 300W, GoodWe >= 200W o GoodWe sotto il 98% per 60 s: SCARICA. 5) Passata a SCARICA
   da meno di 10 minuti, o fuori dalla CARICA senza surplus: SCARICA.
   6) Altrimenti CARICA e modulazione. Controllo periodico ogni 2 minuti.
-  AIUTANTI. input_number.pi30_bulk_carica e input_number.pi30_float_carica:
+  AIUTANTI. input_number.pi30_charge_bulk_voltage e input_number.pi30_charge_float_voltage:
   bulk e float di carica (senza: 29.0V e 27.0V). input_number.pi30_keep_battery_live:
   tensione minima (senza: 25.5V; almeno 24.0V e sotto la tensione di
   redischarge dell'inverter). input_number.pi30_max_manual_current: step
@@ -84,14 +84,14 @@ triggers:
       states('input_number.pi30_charging_max_temperature') | float(999) }}
   - trigger: state
     id: ricarica_batteria
-    entity_id: input_boolean.pi30_ricarica_batteria
+    entity_id: input_boolean.pi30_battery_recharge
   - trigger: state
     id: aiutanti
     entity_id:
       - input_number.pi30_max_manual_current
       - input_number.pi30_keep_battery_live
-      - input_number.pi30_bulk_carica
-      - input_number.pi30_float_carica
+      - input_number.pi30_charge_bulk_voltage
+      - input_number.pi30_charge_float_voltage
 actions:
   - variables:
       charging_steps: [2, 10, 20, 30, 40, 50, 60]
@@ -110,7 +110,7 @@ actions:
       under_voltage: >-
         {{ states('sensor.pi30_battery_under_voltage') | float(default=24.0) }}
       at_threshold: "{{ pi30_voltage is not none and pi30_voltage <= under_voltage }}"
-      ricarica_on: "{{ not is_state('input_boolean.pi30_ricarica_batteria', 'off') }}"
+      ricarica_on: "{{ not is_state('input_boolean.pi30_battery_recharge', 'off') }}"
       # Modalità attuale, dalle due priorità dell'inverter
       output_prio: "{{ states('sensor.pi30_output_source_priority') | float(9) }}"
       charger_prio: "{{ states('sensor.pi30_charger_source_priority') | float(9) }}"
@@ -179,11 +179,12 @@ actions:
         {% else %}
           {{ charging_steps | max }}
         {% endif %}
-      # Corrente massima in CARICA: il limite di temperatura e "PI30 Max Manual Current"
+      # Corrente massima in CARICA: il limite di temperatura e
+      # "PI30 corrente massima manuale"
       current_cap: "{{ [[thermal_cap, max_manual_current] | min, charging_steps | min] | max }}"
       # Corrente di mantenimento in SCARICA: 10A, meno solo per una temperatura
-      # davvero letta oltre il limite. Mai per "PI30 Max Manual Current" né per
-      # una temperatura illeggibile: a 2A il mantenimento non copre l'autoconsumo.
+      # davvero letta oltre il limite. Mai per "PI30 corrente massima manuale"
+      # né per una temperatura illeggibile: a 2A il mantenimento non copre l'autoconsumo.
       hold_limit: "{{ thermal_cap if heat_sink_temp is not none else 10 }}"
       # MODULAZIONE: su di uno step solo con surplus visibile, GoodWe ferma e
       # corrente ferma da step_up_wait_s; giù SUBITO, appena si preleva dalla
@@ -262,11 +263,11 @@ actions:
     then:
       - action: script.turn_on
         target:
-          entity_id: script.pi30_batteria_da_scaricare
+          entity_id: script.pi30_battery_discharge
         data:
           variables:
             current_limit: "{{ hold_limit }}"
-      - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
+      - wait_template: "{{ is_state('script.pi30_battery_discharge', 'off') }}"
         timeout: 120
       - stop: Ricarica spenta, batteria alla soglia o potenze illeggibili, scarica
   # 2) PI30 FUORI RETE (in CARICA ma non in Line mode): avviso, corrente da
@@ -336,11 +337,11 @@ actions:
           - stop: Prelievo o scarica GoodWe durati meno di 60 s, nessun cambio
       - action: script.turn_on
         target:
-          entity_id: script.pi30_batteria_da_scaricare
+          entity_id: script.pi30_battery_discharge
         data:
           variables:
             current_limit: "{{ hold_limit }}"
-      - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
+      - wait_template: "{{ is_state('script.pi30_battery_discharge', 'off') }}"
         timeout: 120
       - stop: Carica al minimo ma prelievo, GoodWe in scarica o GoodWe da ricaricare, scarica
   # 5) RESTA O VA IN SCARICA: passata a SCARICA da meno di charge_dwell_s
@@ -354,19 +355,19 @@ actions:
     then:
       - action: script.turn_on
         target:
-          entity_id: script.pi30_batteria_da_scaricare
+          entity_id: script.pi30_battery_discharge
         data:
           variables:
             current_limit: "{{ hold_limit }}"
-      - wait_template: "{{ is_state('script.pi30_batteria_da_scaricare', 'off') }}"
+      - wait_template: "{{ is_state('script.pi30_battery_discharge', 'off') }}"
         timeout: 120
       - stop: In scarica da meno di 10 minuti, o niente surplus, scarica
   # 6) CARICA. Lo script rimette bulk e float di carica e, entrando, porta la
   # corrente da rete a 2A: la modulazione parte dall'esecuzione successiva.
   - action: script.turn_on
     target:
-      entity_id: script.pi30_batteria_da_caricare
-  - wait_template: "{{ is_state('script.pi30_batteria_da_caricare', 'off') }}"
+      entity_id: script.pi30_battery_charge
+  - wait_template: "{{ is_state('script.pi30_battery_charge', 'off') }}"
     timeout: 120
   - if:
       - condition: template

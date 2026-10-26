@@ -6,21 +6,24 @@
 # Dall'interfaccia:
 #   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante >
 #   Template > Sensore
-#   Nome: PI30 battery SOC calculated
+#   Nome: PI30 batteria SoC calcolato
 #   Modello di stato:
 #     {{ states('input_number.pi30_battery_soc_calculated') | float(0) | round(0) }}
 #   Unità di misura: %   Classe del dispositivo: Batteria
 #   Classe di stato: Misura
-# Dopo il salvataggio apri l'aiutante, icona ingranaggio, e controlla che l'ID
-# entità sia sensor.pi30_battery_soc_calculated (lo usano le dashboard). Se
+# Dopo il salvataggio apri l'aiutante, icona ingranaggio, e cambia l'ID entità
+# in sensor.pi30_battery_soc_calculated (lo usano le dashboard; il nome
+# italiano ne produce un altro). Se
 # avevi già questo sensore con l'ID vecchio
 # (sensor.heltec_pi30_display_pi30_battery_soc_calculated), cambia lì l'ID
 # entità invece di crearne uno nuovo: la cronologia resta.
 #
-# Oppure, uguale, in configuration.yaml (poi riavvia):
+# Oppure, uguale, in configuration.yaml (poi riavvia). default_entity_id fissa
+# l'ID entità, che altrimenti verrebbe dal nome:
 template:
   - sensor:
-      - name: PI30 battery SOC calculated
+      - name: PI30 batteria SoC calcolato
+        default_entity_id: sensor.pi30_battery_soc_calculated
         unique_id: pi30_battery_soc_calculated
         unit_of_measurement: "%"
         device_class: battery

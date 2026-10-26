@@ -304,7 +304,10 @@ File: [`home_assistant/automations/PI30 battery management/`](<home_assistant/au
 Gli script e l'automazione si incollano con "Modifica in YAML". I due file
 `Aiutante`/`Aiutanti` no: dicono cosa creare da Impostazioni > Dispositivi e
 servizi > Aiutanti > Crea aiutante, e il blocco YAML che contengono vale solo
-per `configuration.yaml`.
+per `configuration.yaml`. I nomi degli aiutanti sono in italiano, gli ID
+entità in inglese: dopo averne creato uno da interfaccia aprilo (icona
+ingranaggio) e scrivi l'ID entità indicato nel suo file, perché il nome
+italiano ne produce un altro.
 
 Obiettivo: caricare il pacco LiFePO4 della PI30 dalla rete **solo con il
 surplus fotovoltaico** della GoodWe, usarlo per alimentare i carichi quando
@@ -355,7 +358,7 @@ OGNI ESECUZIONE
 │   IN CARICA (rete prima, solare + rete, bulk 29.0 / float 27.0)
 │   │  entra sempre a 2A
 │   │
-│   ├─ SALE di uno step (2→10→20→30→40→50→60, max "PI30 Max Manual Current")
+│   ├─ SALE di uno step (2→10→20→30→40→50→60, max "PI30 corrente massima manuale")
 │   │     se GoodWe piena
 │   │     E immissione ≥ potenza dello step successivo (o ≥ 250W)
 │   │     E GoodWe ferma (< 100W) E corrente ferma da 20 s
@@ -429,7 +432,7 @@ diretta (`action: script.pi30_...`): quell'azione usa l'ID di configurazione,
 che per uno script creato da interfaccia è diverso dall'ID entità (il
 24/10/2026 ogni esecuzione si fermava con "azione sconosciuta", e con la
 batteria a 24.0V non è partito niente). Gli ID entità devono essere
-`script.pi30_batteria_da_caricare` e `script.pi30_batteria_da_scaricare`.
+`script.pi30_battery_charge` e `script.pi30_battery_discharge`.
 
 **Gli script non sono la modalità.** Uno script è `on` solo mentre gira,
 pochi istanti a ogni esecuzione. La modalità si legge dalle priorità;
@@ -443,11 +446,11 @@ dalla tensione minima), `ALTRO` per priorità impostate a mano.
 
 | Aiutante | Cosa fa | Senza |
 | :--- | :--- | :--- |
-| `input_boolean.pi30_ricarica_batteria` ("PI30 Ricarica Batteria", Commutatore) | spento: sempre SCARICA, la batteria non viene mai ricaricata ma resta alla tensione minima | come acceso |
-| `input_number.pi30_bulk_carica` / `_float_carica` ("PI30 bulk carica" / "PI30 float carica") | bulk e float di carica, scritti da PI30 batteria da caricare: cambiali qui, non sull'inverter | 29.0 / 27.0V |
-| `input_number.pi30_keep_battery_live` ("PI30 keep battery live") | tensione minima di SCARICA e MANTENIMENTO; almeno 24.0V e **sotto la tensione di redischarge** dell'inverter, altrimenti in SBU la PI30 torna a scaricare e la rete la ricarica a ogni ciclo | 25.5V |
-| `input_number.pi30_max_manual_current` ("PI30 Max Manual Current") | step massimo della corrente da rete (un valore in mezzo vale come lo step inferiore, 35 = 30) | 40A |
-| `input_number.pi30_charging_max_temperature` ("PI30 Charging Max Temperature") | facoltativo, limite di temperatura del dissipatore (sotto) | nessun limite |
+| `input_boolean.pi30_battery_recharge` ("PI30 Ricarica Batteria", Commutatore) | spento: sempre SCARICA, la batteria non viene mai ricaricata ma resta alla tensione minima | come acceso |
+| `input_number.pi30_charge_bulk_voltage` / `input_number.pi30_charge_float_voltage` ("PI30 bulk carica" / "PI30 float carica") | bulk e float di carica, scritti da PI30 batteria da caricare: cambiali qui, non sull'inverter | 29.0 / 27.0V |
+| `input_number.pi30_keep_battery_live` ("PI30 batteria tensione di mantenimento") | tensione minima di SCARICA e MANTENIMENTO; almeno 24.0V e **sotto la tensione di redischarge** dell'inverter, altrimenti in SBU la PI30 torna a scaricare e la rete la ricarica a ogni ciclo | 25.5V |
+| `input_number.pi30_max_manual_current` ("PI30 corrente massima manuale") | step massimo della corrente da rete (un valore in mezzo vale come lo step inferiore, 35 = 30) | 40A |
+| `input_number.pi30_charging_max_temperature` ("PI30 temperatura massima carica") | facoltativo, limite di temperatura del dissipatore (sotto) | nessun limite |
 
 Cambiare un aiutante fa ripartire subito l'automazione e lo applica. Non
 disattivare l'automazione al posto dell'interruttore di ricarica: disattivata
@@ -496,7 +499,7 @@ non protegge la batteria (il 25/09/2026 il BMS ha spento l'inverter alle
 
 #### Modulazione della corrente in CARICA
 
-Step: `2 10 20 30 40 50 60`, fino a "PI30 Max Manual Current" e al limite di
+Step: `2 10 20 30 40 50 60`, fino a "PI30 corrente massima manuale" e al limite di
 temperatura.
 
 - **Su** di uno step solo con surplus visibile: immissione almeno pari allo
@@ -537,7 +540,7 @@ risale normalmente. Con il limite impostato e la temperatura illeggibile vale
 come oltre il limite. Vale anche per i 10A della SCARICA (passati allo script
 come `current_limit`), ma solo con la temperatura letta: illeggibile, la
 SCARICA resta a 10A, perché a 2A il mantenimento non copre l'autoconsumo.
-Per lo stesso motivo "PI30 Max Manual Current" limita solo la CARICA, non il
+Per lo stesso motivo "PI30 corrente massima manuale" limita solo la CARICA, non il
 mantenimento. Il controllo ogni 2 minuti fa scendere la corrente anche quando
 nessun altro sensore cambia.
 
@@ -769,12 +772,12 @@ con la ricetta da UI e l'equivalente per `configuration.yaml`:
 `Aiutante 2 - PI30 SOC calcolato (Sensore template).yaml`.
 
 1. **Aiutante "Numero"** (Impostazioni > Dispositivi e servizi > Aiutanti >
-   Crea aiutante > Numero): Nome `PI30 battery SOC calculated`, icona
-   `mdi:battery-unknown`, min `0`, max `100`, passo `0.1`, unità `%`. Crea
-   `input_number.pi30_battery_soc_calculated`, il contenitore del valore
-   grezzo su cui scrive l'automazione. **L'entity id deve essere
-   esattamente quello**: apri l'aiutante, icona ingranaggio, controlla "ID
-   entità" e correggilo se il nome ha prodotto qualcos'altro. Se l'editor
+   Crea aiutante > Numero): Nome `PI30 batteria SoC calcolato grezzo`,
+   icona `mdi:battery-unknown`, min `0`, max `100`, passo `0.1`, unità `%`.
+   **Il suo ID entità deve essere esattamente
+   `input_number.pi30_battery_soc_calculated`**, il contenitore del valore
+   grezzo su cui scrive l'automazione: il nome italiano ne produce un altro,
+   quindi apri l'aiutante, icona ingranaggio, e cambia "ID entità". Se l'editor
    dell'automazione mostra "entità non trovata" accanto a
    `input_number.pi30_battery_soc_calculated`, questo aiutante manca e niente
    può funzionare — e il SOC che stai guardando è un altro sensore, quasi
@@ -786,14 +789,15 @@ con la ricetta da UI e l'equivalente per `configuration.yaml`:
    completa una carica (o si svuota). L'automazione ci scrive 3 decimali:
    il passo `0.1` riguarda solo lo slider, `set_value` non ne è limitato.
 2. **Aiutante "Sensore template"** (Impostazioni > Dispositivi e servizi >
-   Aiutanti > Crea aiutante > Template > Sensore): Nome `PI30 battery SOC
-   calculated`, unità `%`, classe dispositivo
+   Aiutanti > Crea aiutante > Template > Sensore): Nome `PI30 batteria SoC
+   calcolato`, unità `%`, classe dispositivo
    `Batteria`, classe di stato `Misurazione`, e come **Stato**:
    ```
    {{ states('input_number.pi30_battery_soc_calculated') | float(default=0) | round(0) }}
    ```
-   Crea `sensor.pi30_battery_soc_calculated`, il
-   sensore batteria vero e proprio usato dalle dashboard in
+   Poi cambia il suo ID entità (icona ingranaggio) in
+   `sensor.pi30_battery_soc_calculated`, il sensore batteria vero e
+   proprio usato dalle dashboard in
    `home_assistant/dashboard`, utilizzabile nei grafici come qualunque
    altro sensore SOC. Crealo dopo l'aiutante Numero (legge quell'entity_id).
 

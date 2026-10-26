@@ -60,17 +60,17 @@ views:
             show_header_toggle: false
             state_color: true
             entities:
-              - entity: script.pi30_batteria_da_caricare
+              - entity: script.pi30_battery_charge
                 name: 'CARICA: uscita da rete, carica solare + rete'
-              - entity: script.pi30_batteria_da_scaricare
+              - entity: script.pi30_battery_discharge
                 name: 'SCARICA e MANTIENI: uscita SBU, poi batteria tenuta alla tensione minima'
               - &id001
                 type: divider
               - entity: input_number.pi30_keep_battery_live
                 name: Tensione minima da mantenere
-              - entity: input_number.pi30_bulk_carica
+              - entity: input_number.pi30_charge_bulk_voltage
                 name: Bulk in carica
-              - entity: input_number.pi30_float_carica
+              - entity: input_number.pi30_charge_float_voltage
                 name: Float in carica
               - *id001
               - entity: automation.pi30_soc_batteria

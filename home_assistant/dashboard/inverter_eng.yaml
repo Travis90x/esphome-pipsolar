@@ -60,17 +60,17 @@ views:
             show_header_toggle: false
             state_color: true
             entities:
-              - entity: script.pi30_batteria_da_caricare
+              - entity: script.pi30_battery_charge
                 name: 'CHARGE: output from grid, charge solar + grid'
-              - entity: script.pi30_batteria_da_scaricare
+              - entity: script.pi30_battery_discharge
                 name: 'DISCHARGE and HOLD: SBU output, then battery held at the minimum voltage'
               - &id001
                 type: divider
               - entity: input_number.pi30_keep_battery_live
                 name: Minimum voltage to hold
-              - entity: input_number.pi30_bulk_carica
+              - entity: input_number.pi30_charge_bulk_voltage
                 name: Bulk while charging
-              - entity: input_number.pi30_float_carica
+              - entity: input_number.pi30_charge_float_voltage
                 name: Float while charging
               - *id001
               - entity: automation.pi30_soc_batteria

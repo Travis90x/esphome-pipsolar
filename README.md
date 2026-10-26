@@ -296,8 +296,12 @@ Files: [`home_assistant/automations/PI30 battery management/`](<home_assistant/a
 The scripts and the automation are pasted with "Edit in YAML". The two
 `Aiutante`/`Aiutanti` files are not: they say what to create under Settings >
 Devices & services > Helpers > Create helper, and their YAML block is only for
-`configuration.yaml`. The file, script and mode names are in Italian, as in
-the owner's Home Assistant.
+`configuration.yaml`. The file names, the comments inside the files and the
+mode values (`IN CARICA`, `PIENA`...) are in Italian, as in the owner's Home
+Assistant, where helpers and scripts also have Italian names; this README
+uses their English names. A helper created in the UI with the English name
+below gets the right entity id; with any other name, open it (gear icon) and
+set the entity id given in its file.
 
 Goal: charge the PI30's LiFePO4 pack from the grid **only with the GoodWe's
 PV surplus**, use it to power the loads when there is no surplus, and never
@@ -330,7 +334,7 @@ EVERY RUN
  at once if the GoodWe delivers > 200 W or the meter imports > 300 W)
 │
 ├─ 0. SAFETY FIRST
-│   ├─ Charging off ("PI30 Ricarica Batteria" off) ..........► DISCHARGE
+│   ├─ Charging off ("PI30 battery recharge" off) ...........► DISCHARGE
 │   ├─ PI30 pack ≤ 24.0V (undervoltage threshold) ...........► DISCHARGE
 │   ├─ In CHARGE but PI30 not in Line mode for 5 min ........► notification + 2A
 │   │  (no grid on the AC input)
@@ -394,8 +398,8 @@ EVERY RUN
 
 | Mode | Script | Output | Charger | Bulk and float | Utility current |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| IN CARICA (charge, and PIENA, full) | PI30 batteria da caricare | utility first | solar + utility | charging values (29.0 / 27.0V) | from 2A, modulated |
-| IN SCARICA / MANTENIMENTO (discharge / hold) | PI30 batteria da scaricare | SBU | solar + utility | at the hold voltage (25.5V) | 10A |
+| IN CARICA (charge, and PIENA, full) | PI30 battery charge | utility first | solar + utility | charging values (29.0 / 27.0V) | from 2A, modulated |
+| IN SCARICA / MANTENIMENTO (discharge / hold) | PI30 battery discharge | SBU | solar + utility | at the hold voltage (25.5V) | 10A |
 
 - **CHARGE**: the PI30 loads go to the grid and the pack charges with the
   surplus. On entry the utility current starts at 2A; then the automation
@@ -419,12 +423,12 @@ scripts never overlap. Do not call them as direct actions
 (`action: script.pi30_...`): that action uses the configuration id, which for
 a script created in the UI is not the entity id (on 24 Oct 2026 every run
 stopped with "unknown action" and nothing started with the pack at 24.0V).
-The entity ids must be `script.pi30_batteria_da_caricare` and
-`script.pi30_batteria_da_scaricare`.
+The entity ids must be `script.pi30_battery_charge` and
+`script.pi30_battery_discharge`.
 
 **The scripts are not the mode.** A script is `on` only while it runs, a
 moment at each run. The mode is read from the priorities; the optional
-`PI30 Modalità MAN` helper (Template > Sensor, file
+`PI30 MAN mode` helper (Template > Sensor, file
 `Aiutante - PI30 Modalita MAN (Sensore template).yaml`) shows it as
 `IN CARICA`, `PIENA` (in CHARGE with the charger in float), `IN SCARICA` or
 `MANTENIMENTO` (SBU output with the loads on the grid, or the pack within 0.3V
@@ -434,8 +438,8 @@ of the hold voltage), `ALTRO` for priorities set by hand.
 
 | Helper | What it does | Without it |
 | :--- | :--- | :--- |
-| `input_boolean.pi30_ricarica_batteria` ("PI30 Ricarica Batteria", Toggle) | off: always DISCHARGE, the pack is never recharged but stays at the hold voltage | as on |
-| `input_number.pi30_bulk_carica` / `_float_carica` ("PI30 bulk carica" / "PI30 float carica") | charging bulk and float, written by PI30 batteria da caricare: change them here, not on the inverter | 29.0 / 27.0V |
+| `input_boolean.pi30_battery_recharge` ("PI30 battery recharge", Toggle) | off: always DISCHARGE, the pack is never recharged but stays at the hold voltage | as on |
+| `input_number.pi30_charge_bulk_voltage` / `input_number.pi30_charge_float_voltage` ("PI30 charge bulk voltage" / "PI30 charge float voltage") | charging bulk and float, written by PI30 battery charge: change them here, not on the inverter | 29.0 / 27.0V |
 | `input_number.pi30_keep_battery_live` ("PI30 keep battery live") | hold voltage of DISCHARGE and HOLD; at least 24.0V and **below the inverter's redischarge voltage**, or in SBU the PI30 goes back to discharging and the grid recharges it every cycle | 25.5V |
 | `input_number.pi30_max_manual_current` ("PI30 Max Manual Current") | highest utility current step (an in-between value counts as the lower step, 35 = 30) | 40A |
 | `input_number.pi30_charging_max_temperature` ("PI30 Charging Max Temperature") | optional heat-sink temperature limit (below) | no limit |
@@ -753,12 +757,12 @@ recipe and the `configuration.yaml` equivalent:
 `Aiutante 2 - PI30 SOC calcolato (Sensore template).yaml`.
 
 1. **Number helper** (Settings → Devices & services → Helpers → Create
-   helper → Number): Name `PI30 battery SOC calculated`, icon
-   `mdi:battery-unknown`, min `0`, max `100`, step `0.1`, unit `%`. This
-   creates `input_number.pi30_battery_soc_calculated`, the raw value
-   container the automation writes to. **The entity id must be exactly
-   that one**: open the helper, gear icon, check "Entity ID" and fix it if
-   the name produced something else. If the automation editor shows
+   helper → Number): Name `PI30 battery SoC calculated raw`, icon
+   `mdi:battery-unknown`, min `0`, max `100`, step `0.1`, unit `%`. **Its
+   entity id must be exactly `input_number.pi30_battery_soc_calculated`**,
+   the raw value container the automation writes to: this name produces
+   `input_number.pi30_battery_soc_calculated_raw`, so open the helper, gear
+   icon, and change "Entity ID". If the automation editor shows
    "entity not found" next to `input_number.pi30_battery_soc_calculated`,
    this helper is missing and nothing can work — and whatever SOC you are
    looking at is another sensor, most likely the inverter's own
@@ -769,7 +773,7 @@ recipe and the `configuration.yaml` equivalent:
    (or runs empty) anyway. The automation writes 3 decimals into it; the
    `0.1` step only affects the slider, `set_value` is not limited by it.
 2. **Template sensor helper** (Settings → Devices & services → Helpers →
-   Create helper → Template → Sensor): Name `PI30 battery SOC
+   Create helper → Template → Sensor): Name `PI30 battery SoC
    calculated`, unit `%`, device class `Battery`, state class
    `Measurement`, and as **State**:
    ```
@@ -788,7 +792,7 @@ one: its entity id stays the same.
 
 **Hold and float: counting frozen.** While the charger holds the battery
 at the programmed float voltage — float on a full pack, or the
-MANTENIMENTO (hold) state of "PI30 Batteria MAN" (SBU, loads on the grid,
+MANTENIMENTO (hold) state of "PI30 battery MAN" (SBU, loads on the grid,
 bulk and float at the minimum voltage) — the SOC does not move: voltage at
 least float − 0.1V, no discharge, charge below 60W and, below 27.2V, Line
 mode. There the charger covers the inverter's own consumption, so the

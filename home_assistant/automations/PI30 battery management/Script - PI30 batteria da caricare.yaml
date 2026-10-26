@@ -10,9 +10,9 @@ description: >-
   il float non supera mai il bulk.
 sequence:
   - variables:
-      bulk_target: "{{ states('input_number.pi30_bulk_carica') | float(29.0) | round(1) }}"
+      bulk_target: "{{ states('input_number.pi30_charge_bulk_voltage') | float(29.0) | round(1) }}"
       float_target: >-
-        {{ [states('input_number.pi30_float_carica') | float(27.0) | round(1), bulk_target] | min }}
+        {{ [states('input_number.pi30_charge_float_voltage') | float(27.0) | round(1), bulk_target] | min }}
       bulk_now: "{{ states('sensor.pi30_battery_bulk_voltage') | float(0) | round(1) }}"
       entering: >-
         {{ not (states('sensor.pi30_output_source_priority') | float(9) == 0.0

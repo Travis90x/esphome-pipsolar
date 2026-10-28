@@ -327,6 +327,7 @@ Sensori letti:
 | `sensor.pi30_output_source_priority` / `_charger_source_priority` | le due priorità, cioè la modalità attuale |
 | `sensor.pi30_max_utility_charging_current` | corrente di carica da rete confermata dal PI30 |
 | `sensor.pi30_device_mode` | Line mode / Battery mode |
+| `sensor.pi30_battery_bulk_voltage` | bulk scritto nella PI30: distingue MANTENIMENTO e CARICA |
 | `sensor.pi30_battery_voltage` | tensione batteria PI30 |
 | `sensor.pi30_battery_under_voltage` | soglia di sottotensione dell'inverter (24.0V se non leggibile) |
 | `sensor.pi30_battery_soc_calculated` | SOC calcolato (sezione successiva) |
@@ -343,8 +344,8 @@ OGNI ESECUZIONE
 ├─ 0. SICUREZZE, prima di tutto
 │   ├─ Ricarica spenta ("PI30 Ricarica Batteria" off) ......► SCARICA
 │   ├─ Batteria PI30 ≤ 24.0V (soglia di sottotensione) .....► SCARICA
-│   ├─ In CARICA ma PI30 non in Line mode da 5 min .........► notifica + 2A
-│   │  (rete assente sull'ingresso AC)
+│   ├─ In CARICA o MANTENIMENTO, non in Line mode da 5 min .► notifica
+│   │  (rete assente sull'ingresso AC; in CARICA anche 2A)
 │   ├─ Sensori della PI30 non disponibili ..................► aspetta
 │   ├─ Sensore GoodWe non disponibile da < 10 min ..........► aspetta
 │   └─ Contatore o potenza GoodWe illeggibili da > 10 min ..► SCARICA
@@ -393,12 +394,17 @@ OGNI ESECUZIONE
     ├─ batteria sopra 25.5V: alimenta i carichi ......► sensore: IN SCARICA
     │
     ├─ batteria scesa a 25.5V (tensione di recharge):
-    │  carichi sulla rete (BYPASS) e caricabatterie
-    │  che la tiene a 25.5V coprendo i ~50W ...........► sensore: MANTENIMENTO
-    │  (lo fa l'inverter da solo; 10A anche con la temperatura
-    │   illeggibile, perché a 2A il mantenimento non basta)
+    │  la PI30 passa i carichi sulla rete (Line mode)
     │
-    └─ torna IN CARICA quando c'è di nuovo surplus (ramo A)
+    ├─ sulla rete da 60 s, batteria entro 0.4V da 25.5V:
+    │  MANTENIMENTO (rete prima, stessi bulk, float e 10A):
+    │  i carichi restano sulla rete e il caricabatterie
+    │  la tiene a 25.5V coprendo i ~50W ...............► sensore: MANTENIMENTO
+    │  (10A anche con la temperatura illeggibile,
+    │   perché a 2A il mantenimento non basta)
+    │
+    └─ torna IN CARICA quando c'è di nuovo surplus (ramo A),
+       da SCARICA o MANTENIMENTO, dopo almeno 10 minuti
 ```
 
 #### Modalità e script
@@ -406,7 +412,8 @@ OGNI ESECUZIONE
 | Modalità | Script | Uscita | Carica | Bulk e float | Corrente da rete |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | IN CARICA (e PIENA) | PI30 batteria da caricare | rete prima | solare + rete | di carica (29.0 / 27.0V) | da 2A, modulata |
-| IN SCARICA / MANTENIMENTO | PI30 batteria da scaricare | SBU | solare + rete | alla tensione minima (25.5V) | 10A |
+| IN SCARICA | PI30 batteria da scaricare | SBU | solare + rete | alla tensione minima (25.5V) | 10A |
+| MANTENIMENTO | PI30 batteria da scaricare, con `keep_on_grid: true` | rete prima | solare + rete | alla tensione minima (25.5V) | 10A |
 
 - **IN CARICA**: i carichi della PI30 vanno sulla rete e la batteria si carica
   con il surplus. Entrando, la corrente da rete parte da 2A; poi la regola
@@ -417,12 +424,21 @@ OGNI ESECUZIONE
   in CARICA su un pacco pieno ripartiva a 15-30A e il bulk arrivava a 29.0V
   in un minuto (il 29/09 cinque volte in 40 minuti). Con l'ingresso a 2A e i
   10 minuti di anti-oscillazione non serve più.
-- **IN SCARICA e MANTENIMENTO** sono lo stesso script. La batteria alimenta i
-  carichi finché scende alla tensione di recharge dell'inverter; lì la PI30
-  passa i carichi sulla rete e, con bulk e float alla tensione minima, il
-  caricabatterie la tiene lì coprendo solo l'autoconsumo dell'inverter (circa
-  50W) e la scarica interna: non la ricarica oltre e non la lascia scendere.
-  Lo fa l'inverter da solo, senza che l'automazione debba accorgersene.
+- **IN SCARICA e MANTENIMENTO** sono lo stesso script. IN SCARICA (SBU) la
+  batteria alimenta i carichi finché scende alla tensione di recharge
+  dell'inverter; lì la PI30 passa i carichi sulla rete. Dopo 60 secondi in
+  Line mode, con la batteria entro 0.4V dalla tensione minima, l'automazione
+  chiama lo script con `keep_on_grid: true`: uscita "rete prima",
+  MANTENIMENTO. Con bulk e float alla tensione minima il caricabatterie la
+  tiene lì coprendo solo l'autoconsumo dell'inverter (circa 50W) e la scarica
+  interna: non la ricarica oltre e non la lascia scendere. Il MANTENIMENTO
+  dura fino alla prossima CARICA, che parte da 2A come dalla SCARICA.
+  L'automazione distingue MANTENIMENTO e CARICA (tutte e due "rete prima")
+  dal bulk scritto nell'inverter: sotto la metà tra tensione minima e bulk di
+  carica è MANTENIMENTO. Fino al 28/10/2026 il MANTENIMENTO restava in SBU e
+  lo faceva l'inverter da solo: con bulk = float = tensione di recharge, dopo
+  esattamente 10 minuti in Line mode la PI30 tornava in Battery mode e ci
+  restava da 30 secondi a 5 minuti (il 27/10 nove cicli in due ore).
 
 Gli script scrivono solo quello che è diverso: senza niente da scrivere
 finiscono subito. L'automazione li chiama a ogni esecuzione con
@@ -439,8 +455,12 @@ pochi istanti a ogni esecuzione. La modalità si legge dalle priorità;
 l'aiutante facoltativo `PI30 Modalità MAN` (Template > Sensore, file
 `Aiutante - PI30 Modalita MAN (Sensore template).yaml`) la mostra come
 `IN CARICA`, `PIENA` (in CARICA con il caricabatterie in float), `IN SCARICA`
-o `MANTENIMENTO` (uscita SBU con i carichi sulla rete, o batteria entro 0.3V
-dalla tensione minima), `ALTRO` per priorità impostate a mano.
+o `MANTENIMENTO` (uscita "rete prima" con il bulk alla tensione minima,
+oppure uscita SBU con la PI30 già sulla rete, nel minuto prima che
+l'automazione passi a "rete prima"), `ALTRO` per priorità impostate a mano.
+Fino al 28/10/2026 contava come `MANTENIMENTO` anche la batteria entro 0.3V
+dalla tensione minima: vicino al minimo alternava `IN SCARICA` e
+`MANTENIMENTO` ogni pochi secondi.
 
 #### Aiutanti
 
@@ -464,11 +484,12 @@ non protegge la batteria (il 25/09/2026 il BMS ha spento l'inverter alle
    minima e 10A la batteria risale. Un trigger interviene entro un minuto
    dalla soglia. 2A non bastano: il 26/09 la PI30 segnava +2A mentre la
    batteria scendeva da 23.6V a 22.8V e il BMS l'ha staccata.
-2. **PI30 fuori rete**: in CARICA ma non in Line mode da 5 minuti, con le
-   priorità ferme da almeno altrettanto, la PI30 non usa la rete. Notifica
-   persistente "PI30 non sta usando la rete" (id `pi30_fuori_rete`, con la
-   tensione di rete letta dalla PI30), corrente a 2A, nessuna modulazione. La
-   notifica sparisce quando torna in Line mode. Il 23/10/2026 l'ingresso AC
+2. **PI30 fuori rete**: in CARICA o MANTENIMENTO ma non in Line mode da 5
+   minuti, con le priorità ferme da almeno altrettanto, la PI30 non usa la
+   rete. Notifica persistente "PI30 non sta usando la rete" (id
+   `pi30_fuori_rete`, con la tensione di rete letta dalla PI30), in CARICA
+   corrente a 2A, nessuna modulazione. La notifica sparisce quando torna in
+   Line mode. Il 23/10/2026 l'ingresso AC
    della PI30 è rimasto a 0V dalle 14:49 alle 20:40: la PI30 in CARICA è
    andata in Battery mode con il contatore a -300W. Le uscite di 10 secondi
    (buchi di tensione a 103-151V) non contano.
@@ -485,8 +506,8 @@ non protegge la batteria (il 25/09/2026 il BMS ha spento l'inverter alle
    contatore che preleva >= 300W, la GoodWe che eroga >= 200W o la GoodWe
    sotto il 98% per 60 secondi → SCARICA, le stesse soglie delle discese (fino al 24/10/2026 500W). Sotto
    i 60 s è il trasferimento dei carichi, un transitorio.
-5. **Anti-oscillazione**: passata a SCARICA da meno di 10 minuti, resta. Senza,
-   con il surplus al limite la PI30 passava CARICA ↔ SCARICA ogni 20-40
+5. **Anti-oscillazione**: passata a SCARICA o MANTENIMENTO da meno di 10
+   minuti, resta. Senza, con il surplus al limite la PI30 passava CARICA ↔ SCARICA ogni 20-40
    secondi (20-34 volte al giorno tra il 27/09 e il 02/10).
 6. **Surplus**: fuori dalla CARICA si entra solo con la GoodWe piena (100%, o
    99% con la batteria ferma) e un'immissione che copre i carichi della PI30
@@ -537,9 +558,10 @@ riscritto sull'inverter a ogni esecuzione.
 su la corrente da rete scende di uno step ogni 2 minuti fino a 2A, senza
 staccare la carica; tra il limite meno 5°C e il limite resta dov'è; sotto
 risale normalmente. Con il limite impostato e la temperatura illeggibile vale
-come oltre il limite. Vale anche per i 10A della SCARICA (passati allo script
-come `current_limit`), ma solo con la temperatura letta: illeggibile, la
-SCARICA resta a 10A, perché a 2A il mantenimento non copre l'autoconsumo.
+come oltre il limite. Vale anche per i 10A di SCARICA e MANTENIMENTO
+(passati allo script come `current_limit`), ma solo con la temperatura letta:
+illeggibile, restano a 10A, perché a 2A il mantenimento non copre
+l'autoconsumo.
 Per lo stesso motivo "PI30 corrente massima manuale" limita solo la CARICA, non il
 mantenimento. Il controllo ogni 2 minuti fa scendere la corrente anche quando
 nessun altro sensore cambia.
@@ -557,12 +579,15 @@ ferma da sola al minimo: l'inverter passa alla rete alla tensione di
 recharge e il caricabatterie copre solo l'autoconsumo. I tre script sono
 diventati uno, e la soglia di sottotensione resta solo come rete di
 sicurezza. Per lo stesso motivo PIENA è confluita in CARICA (vedi sopra): in
-tutti e due i casi è il caricabatterie a gestire la batteria. Il mantenimento non è una linea piatta: il caricabatterie del
-PI30 è acceso/spento attorno al setpoint, e in SBU l'inverter torna in
-Battery mode dopo il float, quindi di notte alterna 10-15 minuti sulla rete
-e 10-15 in batteria vicino alla tensione minima. A 24.0V (2%, curva ripida)
-la tensione faceva un dente di sega di 0.5V ogni 25 minuti; a 25.5-25.8V
-(15%, curva piatta) lo stesso impulso la sposta di pochi centesimi.
+tutti e due i casi è il caricabatterie a gestire la batteria. Il
+mantenimento non è una linea piatta: il caricabatterie del PI30 è
+acceso/spento attorno al setpoint, e in SBU l'inverter tornava in Battery
+mode dopo il float, quindi di notte alternava 10 minuti sulla rete e fino a
+5 in batteria vicino alla tensione minima; dal 28/10/2026 il MANTENIMENTO
+passa a "rete prima" e resta sulla rete (vedi sopra). A 24.0V (2%, curva
+ripida) la tensione faceva un dente di sega di 0.5V ogni 25 minuti; a
+25.5-25.8V (15%, curva piatta) lo stesso impulso la sposta di pochi
+centesimi.
 
 **Trigger:**
 
@@ -587,6 +612,11 @@ triggers:
       seconds: 10
   - trigger: template               # batteria PI30 alla soglia da 1 minuto
   - trigger: template               # dissipatore al limite di temperatura
+  - trigger: state                  # PI30 in Line mode da 60 s (MANTENIMENTO)
+    entity_id: sensor.pi30_device_mode
+    to: Line mode
+    for:
+      seconds: 60
   - trigger: state                  # interruttore di ricarica
   - trigger: state                  # aiutanti numerici
 ```
@@ -814,8 +844,8 @@ creati imposta l'ID entità dall'icona ingranaggio.
 
 **Mantenimento e float: conteggio fermo.** Quando il caricabatterie tiene
 la batteria alla tensione di float programmata — il float a pacco pieno,
-oppure il MANTENIMENTO di "PI30 Batteria MAN" (SBU, carichi sulla rete,
-bulk e float alla tensione minima) — il SOC non si muove: tensione almeno
+oppure il MANTENIMENTO di "PI30 Batteria MAN" ("rete prima", carichi sulla
+rete, bulk e float alla tensione minima) — il SOC non si muove: tensione almeno
 float − 0.1V, niente scarica, carica sotto i 60W e, sotto i 27.2V, Line
 mode. Lì il caricabatterie copre il consumo dell'inverter, quindi il
 consumo nascosto (65W) non va sottratto: prima il conteggio scendeva a 0

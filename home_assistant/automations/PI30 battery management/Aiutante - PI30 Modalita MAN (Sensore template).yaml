@@ -2,16 +2,20 @@
 # dashboard e nello storico al posto degli script: uno script è "on" solo
 # per pochi istanti mentre gira.
 #
-#   IN CARICA     uscita "rete prima", carica "solare + rete"
-#                 (PI30 batteria da caricare), caricabatterie in bulk
+#   IN CARICA     uscita "rete prima", carica "solare + rete", bulk di
+#                 carica (PI30 batteria da caricare), caricabatterie in bulk
 #   PIENA         come IN CARICA, ma con il caricabatterie in float: la
 #                 batteria è piena e i carichi vanno sul surplus
 #   IN SCARICA    uscita SBU, la batteria alimenta i carichi
 #                 (PI30 batteria da scaricare, batteria sopra il minimo)
-#   MANTENIMENTO  uscita SBU, batteria scarica tenuta alla tensione minima:
-#                 carichi sulla rete (Line mode), oppure batteria entro 0.3V
-#                 dalla tensione minima
-#                 ("PI30 batteria tensione di mantenimento")
+#   MANTENIMENTO  batteria scarica tenuta alla tensione minima, carichi sulla
+#                 rete: uscita "rete prima" con il bulk alla tensione minima
+#                 ("PI30 batteria tensione di mantenimento"; conta il bulk
+#                 sotto la metà tra minimo e bulk di carica), oppure uscita
+#                 SBU con la PI30 già sulla rete (Line mode), nel minuto
+#                 prima che l'automazione passi a "rete prima". Niente regola
+#                 sulla tensione: alternava IN SCARICA e MANTENIMENTO ogni
+#                 pochi secondi con la batteria vicina al minimo.
 #   ALTRO         priorità impostate a mano in un'altra combinazione
 #
 # La PI30 senza rete in CARICA non si vede qui: la segnala la notifica
@@ -40,11 +44,13 @@ template:
         state: >-
           {% set o = states('sensor.pi30_output_source_priority') | float(-1) %}
           {% set c = states('sensor.pi30_charger_source_priority') | float(-1) %}
-          {% set v = states('sensor.pi30_battery_voltage') | float(99) %}
-          {% set minimo = states('input_number.pi30_keep_battery_live') | float(25.5) %}
-          {% if o == 0 and c == 2 and is_state('binary_sensor.pi30_charging_to_floating_mode', 'on') %}PIENA
+          {% set minimo = [states('input_number.pi30_keep_battery_live') | float(25.5), 24.0] | max %}
+          {% set bulk_carica = states('input_number.pi30_charge_bulk_voltage') | float(29.0) %}
+          {% set bulk = states('sensor.pi30_battery_bulk_voltage') | float(0) %}
+          {% if o == 0 and c == 2 and bulk < (minimo + bulk_carica) / 2 %}MANTENIMENTO
+          {% elif o == 0 and c == 2 and is_state('binary_sensor.pi30_charging_to_floating_mode', 'on') %}PIENA
           {% elif o == 0 and c == 2 %}IN CARICA
-          {% elif o == 2 and (is_state('sensor.pi30_device_mode', 'Line mode') or v <= minimo + 0.3) %}MANTENIMENTO
+          {% elif o == 2 and is_state('sensor.pi30_device_mode', 'Line mode') %}MANTENIMENTO
           {% elif o == 2 %}IN SCARICA
           {% else %}ALTRO{% endif %}
         availability: >-

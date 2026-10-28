@@ -3,20 +3,27 @@ description: >-
   IN CARICA. Uscita "rete prima", carica "solare + rete", bulk e float di
   carica dagli aiutanti "PI30 bulk carica" e "PI30 float carica" (senza:
   29.0V e 27.0V), corrente totale 60A. Entrando in CARICA da un'altra
-  modalità la corrente da rete parte da 2A; poi la regola l'automazione PI30
+  modalità (anche dal MANTENIMENTO: uscita "rete prima" con il bulk sotto la
+  metà tra tensione minima e bulk di carica) la corrente da rete parte da 2A; poi la regola l'automazione PI30
   Batteria MAN, che chiama questo script a ogni esecuzione e aspetta che
   finisca. Scrive solo quello che è diverso: senza niente da scrivere finisce
   subito. Bulk e float: salendo prima il bulk, scendendo prima il float, così
   il float non supera mai il bulk.
 sequence:
+  # Due blocchi: nel secondo le variabili che leggono quelle del primo, così
+  # non conta l'ordine delle chiavi dentro un blocco
   - variables:
       bulk_target: "{{ states('input_number.pi30_charge_bulk_voltage') | float(29.0) | round(1) }}"
+      bulk_now: "{{ states('sensor.pi30_battery_bulk_voltage') | float(0) | round(1) }}"
+      hold_v: >-
+        {{ [states('input_number.pi30_keep_battery_live') | float(25.5), 24.0] | max | round(1) }}
+  - variables:
       float_target: >-
         {{ [states('input_number.pi30_charge_float_voltage') | float(27.0) | round(1), bulk_target] | min }}
-      bulk_now: "{{ states('sensor.pi30_battery_bulk_voltage') | float(0) | round(1) }}"
       entering: >-
         {{ not (states('sensor.pi30_output_source_priority') | float(9) == 0.0
-           and states('sensor.pi30_charger_source_priority') | float(9) == 2.0) }}
+           and states('sensor.pi30_charger_source_priority') | float(9) == 2.0)
+           or bulk_now < (hold_v + bulk_target) / 2 }}
   # Entrando in CARICA: corrente da rete al minimo
   - if:
       - condition: template

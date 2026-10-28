@@ -25,14 +25,15 @@ description: >-
   +1A per ore con la batteria che scendeva).
   MANTENIMENTO E FLOAT: CONTEGGIO FERMO. Quando il caricabatterie tiene la
   batteria alla tensione di float programmata (float o pieno a 27.5V, oppure
-  il MANTENIMENTO della PI30 Batteria MAN: SBU, carichi sulla rete, bulk e
-  float alla tensione minima), la tensione è almeno quella di float - 0.1V,
-  niente si scarica e la carica è sotto i 60W: il caricabatterie copre lui
-  il consumo dell'inverter, quindi il SOC non si muove né in su né in giù e
-  la correzione da tensione è spenta (la tensione è quella imposta dal
-  caricabatterie, non quella di riposo). Sotto i 27.2V serve in più il Line
-  mode (carichi sulla rete), così una batteria in Battery mode che alimenta
-  pochi watt riportando 0A non viene scambiata per mantenimento.
+  il MANTENIMENTO della PI30 Batteria MAN: uscita "rete prima", carichi
+  sulla rete, bulk e float alla tensione minima), la tensione è almeno
+  quella di float - 0.1V, niente si scarica e la carica è sotto i 60W: il
+  caricabatterie copre lui il consumo dell'inverter, quindi il SOC non si
+  muove né in su né in giù e la correzione da tensione è spenta (la tensione
+  è quella imposta dal caricabatterie, non quella di riposo). Sotto i 27.2V
+  serve in più il Line mode (carichi sulla rete), così una batteria in
+  Battery mode che alimenta pochi watt riportando 0A non viene scambiata per
+  mantenimento.
   Il conteggio da solo non arriva mai a 100 o a 0: salendo si ferma a 99,
   scendendo a 1. Da un 100 ancorato può scendere; una carica contata (oltre
   60W) porta un 100 a 99, perché una batteria che prende energia non è piena.

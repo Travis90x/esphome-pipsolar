@@ -320,6 +320,7 @@ Sensors read:
 | `sensor.pi30_output_source_priority` / `_charger_source_priority` | the two priorities, i.e. the current mode |
 | `sensor.pi30_max_utility_charging_current` | utility charging current confirmed by the PI30 |
 | `sensor.pi30_device_mode` | Line mode / Battery mode |
+| `sensor.pi30_battery_bulk_voltage` | bulk written in the PI30: tells HOLD from CHARGE |
 | `sensor.pi30_battery_voltage` | PI30 battery voltage |
 | `sensor.pi30_battery_under_voltage` | inverter undervoltage threshold (24.0V if unreadable) |
 | `sensor.pi30_battery_soc_calculated` | calculated SOC (next section) |
@@ -336,8 +337,8 @@ EVERY RUN
 ├─ 0. SAFETY FIRST
 │   ├─ Charging off ("PI30 battery recharge" off) ...........► DISCHARGE
 │   ├─ PI30 pack ≤ 24.0V (undervoltage threshold) ...........► DISCHARGE
-│   ├─ In CHARGE but PI30 not in Line mode for 5 min ........► notification + 2A
-│   │  (no grid on the AC input)
+│   ├─ In CHARGE or HOLD but PI30 not in Line mode for 5 min ► notification
+│   │  (no grid on the AC input; in CHARGE also 2A)
 │   ├─ PI30 sensors unavailable .............................► wait
 │   ├─ GoodWe sensor unavailable for < 10 min ...............► wait
 │   └─ Meter or GoodWe power unreadable for > 10 min ........► DISCHARGE
@@ -386,12 +387,17 @@ EVERY RUN
     ├─ pack above 25.5V: powers the loads ..............► helper: IN SCARICA
     │
     ├─ pack down to 25.5V (recharge voltage):
-    │  loads on the grid (BYPASS), charger holding
-    │  it at 25.5V covering the ~50 W ..................► helper: MANTENIMENTO
-    │  (the inverter does it by itself; 10A even with the
-    │   temperature unreadable, as 2A cannot cover the hold)
+    │  the PI30 moves the loads to the grid (Line mode)
     │
-    └─ back to CHARGE when there is surplus again (branch A)
+    ├─ on the grid for 60 s, pack within 0.4V of 25.5V:
+    │  HOLD (utility first, same bulk, float and 10A):
+    │  loads stay on the grid, charger holding
+    │  it at 25.5V covering the ~50 W ..................► helper: MANTENIMENTO
+    │  (10A even with the temperature unreadable,
+    │   as 2A cannot cover the hold)
+    │
+    └─ back to CHARGE when there is surplus again (branch A),
+       from DISCHARGE or HOLD, after at least 10 minutes
 ```
 
 #### Modes and scripts
@@ -399,7 +405,8 @@ EVERY RUN
 | Mode | Script | Output | Charger | Bulk and float | Utility current |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | IN CARICA (charge, and PIENA, full) | PI30 battery charge | utility first | solar + utility | charging values (29.0 / 27.0V) | from 2A, modulated |
-| IN SCARICA / MANTENIMENTO (discharge / hold) | PI30 battery discharge | SBU | solar + utility | at the hold voltage (25.5V) | 10A |
+| IN SCARICA (discharge) | PI30 battery discharge | SBU | solar + utility | at the hold voltage (25.5V) | 10A |
+| MANTENIMENTO (hold) | PI30 battery discharge, with `keep_on_grid: true` | utility first | solar + utility | at the hold voltage (25.5V) | 10A |
 
 - **CHARGE**: the PI30 loads go to the grid and the pack charges with the
   surplus. On entry the utility current starts at 2A; then the automation
@@ -409,12 +416,21 @@ EVERY RUN
   only), from when every return to CHARGE on a full pack started at 15-30A
   and bulk reached 29.0V within a minute (five times in 40 minutes on 29
   Sep). With entry at 2A and the 10-minute anti-oscillation it is not needed.
-- **DISCHARGE and HOLD** are the same script. The pack powers the loads until
-  it falls to the inverter's recharge voltage; there the PI30 moves the loads
-  to the grid and, with bulk and float at the hold voltage, the charger keeps
-  the pack there, covering only the inverter's own consumption (about 50 W)
-  and self-discharge: no recharge above it, no drift below it. The inverter
-  does this by itself, the automation does not have to notice.
+- **DISCHARGE and HOLD** are the same script. In DISCHARGE (SBU) the pack
+  powers the loads until it falls to the inverter's recharge voltage; there
+  the PI30 moves the loads to the grid. After 60 seconds in Line mode, with
+  the pack within 0.4V of the hold voltage, the automation calls the script
+  with `keep_on_grid: true`: output "utility first", HOLD. With bulk and
+  float at the hold voltage the charger keeps the pack there, covering only
+  the inverter's own consumption (about 50 W) and self-discharge: no
+  recharge above it, no drift below it. HOLD lasts until the next CHARGE,
+  which starts at 2A as from DISCHARGE. The automation tells HOLD from
+  CHARGE (both utility first) by the bulk written in the inverter: below
+  halfway between the hold voltage and the charging bulk it is HOLD.
+  Until 28 Oct 2026 HOLD stayed in SBU and was left to the inverter: with
+  bulk = float = recharge voltage, after exactly 10 minutes in Line mode the
+  PI30 went back to Battery mode and stayed there 30 seconds to 5 minutes
+  (on 27 Oct, nine cycles in two hours).
 
 The scripts only write what differs: with nothing to write they finish at
 once. The automation calls them on every run with `script.turn_on` by
@@ -431,8 +447,12 @@ moment at each run. The mode is read from the priorities; the optional
 `PI30 MAN mode` helper (Template > Sensor, file
 `Aiutante - PI30 Modalita MAN (Sensore template).yaml`) shows it as
 `IN CARICA`, `PIENA` (in CHARGE with the charger in float), `IN SCARICA` or
-`MANTENIMENTO` (SBU output with the loads on the grid, or the pack within 0.3V
-of the hold voltage), `ALTRO` for priorities set by hand.
+`MANTENIMENTO` (utility first with the bulk at the hold voltage, or SBU with
+the PI30 already on the grid, in the minute before the automation switches
+it to utility first), `ALTRO` for priorities set by hand. Until 28 Oct 2026
+it also counted the pack within 0.3V of the hold voltage as `MANTENIMENTO`:
+near the minimum it flipped between `IN SCARICA` and `MANTENIMENTO` every
+few seconds.
 
 #### Helpers
 
@@ -455,11 +475,12 @@ protect the pack (on 25 Sep 2026 the BMS shut the inverter down at 22:00).
    and 10A the pack comes back up. A trigger reacts within a minute of the
    threshold. 2A are not enough: on 26 Sep the PI30 read +2A while the pack
    fell from 23.6V to 22.8V and the BMS cut it.
-2. **PI30 off the grid**: in CHARGE but not in Line mode for 5 minutes, with
-   the priorities unchanged for as long, the PI30 is not using the grid.
-   Persistent notification "PI30 non sta usando la rete" (id
-   `pi30_fuori_rete`, with the grid voltage read by the PI30), current to 2A,
-   no modulation. The notification goes away once it is back in Line mode.
+2. **PI30 off the grid**: in CHARGE or HOLD but not in Line mode for 5
+   minutes, with the priorities unchanged for as long, the PI30 is not using
+   the grid. Persistent notification "PI30 non sta usando la rete" (id
+   `pi30_fuori_rete`, with the grid voltage read by the PI30), in CHARGE
+   current to 2A, no modulation. The notification goes away once it is back
+   in Line mode.
    On 23 Oct 2026 the PI30 AC input read 0 V from 14:49 to 20:40: the PI30, in
    CHARGE, went to Battery mode with the meter at -300 W. The 10-second drops
    (voltage dips to 103-151 V) do not count.
@@ -476,8 +497,8 @@ protect the pack (on 25 Sep 2026 the BMS shut the inverter down at 22:00).
    with the meter importing >= 300 W, the GoodWe delivering >= 200 W or the
    GoodWe below 98% for 60 seconds → DISCHARGE, the same thresholds as the step-downs (500 W until 24
    Oct 2026). Under 60 s it is the load transfer, a transient.
-5. **Anti-oscillation**: moved to DISCHARGE less than 10 minutes ago, it
-   stays. Without it, with a borderline surplus the PI30 went CHARGE ↔
+5. **Anti-oscillation**: moved to DISCHARGE or HOLD less than 10 minutes
+   ago, it stays. Without it, with a borderline surplus the PI30 went CHARGE ↔
    DISCHARGE every 20-40 seconds (20-34 times a day between 27 Sep and 2 Oct).
 6. **Surplus**: outside CHARGE the PI30 enters only with the GoodWe full (100%,
    or 99% with its battery idle) and an export covering its loads plus 60 W,
@@ -528,9 +549,9 @@ example 70°C) and `sensor.pi30_heat_sink_temperature`: from the limit
 up the utility current drops one step every 2 minutes down to 2A, without
 stopping the charge; between the limit minus 5°C and the limit it stays;
 below it rises normally. With the limit set and the temperature unreadable it
-counts as over the limit. It also applies to the 10A of DISCHARGE (passed to
-the script as `current_limit`), but only with a temperature reading:
-unreadable, DISCHARGE keeps 10A, as 2A cannot cover the hold. For the same
+counts as over the limit. It also applies to the 10A of DISCHARGE and HOLD
+(passed to the script as `current_limit`), but only with a temperature
+reading: unreadable, they keep 10A, as 2A cannot cover the hold. For the same
 reason "PI30 Max Manual Current" only limits CHARGE, not the hold. The
 2-minute periodic check makes the current step down even when no other sensor
 changes.
@@ -548,12 +569,13 @@ stops at the minimum by itself: the inverter moves to the grid at the
 recharge voltage and the charger covers only the own consumption. The three
 scripts became one, and the undervoltage threshold stays only as a safety
 net. For the same reason FULL merged into CHARGE (above): in both cases the
-charger looks after the pack. The hold is not a flat line: the PI30 charger switches on and off
-around the setpoint, and in SBU the inverter returns to Battery mode after
-float, so at night it alternates 10-15 minutes on the grid and 10-15 on the
-battery near the hold voltage. At 24.0V (2%, steep curve) the voltage made a
-0.5V sawtooth every 25 minutes; at 25.5-25.8V (15%, flat curve) the same
-pulse moves it by a few hundredths.
+charger looks after the pack. The hold is not a flat line: the PI30 charger
+switches on and off around the setpoint, and in SBU the inverter returned to
+Battery mode after float, so at night it alternated 10 minutes on the grid
+and up to 5 on the battery near the hold voltage; since 28 Oct 2026 HOLD
+switches to utility first and stays on the grid (above). At 24.0V (2%, steep
+curve) the voltage made a 0.5V sawtooth every 25 minutes; at 25.5-25.8V
+(15%, flat curve) the same pulse moves it by a few hundredths.
 
 **Triggers:**
 
@@ -578,6 +600,11 @@ triggers:
       seconds: 10
   - trigger: template               # PI30 pack at the threshold for 1 minute
   - trigger: template               # heat sink at the temperature limit
+  - trigger: state                  # PI30 in Line mode for 60 s (HOLD)
+    entity_id: sensor.pi30_device_mode
+    to: Line mode
+    for:
+      seconds: 60
   - trigger: state                  # charging switch
   - trigger: state                  # number helpers
 ```
@@ -797,8 +824,8 @@ from the gear icon.
 
 **Hold and float: counting frozen.** While the charger holds the battery
 at the programmed float voltage — float on a full pack, or the
-MANTENIMENTO (hold) state of "PI30 battery MAN" (SBU, loads on the grid,
-bulk and float at the minimum voltage) — the SOC does not move: voltage at
+MANTENIMENTO (hold) state of "PI30 battery MAN" (utility first, loads on
+the grid, bulk and float at the minimum voltage) — the SOC does not move: voltage at
 least float − 0.1V, no discharge, charge below 60W and, below 27.2V, Line
 mode. There the charger covers the inverter's own consumption, so the
 hidden drain (65W) must not be subtracted: before, the count ran down to 0

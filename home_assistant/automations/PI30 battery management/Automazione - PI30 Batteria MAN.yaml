@@ -8,11 +8,17 @@ description: >-
   script.pi30_battery_charge (IN CARICA): uscita "rete prima", carica
   "solare + rete", bulk e float di carica; la batteria passa da sola da bulk
   a float e, piena, resta in float con i carichi sul surplus. Entra a 2A.
-  script.pi30_battery_discharge (IN SCARICA e MANTENIMENTO): uscita SBU,
-  carica "solare + rete", bulk e float alla tensione minima, 10A: la batteria
-  alimenta i carichi finché scende alla tensione di recharge, poi la PI30
-  passa sulla rete e il caricabatterie la tiene alla tensione minima, coprendo
-  solo l'autoconsumo (circa 50W).
+  script.pi30_battery_discharge (IN SCARICA e MANTENIMENTO): carica
+  "solare + rete", bulk e float alla tensione minima, 10A. IN SCARICA uscita
+  SBU: la batteria alimenta i carichi finché scende alla tensione di
+  recharge, poi la PI30 passa sulla rete. MANTENIMENTO: appena la PI30 è
+  sulla rete da 60 s con la batteria entro 0.4V dalla tensione minima,
+  uscita "rete prima" (keep_on_grid): i carichi restano sulla rete e il
+  caricabatterie tiene la batteria alla tensione minima, coprendo solo
+  l'autoconsumo (circa 50W), fino alla prossima CARICA. In SBU la PI30
+  tornava a batteria dopo 10 minuti di rete e ci restava da 30 s a 5 minuti
+  (27/10/2026: nove cicli in due ore). Il MANTENIMENTO si riconosce dal bulk
+  scritto nell'inverter: sotto la metà tra tensione minima e bulk di carica.
   SURPLUS = GoodWe piena (100%, o 99% ferma), batteria GoodWe che non eroga
   (< 200W) e immissione che copre i carichi della PI30 più 60W, oppure al
   limite di immissione meno 50W (250W). Senza surplus: SCARICA.
@@ -26,15 +32,16 @@ description: >-
   2A con lo stesso prelievo per 60 s: SCARICA. GoodWe scesa al 98-99% in
   CARICA (oscilla tra 99 e 100): non sale e non esce. GoodWe sotto il 98%:
   subito 2A, poi SCARICA dopo 60 s, perché sta ricaricando e ha la precedenza.
-  ORDINE DEI CONTROLLI. 1) Ricarica spenta (input_boolean.pi30_battery_recharge
-  off) o batteria PI30 alla soglia di sottotensione: SCARICA. 2) In CARICA ma
-  non in Line mode da 5 minuti: la PI30 non usa la rete, notifica (con la
+  ORDINE DEI CONTROLLI. Ogni SCARICA diventa MANTENIMENTO con la batteria
+  già al minimo (vedi sopra). 1) Ricarica spenta (input_boolean.pi30_battery_recharge
+  off) o batteria PI30 alla soglia di sottotensione: SCARICA. 2) In CARICA o
+  MANTENIMENTO ma non in Line mode da 5 minuti: la PI30 non usa la rete, notifica (con la
   tensione di rete letta dalla PI30) e corrente a 2A. 3) Un sensore GoodWe non
   disponibile da meno di 10 minuti: nessuna decisione; contatore o potenza
   GoodWe illeggibili da più di 10 minuti: SCARICA. Sensori della PI30 non
   disponibili: nessuna decisione. 4) In CARICA a 2A con
   prelievo >= 300W, GoodWe >= 200W o GoodWe sotto il 98% per 60 s: SCARICA. 5) Passata a SCARICA
-  da meno di 10 minuti, o fuori dalla CARICA senza surplus: SCARICA.
+  o MANTENIMENTO da meno di 10 minuti, o fuori dalla CARICA senza surplus: SCARICA.
   6) Altrimenti CARICA e modulazione. Controllo periodico ogni 2 minuti.
   AIUTANTI. input_number.pi30_charge_bulk_voltage e input_number.pi30_charge_float_voltage:
   bulk e float di carica (senza: 29.0V e 27.0V). input_number.pi30_keep_battery_live:
@@ -83,6 +90,12 @@ triggers:
       {{ states('sensor.pi30_heat_sink_temperature') | float(0) >=
       states('input_number.pi30_charging_max_temperature') | float(999) }}
   - trigger: state
+    id: sulla_rete
+    entity_id: sensor.pi30_device_mode
+    to: Line mode
+    for:
+      seconds: 60
+  - trigger: state
     id: ricarica_batteria
     entity_id: input_boolean.pi30_battery_recharge
   - trigger: state
@@ -111,10 +124,19 @@ actions:
         {{ states('sensor.pi30_battery_under_voltage') | float(default=24.0) }}
       at_threshold: "{{ pi30_voltage is not none and pi30_voltage <= under_voltage }}"
       ricarica_on: "{{ not is_state('input_boolean.pi30_battery_recharge', 'off') }}"
-      # Modalità attuale, dalle due priorità dell'inverter
+      # Modalità attuale, dalle due priorità dell'inverter e dal bulk:
+      # "rete prima" con il bulk sotto la metà tra tensione minima e bulk di
+      # carica è il MANTENIMENTO (una metà regge anche se uno dei due
+      # aiutanti cambia mentre la PI30 è in quella modalità)
       output_prio: "{{ states('sensor.pi30_output_source_priority') | float(9) }}"
       charger_prio: "{{ states('sensor.pi30_charger_source_priority') | float(9) }}"
-      in_charge: "{{ output_prio == 0.0 and charger_prio == 2.0 }}"
+      hold_v: >-
+        {{ [states('input_number.pi30_keep_battery_live') | float(25.5), 24.0] | max | round(1) }}
+      charge_bulk_v: "{{ states('input_number.pi30_charge_bulk_voltage') | float(29.0) | round(1) }}"
+      bulk_now: "{{ states('sensor.pi30_battery_bulk_voltage') | float(0) | round(1) }}"
+      utility_first: "{{ output_prio == 0.0 and charger_prio == 2.0 }}"
+      in_hold: "{{ utility_first and bulk_now < (hold_v + charge_bulk_v) / 2 }}"
+      in_charge: "{{ utility_first and not in_hold }}"
       in_discharge: "{{ output_prio == 2.0 }}"
       prio_age_s: >-
         {% set o = states.sensor.pi30_output_source_priority %}
@@ -234,17 +256,27 @@ actions:
       pi30_unknown: "{{ output_prio == 9 or charger_prio == 9 }}"
       # Contatore o potenza GoodWe illeggibili oltre la finestra dei glitch
       power_lost: "{{ not power_known and not goodwe_glitch }}"
-      # PI30 FUORI RETE: in CARICA (uscita "rete prima") la PI30 deve stare in
-      # Line mode; da line_lost_s in un altro modo non usa la rete.
+      # PI30 FUORI RETE: in CARICA e MANTENIMENTO (uscita "rete prima") la PI30
+      # deve stare in Line mode; da line_lost_s in un altro modo non usa la rete.
       line_lost_s: 300
       pi30_device_mode: "{{ states('sensor.pi30_device_mode') }}"
       device_mode_age_s: >-
         {% set m = states.sensor.pi30_device_mode %}
         {{ (now() - m.last_changed).total_seconds() if m is not none else 0 }}
       line_lost: >-
-        {{ in_charge and
+        {{ (in_charge or in_hold) and
            pi30_device_mode not in ['Line mode', 'unknown', 'unavailable'] and
            device_mode_age_s >= line_lost_s and prio_age_s >= line_lost_s }}
+      # MANTENIMENTO: già in mantenimento, oppure in SCARICA con la PI30 sulla
+      # rete da hold_entry_s e la batteria vicina alla tensione minima. In SBU
+      # la PI30 passa sulla rete alla tensione di recharge; un sovraccarico con
+      # la batteria carica non conta.
+      hold_entry_s: 60
+      hold_margin_v: 0.4
+      hold_wanted: >-
+        {{ in_hold or (in_discharge and pi30_device_mode == 'Line mode' and
+           device_mode_age_s >= hold_entry_s and prio_age_s >= hold_entry_s and
+           pi30_voltage is not none and pi30_voltage <= hold_v + hold_margin_v) }}
   # 0) PI30 non raggiungibile (sensori dell'inverter non disponibili, per
   # esempio alla riconnessione di ESPHome): niente da scrivere, aspetta.
   - if:
@@ -267,6 +299,7 @@ actions:
         data:
           variables:
             current_limit: "{{ hold_limit }}"
+            keep_on_grid: "{{ hold_wanted }}"
       - wait_template: "{{ is_state('script.pi30_battery_discharge', 'off') }}"
         timeout: 120
       - stop: Ricarica spenta, batteria alla soglia o potenze illeggibili, scarica
@@ -282,7 +315,7 @@ actions:
           notification_id: pi30_fuori_rete
           title: PI30 non sta usando la rete
           message: >-
-            La PI30 è in CARICA (uscita "rete prima") ma è in {{ pi30_device_mode }} da
+            La PI30 è in {{ 'MANTENIMENTO' if in_hold else 'CARICA' }} (uscita "rete prima") ma è in {{ pi30_device_mode }} da
             {{ (device_mode_age_s / 60) | round(0) | int }} minuti: la batteria
             alimenta i carichi invece di caricarsi.
             {%- set gv = states('sensor.pi30_grid_voltage') %}
@@ -298,7 +331,7 @@ actions:
               entity_id: select.pi30_set_max_utility_charging_current
             data:
               option: "2"
-      - stop: PI30 in CARICA ma non sulla rete, nessuna modulazione
+      - stop: PI30 in uscita rete prima ma non sulla rete, nessuna modulazione
   # In Line mode: togli l'avviso, entro 15 minuti dal ritorno sulla rete o
   # dall'ultimo cambio di modalità
   - if:
@@ -341,17 +374,18 @@ actions:
         data:
           variables:
             current_limit: "{{ hold_limit }}"
+            keep_on_grid: "{{ hold_wanted }}"
       - wait_template: "{{ is_state('script.pi30_battery_discharge', 'off') }}"
         timeout: 120
       - stop: Carica al minimo ma prelievo, GoodWe in scarica o GoodWe da ricaricare, scarica
-  # 5) RESTA O VA IN SCARICA: passata a SCARICA da meno di charge_dwell_s
-  # (anti-oscillazione), oppure fuori dalla CARICA senza surplus (GoodWe non
-  # piena, GoodWe che eroga, immissione insufficiente). Lo script tiene
-  # aggiornata la tensione minima.
+  # 5) RESTA O VA IN SCARICA: passata a SCARICA o MANTENIMENTO da meno di
+  # charge_dwell_s (anti-oscillazione), oppure fuori dalla CARICA senza
+  # surplus (GoodWe non piena, GoodWe che eroga, immissione insufficiente).
+  # Lo script tiene aggiornata la tensione minima.
   - if:
       - condition: template
         value_template: >-
-          {{ (in_discharge and prio_age_s < charge_dwell_s) or (not in_charge and not charge_ok) }}
+          {{ ((in_discharge or in_hold) and prio_age_s < charge_dwell_s) or (not in_charge and not charge_ok) }}
     then:
       - action: script.turn_on
         target:
@@ -359,11 +393,13 @@ actions:
         data:
           variables:
             current_limit: "{{ hold_limit }}"
+            keep_on_grid: "{{ hold_wanted }}"
       - wait_template: "{{ is_state('script.pi30_battery_discharge', 'off') }}"
         timeout: 120
-      - stop: In scarica da meno di 10 minuti, o niente surplus, scarica
-  # 6) CARICA. Lo script rimette bulk e float di carica e, entrando, porta la
-  # corrente da rete a 2A: la modulazione parte dall'esecuzione successiva.
+      - stop: In scarica o mantenimento da meno di 10 minuti, o niente surplus, scarica
+  # 6) CARICA. Lo script rimette bulk e float di carica e, entrando (anche dal
+  # MANTENIMENTO), porta la corrente da rete a 2A: la modulazione parte
+  # dall'esecuzione successiva.
   - action: script.turn_on
     target:
       entity_id: script.pi30_battery_charge

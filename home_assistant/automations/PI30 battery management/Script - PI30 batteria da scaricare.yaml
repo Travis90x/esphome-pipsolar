@@ -1,14 +1,16 @@
 alias: PI30 batteria da scaricare
 description: >-
-  IN SCARICA e MANTENIMENTO. Uscita SBU, carica "solare + rete", bulk e
-  float alla tensione minima (aiutante "PI30 batteria tensione di
-  mantenimento", senza: 25.5V; mai sotto 24.0V), corrente da rete 10A (meno con current_limit, il
-  limite di temperatura dell'automazione PI30 Batteria MAN). La batteria
-  alimenta i carichi finché scende alla tensione di recharge dell'inverter;
-  lì la PI30 passa i carichi sulla rete e il caricabatterie tiene la batteria
-  alla tensione minima, coprendo solo l'autoconsumo dell'inverter (circa
-  50W) e la scarica interna: non la ricarica oltre e non la lascia scendere
-  fino allo stacco del BMS. La tensione minima deve restare sotto la tensione
+  IN SCARICA e MANTENIMENTO. Carica "solare + rete", bulk e float alla
+  tensione minima (aiutante "PI30 batteria tensione di mantenimento", senza:
+  25.5V; mai sotto 24.0V), corrente da rete 10A (meno con current_limit, il
+  limite di temperatura dell'automazione PI30 Batteria MAN). IN SCARICA
+  uscita SBU: la batteria alimenta i carichi finché scende alla tensione di
+  recharge dell'inverter, poi la PI30 passa i carichi sulla rete.
+  MANTENIMENTO (keep_on_grid, lo decide l'automazione): uscita "rete prima",
+  i carichi restano sulla rete e il caricabatterie tiene la batteria alla
+  tensione minima, coprendo solo l'autoconsumo dell'inverter (circa 50W) e
+  la scarica interna: non la ricarica oltre e non la lascia scendere fino
+  allo stacco del BMS. In SBU la PI30 tornava a batteria ogni 10 minuti. La tensione minima deve restare sotto la tensione
   di redischarge dell'inverter, altrimenti in SBU la PI30 torna a scaricare
   e la rete la ricarica a ogni ciclo. Scrive solo quello che è diverso: senza
   niente da scrivere finisce subito. Prima bulk e float, poi le priorità, così
@@ -20,6 +22,7 @@ sequence:
       hold_current: >-
         {{ ([10, current_limit | int(10)] | min) if current_limit is defined else 10 }}
       bulk_now: "{{ states('sensor.pi30_battery_bulk_voltage') | float(0) | round(1) }}"
+      on_grid: "{{ (keep_on_grid | bool) if keep_on_grid is defined else false }}"
   # Bulk e float alla tensione minima: scendendo prima il float, salendo
   # prima il bulk
   - if:
@@ -65,11 +68,12 @@ sequence:
             data:
               value: "{{ hold }}"
           - delay: "00:00:02"
-  # Priorità: SBU, carica "solare + rete"
+  # Priorità: uscita SBU (SCARICA) o "rete prima" (MANTENIMENTO), carica
+  # "solare + rete"
   - if:
       - condition: template
         value_template: >-
-          {{ not (states('sensor.pi30_output_source_priority') | float(9) == 2.0
+          {{ not (states('sensor.pi30_output_source_priority') | float(9) == (0.0 if on_grid else 2.0)
              and states('sensor.pi30_charger_source_priority') | float(9) == 2.0) }}
     then:
       - action: button.press
@@ -78,7 +82,9 @@ sequence:
       - delay: "00:00:01"
       - action: switch.turn_on
         target:
-          entity_id: switch.pi30_output_priority_sbu
+          entity_id: >-
+            {{ 'switch.pi30_output_priority_utility' if on_grid
+               else 'switch.pi30_output_priority_sbu' }}
       - delay: "00:00:02"
   # Corrente da rete per il mantenimento
   - if:

@@ -386,10 +386,12 @@ EVERY RUN
     │
     ├─ pack above 25.5V: powers the loads ..............► helper: IN SCARICA
     │
-    ├─ pack down to 25.5V (recharge voltage):
+    ├─ pack down to 25.5V (recharge voltage, which the
+    │  script sets to the hold voltage, in 0.5V steps):
     │  the PI30 moves the loads to the grid (Line mode)
     │
-    ├─ on the grid for 60 s, pack within 0.4V of 25.5V:
+    ├─ on the grid for 60 s, pack within 0.8V of the
+    │  recharge voltage, or pack at 25.5V for 1 minute:
     │  HOLD (utility first, same bulk, float and 10A):
     │  loads stay on the grid, charger holding
     │  it at 25.5V covering the ~50 W ..................► helper: MANTENIMENTO
@@ -417,9 +419,13 @@ EVERY RUN
   and bulk reached 29.0V within a minute (five times in 40 minutes on 29
   Sep). With entry at 2A and the 10-minute anti-oscillation it is not needed.
 - **DISCHARGE and HOLD** are the same script. In DISCHARGE (SBU) the pack
-  powers the loads until it falls to the inverter's recharge voltage; there
-  the PI30 moves the loads to the grid. After 60 seconds in Line mode, with
-  the pack within 0.4V of the hold voltage, the automation calls the script
+  powers the loads until it falls to the inverter's recharge voltage, which
+  the script writes equal to the hold voltage (the PI30 takes 22.0-25.5V in
+  0.5V steps: 25.3V becomes 25.0V, 25.8V becomes 25.5V); there the PI30
+  moves the loads to the grid. After 60 seconds in Line mode, with the pack
+  within 0.8V of the recharge voltage (an overload with a charged pack does
+  not count), or with the pack at the hold voltage for 1 minute even
+  without the grid (trigger `sotto_minima`), the automation calls the script
   with `keep_on_grid: true`: output "utility first", HOLD. With bulk and
   float at the hold voltage the charger keeps the pack there, covering only
   the inverter's own consumption (about 50 W) and self-discharge: no
@@ -460,7 +466,7 @@ few seconds.
 | :--- | :--- | :--- |
 | `input_boolean.pi30_battery_recharge` ("PI30 battery recharge", Toggle) | off: always DISCHARGE, the pack is never recharged but stays at the hold voltage | as on |
 | `input_number.pi30_charge_bulk_voltage` / `input_number.pi30_charge_float_voltage` ("PI30 charge bulk voltage" / "PI30 charge float voltage") | charging bulk and float, written by PI30 battery charge: change them here, not on the inverter | 29.0 / 27.0V |
-| `input_number.pi30_keep_battery_live` ("PI30 keep battery live") | hold voltage of DISCHARGE and HOLD; at least 24.0V and **below the inverter's redischarge voltage**, or in SBU the PI30 goes back to discharging and the grid recharges it every cycle | 25.5V |
+| `input_number.pi30_keep_battery_live` ("PI30 keep battery live") | hold voltage of DISCHARGE and HOLD: the pack discharges down to it (it is also written as the inverter's recharge voltage, in 0.5V steps up to 25.5V) and is held there; at least 24.0V and **below the inverter's redischarge voltage**, or in SBU the PI30 goes back to discharging and the grid recharges it every cycle | 25.5V |
 | `input_number.pi30_max_manual_current` ("PI30 Max Manual Current") | highest utility current step (an in-between value counts as the lower step, 35 = 30) | 40A |
 | `input_number.pi30_charging_max_temperature` ("PI30 Charging Max Temperature") | optional heat-sink temperature limit (below) | no limit |
 
@@ -600,6 +606,7 @@ triggers:
       seconds: 10
   - trigger: template               # PI30 pack at the threshold for 1 minute
   - trigger: template               # heat sink at the temperature limit
+  - trigger: template               # PI30 pack at the hold voltage for 1 minute
   - trigger: state                  # PI30 in Line mode for 60 s (HOLD)
     entity_id: sensor.pi30_device_mode
     to: Line mode

@@ -393,10 +393,12 @@ OGNI ESECUZIONE
     │
     ├─ batteria sopra 25.5V: alimenta i carichi ......► sensore: IN SCARICA
     │
-    ├─ batteria scesa a 25.5V (tensione di recharge):
+    ├─ batteria scesa a 25.5V (tensione di recharge, che
+    │  lo script porta alla minima, a passi di 0.5V):
     │  la PI30 passa i carichi sulla rete (Line mode)
     │
-    ├─ sulla rete da 60 s, batteria entro 0.4V da 25.5V:
+    ├─ sulla rete da 60 s, batteria entro 0.8V dalla
+    │  recharge, oppure batteria a 25.5V da 1 minuto:
     │  MANTENIMENTO (rete prima, stessi bulk, float e 10A):
     │  i carichi restano sulla rete e il caricabatterie
     │  la tiene a 25.5V coprendo i ~50W ...............► sensore: MANTENIMENTO
@@ -426,8 +428,12 @@ OGNI ESECUZIONE
   10 minuti di anti-oscillazione non serve più.
 - **IN SCARICA e MANTENIMENTO** sono lo stesso script. IN SCARICA (SBU) la
   batteria alimenta i carichi finché scende alla tensione di recharge
-  dell'inverter; lì la PI30 passa i carichi sulla rete. Dopo 60 secondi in
-  Line mode, con la batteria entro 0.4V dalla tensione minima, l'automazione
+  dell'inverter, che lo script scrive uguale alla tensione minima (la PI30
+  accetta 22.0-25.5V a passi di 0.5V: 25.3V diventa 25.0V, 25.8V diventa
+  25.5V); lì la PI30 passa i carichi sulla rete. Dopo 60 secondi in Line
+  mode, con la batteria entro 0.8V dalla recharge (un sovraccarico con la
+  batteria carica non conta), oppure con la batteria alla tensione minima da
+  1 minuto anche senza rete (trigger `sotto_minima`), l'automazione
   chiama lo script con `keep_on_grid: true`: uscita "rete prima",
   MANTENIMENTO. Con bulk e float alla tensione minima il caricabatterie la
   tiene lì coprendo solo l'autoconsumo dell'inverter (circa 50W) e la scarica
@@ -468,7 +474,7 @@ dalla tensione minima: vicino al minimo alternava `IN SCARICA` e
 | :--- | :--- | :--- |
 | `input_boolean.pi30_battery_recharge` ("PI30 Ricarica Batteria", Commutatore) | spento: sempre SCARICA, la batteria non viene mai ricaricata ma resta alla tensione minima | come acceso |
 | `input_number.pi30_charge_bulk_voltage` / `input_number.pi30_charge_float_voltage` ("PI30 bulk carica" / "PI30 float carica") | bulk e float di carica, scritti da PI30 batteria da caricare: cambiali qui, non sull'inverter | 29.0 / 27.0V |
-| `input_number.pi30_keep_battery_live` ("PI30 batteria tensione di mantenimento") | tensione minima di SCARICA e MANTENIMENTO; almeno 24.0V e **sotto la tensione di redischarge** dell'inverter, altrimenti in SBU la PI30 torna a scaricare e la rete la ricarica a ogni ciclo | 25.5V |
+| `input_number.pi30_keep_battery_live` ("PI30 batteria tensione di mantenimento") | tensione minima di SCARICA e MANTENIMENTO: la batteria si scarica fino a lì (viene scritta anche come tensione di recharge dell'inverter, a passi di 0.5V fino a 25.5V) e lì resta; almeno 24.0V e **sotto la tensione di redischarge** dell'inverter, altrimenti in SBU la PI30 torna a scaricare e la rete la ricarica a ogni ciclo | 25.5V |
 | `input_number.pi30_max_manual_current` ("PI30 corrente massima manuale") | step massimo della corrente da rete (un valore in mezzo vale come lo step inferiore, 35 = 30) | 40A |
 | `input_number.pi30_charging_max_temperature` ("PI30 temperatura massima carica") | facoltativo, limite di temperatura del dissipatore (sotto) | nessun limite |
 
@@ -612,6 +618,7 @@ triggers:
       seconds: 10
   - trigger: template               # batteria PI30 alla soglia da 1 minuto
   - trigger: template               # dissipatore al limite di temperatura
+  - trigger: template               # batteria PI30 alla tensione minima da 1 minuto
   - trigger: state                  # PI30 in Line mode da 60 s (MANTENIMENTO)
     entity_id: sensor.pi30_device_mode
     to: Line mode

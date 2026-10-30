@@ -15,9 +15,11 @@
 #
 # 3) Numero "PI30 batteria tensione di mantenimento"
 #    (input_number.pi30_keep_battery_live)
-#    Tensione minima: PI30 batteria da scaricare porta bulk e float a questo
-#    valore, così quando l'inverter passa alla rete il caricabatterie tiene
-#    la batteria qui. Minimo 24.0V (il PI30 non accetta di meno), senza:
+#    Tensione minima: la batteria si scarica fino a qui e qui resta. PI30
+#    batteria da scaricare porta bulk e float a questo valore e scrive la
+#    tensione di recharge dell'inverter uguale (a passi di 0.5V, fino a
+#    25.5V): in SBU la PI30 passa alla rete qui e il caricabatterie tiene la
+#    batteria qui. Minimo 24.0V (il PI30 non accetta di meno), senza:
 #    25.5V. Meglio sopra i 25.5V: a 24.0V il pacco è al 2% e la curva LiFePO4
 #    è ripida, ogni impulso del caricabatterie la sposta di 0.5V (storico
 #    7-8/10/2026); a 25.5-25.8V la curva è piatta. Deve restare SOTTO la

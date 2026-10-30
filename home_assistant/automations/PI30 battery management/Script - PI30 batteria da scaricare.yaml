@@ -3,18 +3,20 @@ description: >-
   IN SCARICA e MANTENIMENTO. Carica "solare + rete", bulk e float alla
   tensione minima (aiutante "PI30 batteria tensione di mantenimento", senza:
   25.5V; mai sotto 24.0V), corrente da rete 10A (meno con current_limit, il
-  limite di temperatura dell'automazione PI30 Batteria MAN). IN SCARICA
-  uscita SBU: la batteria alimenta i carichi finché scende alla tensione di
-  recharge dell'inverter, poi la PI30 passa i carichi sulla rete.
-  MANTENIMENTO (keep_on_grid, lo decide l'automazione): uscita "rete prima",
-  i carichi restano sulla rete e il caricabatterie tiene la batteria alla
-  tensione minima, coprendo solo l'autoconsumo dell'inverter (circa 50W) e
-  la scarica interna: non la ricarica oltre e non la lascia scendere fino
-  allo stacco del BMS. In SBU la PI30 tornava a batteria ogni 10 minuti. La tensione minima deve restare sotto la tensione
-  di redischarge dell'inverter, altrimenti in SBU la PI30 torna a scaricare
-  e la rete la ricarica a ogni ciclo. Scrive solo quello che è diverso: senza
-  niente da scrivere finisce subito. Prima bulk e float, poi le priorità, così
-  il caricabatterie non carica mai oltre la tensione minima.
+  limite di temperatura dell'automazione PI30 Batteria MAN). Scrive anche la
+  tensione di recharge dell'inverter alla tensione minima (a passi di 0.5V,
+  per difetto, tra 22.0V e 25.5V): IN SCARICA uscita SBU, la batteria
+  alimenta i carichi finché scende lì, poi la PI30 passa i carichi sulla
+  rete. MANTENIMENTO (keep_on_grid, lo decide l'automazione): uscita "rete
+  prima", i carichi restano sulla rete e il caricabatterie tiene la batteria
+  alla tensione minima, coprendo solo l'autoconsumo dell'inverter (circa
+  50W) e la scarica interna: non la ricarica oltre e non la lascia scendere
+  fino allo stacco del BMS. In SBU la PI30 tornava a batteria ogni 10
+  minuti. La tensione minima deve restare sotto la tensione di redischarge
+  dell'inverter, altrimenti in SBU la PI30 torna a scaricare e la rete la
+  ricarica a ogni ciclo. Scrive solo quello che è diverso: senza niente da
+  scrivere finisce subito. Prima bulk, float e recharge, poi le priorità,
+  così il caricabatterie non carica mai oltre la tensione minima.
 sequence:
   - variables:
       hold: >-
@@ -23,6 +25,11 @@ sequence:
         {{ ([10, current_limit | int(10)] | min) if current_limit is defined else 10 }}
       bulk_now: "{{ states('sensor.pi30_battery_bulk_voltage') | float(0) | round(1) }}"
       on_grid: "{{ (keep_on_grid | bool) if keep_on_grid is defined else false }}"
+  # Recharge in un secondo blocco perché legge hold: così non conta l'ordine
+  # delle chiavi dentro un blocco. La PI30 accetta 22.0-25.5V a passi di 0.5V
+  - variables:
+      recharge_target: >-
+        {{ ([[((hold * 2) | round(0, 'floor')) / 2, 22.0] | max, 25.5] | min) | round(1) }}
   # Bulk e float alla tensione minima: scendendo prima il float, salendo
   # prima il bulk
   - if:
@@ -68,6 +75,19 @@ sequence:
             data:
               value: "{{ hold }}"
           - delay: "00:00:02"
+  # Tensione di recharge alla tensione minima: in SBU la PI30 passa sulla
+  # rete lì, invece che al valore impostato sull'inverter
+  - if:
+      - condition: template
+        value_template: >-
+          {{ states('sensor.pi30_battery_recharge_voltage') | float(0) | round(1) != recharge_target }}
+    then:
+      - action: number.set_value
+        target:
+          entity_id: number.pi30_set_battery_recharge_voltage
+        data:
+          value: "{{ recharge_target }}"
+      - delay: "00:00:02"
   # Priorità: uscita SBU (SCARICA) o "rete prima" (MANTENIMENTO), carica
   # "solare + rete"
   - if:

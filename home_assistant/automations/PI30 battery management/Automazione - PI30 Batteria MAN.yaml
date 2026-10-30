@@ -11,9 +11,11 @@ description: >-
   script.pi30_battery_discharge (IN SCARICA e MANTENIMENTO): carica
   "solare + rete", bulk e float alla tensione minima, 10A. IN SCARICA uscita
   SBU: la batteria alimenta i carichi finché scende alla tensione di
-  recharge, poi la PI30 passa sulla rete. MANTENIMENTO: appena la PI30 è
-  sulla rete da 60 s con la batteria entro 0.4V dalla tensione minima,
-  uscita "rete prima" (keep_on_grid): i carichi restano sulla rete e il
+  recharge, che lo script porta alla tensione minima, poi la PI30 passa
+  sulla rete. MANTENIMENTO: appena la PI30 è sulla rete da 60 s con la
+  batteria entro 0.8V dalla tensione di recharge, oppure con la batteria
+  alla tensione minima da 1 minuto anche senza rete, uscita "rete prima"
+  (keep_on_grid): i carichi restano sulla rete e il
   caricabatterie tiene la batteria alla tensione minima, coprendo solo
   l'autoconsumo (circa 50W), fino alla prossima CARICA. In SBU la PI30
   tornava a batteria dopo 10 minuti di rete e ci restava da 30 s a 5 minuti
@@ -89,6 +91,13 @@ triggers:
     value_template: >-
       {{ states('sensor.pi30_heat_sink_temperature') | float(0) >=
       states('input_number.pi30_charging_max_temperature') | float(999) }}
+  - trigger: template
+    id: sotto_minima
+    value_template: >-
+      {{ states('sensor.pi30_battery_voltage') | float(99) <=
+      [states('input_number.pi30_keep_battery_live') | float(25.5), 24.0] | max }}
+    for:
+      minutes: 1
   - trigger: state
     id: sulla_rete
     entity_id: sensor.pi30_device_mode
@@ -268,15 +277,23 @@ actions:
            pi30_device_mode not in ['Line mode', 'unknown', 'unavailable'] and
            device_mode_age_s >= line_lost_s and prio_age_s >= line_lost_s }}
       # MANTENIMENTO: già in mantenimento, oppure in SCARICA con la PI30 sulla
-      # rete da hold_entry_s e la batteria vicina alla tensione minima. In SBU
-      # la PI30 passa sulla rete alla tensione di recharge; un sovraccarico con
-      # la batteria carica non conta.
+      # rete da hold_entry_s e la batteria entro hold_margin_v dalla tensione
+      # di recharge (lo script la porta alla tensione minima: in SBU la PI30
+      # passa sulla rete lì; un sovraccarico con la batteria carica non
+      # conta), oppure con la batteria alla tensione minima da 1 minuto
+      # (trigger sotto_minima), anche se la PI30 non è passata sulla rete.
       hold_entry_s: 60
-      hold_margin_v: 0.4
+      hold_margin_v: 0.8
+      recharge_v: "{{ states('sensor.pi30_battery_recharge_voltage') | float(25.5) }}"
+      at_hold_floor: >-
+        {{ (trigger.id | default('')) == 'sotto_minima' and
+           pi30_voltage is not none and pi30_voltage <= hold_v }}
       hold_wanted: >-
-        {{ in_hold or (in_discharge and pi30_device_mode == 'Line mode' and
-           device_mode_age_s >= hold_entry_s and prio_age_s >= hold_entry_s and
-           pi30_voltage is not none and pi30_voltage <= hold_v + hold_margin_v) }}
+        {{ in_hold or (in_discharge and
+           ((pi30_device_mode == 'Line mode' and
+             device_mode_age_s >= hold_entry_s and prio_age_s >= hold_entry_s and
+             pi30_voltage is not none and pi30_voltage <= recharge_v + hold_margin_v)
+            or at_hold_floor)) }}
   # 0) PI30 non raggiungibile (sensori dell'inverter non disponibili, per
   # esempio alla riconnessione di ESPHome): niente da scrivere, aspetta.
   - if:

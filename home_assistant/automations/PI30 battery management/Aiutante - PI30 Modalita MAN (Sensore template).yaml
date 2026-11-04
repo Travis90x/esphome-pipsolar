@@ -3,10 +3,10 @@
 # per pochi istanti mentre gira.
 #
 #   IN CARICA     uscita "rete prima", carica "solare + rete", bulk di
-#                 carica (PI30 batteria da caricare), caricabatterie in bulk
-#   PIENA         come IN CARICA, ma con il caricabatterie in float: la
-#                 batteria è piena e i carichi vanno sul surplus
-#   IN SCARICA    uscita SBU, la batteria alimenta i carichi
+#                 carica (PI30 batteria da caricare). Il passaggio da bulk a
+#                 float lo fa da solo il caricabatterie e il sensore resta
+#                 IN CARICA (fino al 04/11/2026 in float mostrava PIENA)
+#   IN SCARICA   uscita SBU, la batteria alimenta i carichi
 #                 (PI30 batteria da scaricare, batteria sopra il minimo)
 #   MANTENIMENTO  batteria scarica tenuta alla tensione minima, carichi sulla
 #                 rete: uscita "rete prima" con il bulk alla tensione minima
@@ -48,7 +48,6 @@ template:
           {% set bulk_carica = states('input_number.pi30_charge_bulk_voltage') | float(29.0) %}
           {% set bulk = states('sensor.pi30_battery_bulk_voltage') | float(0) %}
           {% if o == 0 and c == 2 and bulk < (minimo + bulk_carica) / 2 %}MANTENIMENTO
-          {% elif o == 0 and c == 2 and is_state('binary_sensor.pi30_charging_to_floating_mode', 'on') %}PIENA
           {% elif o == 0 and c == 2 %}IN CARICA
           {% elif o == 2 and is_state('sensor.pi30_device_mode', 'Line mode') %}MANTENIMENTO
           {% elif o == 2 %}IN SCARICA

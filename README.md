@@ -297,7 +297,7 @@ The scripts and the automation are pasted with "Edit in YAML". The two
 `Aiutante`/`Aiutanti` files are not: they say what to create under Settings >
 Devices & services > Helpers > Create helper, and their YAML block is only for
 `configuration.yaml`. The file names, the comments inside the files and the
-mode values (`IN CARICA`, `PIENA`...) are in Italian, as in the owner's Home
+mode values (`IN CARICA`, `IN SCARICA`...) are in Italian, as in the owner's Home
 Assistant, where helpers and scripts also have Italian names; this README
 uses their English names. A helper created in the UI with the English name
 below gets the right entity id; with any other name, open it (gear icon) and
@@ -375,7 +375,8 @@ EVERY RUN
 │   │     OR GoodWe below 20%) for 60 s
 │   │
 │   └─ full pack: the charger goes from bulk to float
-│      by itself and holds it there ...................► helper: PIENA
+│      by itself and holds it there; the automation
+│      does not step in ................................► helper: IN CARICA
 │
 └─ B. NO SURPLUS
     │  (GoodWe below 20%, GoodWe delivering, import, not enough export)
@@ -405,15 +406,16 @@ EVERY RUN
 
 | Mode | Script | Output | Charger | Bulk and float | Utility current |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| IN CARICA (charge, and PIENA, full) | PI30 battery charge | utility first | solar + utility | charging values (29.0 / 27.0V) | from 2A, modulated |
+| IN CARICA (charge) | PI30 battery charge | utility first | solar + utility | charging values (29.0 / 27.0V) | from 2A, modulated |
 | IN SCARICA (discharge) | PI30 battery discharge | SBU | solar + utility | at the hold voltage (25.5V) | 10A |
 | MANTENIMENTO (hold) | PI30 battery discharge, with `keep_on_grid: true` | utility first | solar + utility | at the hold voltage (25.5V) | 10A |
 
 - **CHARGE**: the PI30 loads go to the grid and the pack charges with the
   surplus. On entry the utility current starts at 2A; then the automation
   sets it (below). The pack looks after itself: the charger goes from bulk
-  to float and, once full, holds it in float with the loads on the surplus.
-  Until 24 Oct 2026 there was a separate FULL mode (utility first, solar
+  to float and, once full, holds it in float with the loads on the surplus;
+  the helper stays `IN CARICA` even in float (until 4 Nov 2026 it showed
+  `PIENA`). Until 24 Oct 2026 there was a separate FULL mode (utility first, solar
   only), from when every return to CHARGE on a full pack started at 15-30A
   and bulk reached 29.0V within a minute (five times in 40 minutes on 29
   Sep). With entry at 2A and the 10-minute anti-oscillation it is not needed.
@@ -451,7 +453,9 @@ The entity ids must be `script.pi30_battery_charge` and
 moment at each run. The mode is read from the priorities; the optional
 `PI30 MAN mode` helper (Template > Sensor, file
 `Aiutante - PI30 Modalita MAN (Sensore template).yaml`) shows it as
-`IN CARICA`, `PIENA` (in CHARGE with the charger in float), `IN SCARICA` or
+`IN CARICA` (also with the charger in float: until 4 Nov 2026 it then showed
+`PIENA`; `binary_sensor.pi30_charging_to_floating_mode` shows the float),
+`IN SCARICA` or
 `MANTENIMENTO` (utility first with the bulk at the hold voltage, or SBU with
 the PI30 already on the grid, in the minute before the automation switches
 it to utility first), `ALTRO` for priorities set by hand. Until 28 Oct 2026
@@ -552,6 +556,21 @@ which also fired with the meter at zero and the GoodWe already delivering
 with the GoodWe full that was a 2-40-2A sawtooth every 1-3 minutes (114
 current changes and 20 crashes to 2A between 16:00 and 17:00 on 22 Oct), and
 the same value was rewritten to the inverter at every run.
+
+**Early float (seen on 3 Nov 2026, not handled).**
+`binary_sensor.pi30_charging_to_floating_mode` (which until 4 Nov 2026 made
+the helper show `PIENA`) turned `on` in CHARGE 14 times between 26 Oct and
+3 Nov. In 6 the pack had reached bulk. In 8 it was early: pack 0.6-1.8V below
+bulk (26.5-26.9V with bulk 27.5V), and in 7 of those 8 the utility current
+had been taken to 2A in the 2 minutes before (the eighth, 1 Nov at 14:29, was
+not checked). In float the inverter holds the float voltage whatever the
+current limit is (3 Nov, 12:34-12:39: 26.8V with the limit from 40 to 60A,
+real current from 33A to 27A) and does not go back to bulk by itself: the
+sensor stayed `on` from 12:31 to 13:23, when the output priority was set by
+hand to SBU and back to utility first. The inverter's exact rule is not
+known: at 26.0-26.4V the current was between 2 and 10A for 6-9 minutes
+without it firing. The automation does not step in: the end of charge is the
+inverter's.
 
 **Temperature limit.** With `input_number.pi30_charging_max_temperature` (for
 example 70°C) and `sensor.pi30_heat_sink_temperature`: from the limit

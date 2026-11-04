@@ -382,7 +382,8 @@ OGNI ESECUZIONE
 │   │     O GoodWe sotto il 20%) per 60 s
 │   │
 │   └─ batteria piena: il caricabatterie passa da solo
-│      da bulk a float e la tiene lì ..................► sensore: PIENA
+│      da bulk a float e la tiene lì; l'automazione
+│      non interviene ..................................► sensore: IN CARICA
 │
 └─ B. NO SURPLUS
     │  (GoodWe sotto il 20%, GoodWe che eroga, prelievo, immissione insufficiente)
@@ -412,7 +413,7 @@ OGNI ESECUZIONE
 
 | Modalità | Script | Uscita | Carica | Bulk e float | Corrente da rete |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| IN CARICA (e PIENA) | PI30 batteria da caricare | rete prima | solare + rete | di carica (29.0 / 27.0V) | da 2A, modulata |
+| IN CARICA | PI30 batteria da caricare | rete prima | solare + rete | di carica (29.0 / 27.0V) | da 2A, modulata |
 | IN SCARICA | PI30 batteria da scaricare | SBU | solare + rete | alla tensione minima (25.5V) | 10A |
 | MANTENIMENTO | PI30 batteria da scaricare, con `keep_on_grid: true` | rete prima | solare + rete | alla tensione minima (25.5V) | 10A |
 
@@ -420,7 +421,8 @@ OGNI ESECUZIONE
   con il surplus. Entrando, la corrente da rete parte da 2A; poi la regola
   l'automazione (vedi sotto). La batteria si gestisce da sola: il
   caricabatterie passa da bulk a float e, quando è piena, la tiene in float
-  con i carichi sul surplus. Fino al 24/10/2026 c'era una modalità PIENA a
+  con i carichi sul surplus; il sensore resta `IN CARICA` anche in float
+  (fino al 04/11/2026 mostrava `PIENA`). Fino al 24/10/2026 c'era una modalità PIENA a
   parte (uscita "rete prima", carica "solo solare"), nata quando ogni ritorno
   in CARICA su un pacco pieno ripartiva a 15-30A e il bulk arrivava a 29.0V
   in un minuto (il 29/09 cinque volte in 40 minuti). Con l'ingresso a 2A e i
@@ -459,8 +461,10 @@ batteria a 24.0V non è partito niente). Gli ID entità devono essere
 pochi istanti a ogni esecuzione. La modalità si legge dalle priorità;
 l'aiutante facoltativo `PI30 Modalità MAN` (Template > Sensore, file
 `Aiutante - PI30 Modalita MAN (Sensore template).yaml`) la mostra come
-`IN CARICA`, `PIENA` (in CARICA con il caricabatterie in float), `IN SCARICA`
-o `MANTENIMENTO` (uscita "rete prima" con il bulk alla tensione minima,
+`IN CARICA` (anche con il caricabatterie in float: fino al 04/11/2026 allora
+mostrava `PIENA`; chi vuole vedere il float ha
+`binary_sensor.pi30_charging_to_floating_mode`), `IN SCARICA` o
+`MANTENIMENTO` (uscita "rete prima" con il bulk alla tensione minima,
 oppure uscita SBU con la PI30 già sulla rete, nel minuto prima che
 l'automazione passi a "rete prima"), `ALTRO` per priorità impostate a mano.
 Fino al 28/10/2026 contava come `MANTENIMENTO` anche la batteria entro 0.3V
@@ -562,6 +566,21 @@ Prima (fino al 23/10/2026) si saliva con "contatore < 300W e GoodWe <
 piena era un dente di sega 2-40-2A ogni 1-3 minuti (il 22/10 tra le 16 e le
 17: 114 cambi di corrente, 20 crolli a 2A), e lo stesso valore veniva
 riscritto sull'inverter a ogni esecuzione.
+
+**Float anticipato (osservato il 03/11/2026, non gestito).**
+`binary_sensor.pi30_charging_to_floating_mode` (che fino al 04/11/2026 faceva
+mostrare `PIENA`) è passato a `on` in CARICA 14 volte tra il 26/10 e il
+03/11. In 6 la batteria era arrivata al bulk. In 8 era anticipato: batteria
+0.6-1.8V sotto il bulk (26.5-26.9V con bulk 27.5V), e in 7 di questi 8 la
+corrente da rete era stata portata a 2A nei 2 minuti prima (l'ottavo, il
+01/11 alle 14:29, non controllato). In float l'inverter tiene la tensione di
+float qualunque sia il limite di corrente (03/11, 12:34-12:39: 26.8V con il
+limite da 40 a 60A, corrente reale da 33A a 27A) e non torna al bulk da solo:
+il sensore è rimasto `on` dalle 12:31 alle 13:23, quando la priorità di
+uscita è stata portata a mano su SBU e di nuovo su rete prima. La regola
+esatta dell'inverter non è nota: a 26.0-26.4V la corrente è stata tra 2 e 10A
+per 6-9 minuti senza che scattasse. L'automazione non interviene: il fine
+carica lo gestisce l'inverter.
 
 **Limite di temperatura.** Con `input_number.pi30_charging_max_temperature`
 (per esempio 70°C) e `sensor.pi30_heat_sink_temperature`: dal limite in

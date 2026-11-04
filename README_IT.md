@@ -351,7 +351,7 @@ OGNI ESECUZIONE
 │   └─ Contatore o potenza GoodWe illeggibili da > 10 min ..► SCARICA
 │
 ├─ A. C'È SURPLUS
-│   │  = GoodWe piena (100%, o 99% ferma)
+│   │  = GoodWe almeno al 20% (anche mentre ricarica)
 │   │  E batteria GoodWe che non eroga (< 200W)
 │   │  E immissione in rete che copre i carichi della PI30 + 60W,
 │   │    oppure ≥ 250W (al limite la GoodWe taglia il fotovoltaico)
@@ -360,7 +360,7 @@ OGNI ESECUZIONE
 │   │  entra sempre a 2A
 │   │
 │   ├─ SALE di uno step (2→10→20→30→40→50→60, max "PI30 corrente massima manuale")
-│   │     se GoodWe piena
+│   │     se GoodWe almeno al 20%
 │   │     E immissione ≥ potenza dello step successivo (o ≥ 250W)
 │   │     E GoodWe ferma (< 100W) E corrente ferma da 20 s
 │   │
@@ -369,24 +369,23 @@ OGNI ESECUZIONE
 │   │
 │   ├─ SCENDE SUBITO A 2A
 │   │     se manca una lettura: SOC o tensione GoodWe, tensione batteria PI30
-│   │     o se la GoodWe scende sotto il 98% (sta ricaricando: ha la precedenza)
+│   │     o se la GoodWe scende sotto il 20% (troppo scarica: ha la precedenza)
 │   │
 │   ├─ SCENDE GRADUALMENTE, uno step ogni 2 min, fino a 2A
 │   │     se il dissipatore è al limite di temperatura, o non si legge
 │   │
 │   ├─ RESTA, senza riscrivere nulla
-│   │     negli altri casi (anche con la GoodWe al 98-99%:
-│   │     non sale e non esce, niente oscillazioni 99 ↔ 100)
+│   │     negli altri casi
 │   │
 │   ├─ "A ZERO" = esce in SCARICA (sotto 2A l'inverter non va)
 │   │     se è già a 2A E (contatore ≥ 300W O GoodWe ≥ 200W
-│   │     O GoodWe sotto il 98%) per 60 s
+│   │     O GoodWe sotto il 20%) per 60 s
 │   │
 │   └─ batteria piena: il caricabatterie passa da solo
 │      da bulk a float e la tiene lì ..................► sensore: PIENA
 │
 └─ B. NO SURPLUS
-    │  (GoodWe non piena, GoodWe che eroga, prelievo, immissione insufficiente)
+    │  (GoodWe sotto il 20%, GoodWe che eroga, prelievo, immissione insufficiente)
     ▼
     IN SCARICA (SBU, solare + rete, bulk = float = 25.5V, 10A)
     │  ci resta almeno 10 minuti (anti-oscillazione)
@@ -510,16 +509,18 @@ non protegge la batteria (il 25/09/2026 il BMS ha spento l'inverter alle
    60 secondi del punto 4 non conta come prelievo.
 4. **Carica al minimo ma non basta** ("VUOL DIRE CHE"): in CARICA a 2A con il
    contatore che preleva >= 300W, la GoodWe che eroga >= 200W o la GoodWe
-   sotto il 98% per 60 secondi → SCARICA, le stesse soglie delle discese (fino al 24/10/2026 500W). Sotto
+   sotto il 20% per 60 secondi → SCARICA, le stesse soglie delle discese (fino al 24/10/2026 500W). Sotto
    i 60 s è il trasferimento dei carichi, un transitorio.
 5. **Anti-oscillazione**: passata a SCARICA o MANTENIMENTO da meno di 10
    minuti, resta. Senza, con il surplus al limite la PI30 passava CARICA ↔ SCARICA ogni 20-40
    secondi (20-34 volte al giorno tra il 27/09 e il 02/10).
-6. **Surplus**: fuori dalla CARICA si entra solo con la GoodWe piena (100%, o
-   99% con la batteria ferma) e un'immissione che copre i carichi della PI30
-   più 60W, oppure al limite di immissione meno 50W (250W: oltre i 300W la
-   GoodWe taglia il fotovoltaico e il surplus vero non si vede). Altrimenti
-   SCARICA. Il 04/10 la PI30 tentava la CARICA con
+6. **Surplus**: fuori dalla CARICA si entra solo con la GoodWe almeno al 20%
+   (anche se sta ancora ricaricando: con tanto fotovoltaico si caricano
+   insieme, e l'immissione è ciò che la GoodWe non assorbe) e un'immissione
+   che copre i carichi della PI30 più 60W, oppure al limite di immissione
+   meno 50W (250W: oltre i 300W la GoodWe taglia il fotovoltaico e il surplus
+   vero non si vede). Altrimenti SCARICA. Fino al 04/11/2026 serviva la
+   GoodWe piena (100%, o 99% con la batteria ferma). Il 04/10 la PI30 tentava la CARICA con
    500W di carichi e 120-240W di immissione, sei volte in una sera.
 7. **CARICA**: si entra a 2A e la corrente si modula dall'esecuzione
    successiva.
@@ -540,17 +541,20 @@ temperatura.
   GoodWe. Due trigger (GoodWe oltre 200W, contatore oltre 300W) intervengono
   senza aspettare i 10 secondi degli altri.
 - **Giù subito a 2A** se manca una lettura (SOC o tensione GoodWe, tensione
-  della batteria PI30) o se la GoodWe scende sotto il 98%: sta ricaricando e ha
-  la precedenza. Già a 2A, dopo 60 secondi così, SCARICA.
+  della batteria PI30) o se la GoodWe scende sotto il 20%: è troppo scarica e
+  ha la precedenza. Già a 2A, dopo 60 secondi così, SCARICA.
 - **Giù gradualmente** solo per la temperatura (sotto).
 - **In mezzo resta** e non viene riscritta sull'inverter.
-- Si sale solo con la GoodWe piena (100%, oppure 99% con la batteria ferma:
-  il suo BMS può fermarsi a 99 per ore). Se in CARICA la GoodWe scende al
-  98-99% la corrente non sale ma la PI30 non esce (sotto il 98%, vedi sopra): il SOC GoodWe oscilla tra
-  99 e 100, e il 04/10 un 99 di un attimo aveva mandato in SCARICA una PI30 in
-  float con -311W al contatore. Le vecchie eccezioni (GoodWe sopra 55V, al
-  100% sotto 53V, salita da 2 a 10A con la GoodWe non piena) sono sparite il
-  24/10/2026: quella mattina la GoodWe era a 55V al 91% mentre caricava a 3kW.
+- Si sale solo con la GoodWe almeno al 20%, anche se sta ancora ricaricando:
+  con tanto fotovoltaico le due batterie si caricano insieme, e il surplus
+  visibile all'immissione è quello che la GoodWe non assorbe. Fino al
+  04/11/2026 si saliva solo con la GoodWe piena (100%, oppure 99% con la
+  batteria ferma: il suo BMS può fermarsi a 99 per ore) e sotto il 98% si
+  tornava a 2A e poi in SCARICA: il SOC GoodWe oscillava tra 99 e 100, e il
+  04/10 un 99 di un attimo aveva mandato in SCARICA una PI30 in float con
+  -311W al contatore. Le vecchie eccezioni (GoodWe sopra 55V, al 100% sotto
+  53V, salita da 2 a 10A con la GoodWe non piena) sono sparite il 24/10/2026:
+  quella mattina la GoodWe era a 55V al 91% mentre caricava a 3kW.
 
 Prima (fino al 23/10/2026) si saliva con "contatore < 300W e GoodWe <
 200W", cioè anche con il contatore a zero e la GoodWe che erogava già

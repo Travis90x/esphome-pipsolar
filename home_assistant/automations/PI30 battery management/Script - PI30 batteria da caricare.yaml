@@ -1,111 +1,106 @@
+# PI30 batteria da caricare (script.pi30_battery_charge).
+# Copia esatta della configurazione in Home Assistant al 08/11/2026
+# (hash di verifica 40f7a13f52f84c5d). Dall'08/11/2026 non tocca più la
+# corrente massima totale: la regola l'automazione PI30 Batteria MAN.
+# Per importarlo: Impostazioni > Automazioni e scene > Script > Aggiungi
+# script > menu in alto a destra > Modifica in YAML, incolla tutto, poi
+# l'ID entità deve essere script.pi30_battery_charge.
 alias: PI30 batteria da caricare
-description: >-
-  IN CARICA. Uscita "rete prima", carica "solare + rete", bulk e float di
-  carica dagli aiutanti "PI30 bulk carica" e "PI30 float carica" (senza:
-  29.0V e 27.0V), corrente totale 60A. Entrando in CARICA da un'altra
-  modalità (anche dal MANTENIMENTO: uscita "rete prima" con il bulk sotto la
-  metà tra tensione minima e bulk di carica) la corrente da rete parte da 2A; poi la regola l'automazione PI30
-  Batteria MAN, che chiama questo script a ogni esecuzione e aspetta che
-  finisca. Scrive solo quello che è diverso: senza niente da scrivere finisce
-  subito. Bulk e float: salendo prima il bulk, scendendo prima il float, così
-  il float non supera mai il bulk.
+description: 'IN CARICA. Uscita "rete prima", carica "solare + rete", bulk e float di carica dagli aiutanti
+  "PI30 bulk carica" e "PI30 float carica" (senza: 29.0V e 27.0V). La corrente massima totale (select.pi30_set_max_total_charging_current)
+  non la tocca: la regola l''automazione PI30 Batteria MAN, che la usa per gli step da 10A in su. Entrando
+  in CARICA da un''altra modalità (anche dal MANTENIMENTO: uscita "rete prima" con il bulk sotto la metà
+  tra tensione minima e bulk di carica) la corrente da rete parte da 2A; poi la regola l''automazione
+  PI30 Batteria MAN, che chiama questo script a ogni esecuzione e aspetta che finisca. Scrive solo quello
+  che è diverso: senza niente da scrivere finisce subito. Bulk e float: salendo prima il bulk, scendendo
+  prima il float, così il float non supera mai il bulk. Bulk e float si scrivono solo all''ingresso in
+  CARICA (dal MANTENIMENTO o dalla SCARICA vanno rimessi ai valori di carica) o quando l''automazione
+  passa apply_voltages (l''utente ha cambiato gli aiutanti); mai a carica in corso, dove li gestisce l''inverter.'
+max: 10
+mode: queued
 sequence:
-  # Due blocchi: nel secondo le variabili che leggono quelle del primo, così
-  # non conta l'ordine delle chiavi dentro un blocco
-  - variables:
-      bulk_target: "{{ states('input_number.pi30_charge_bulk_voltage') | float(29.0) | round(1) }}"
-      bulk_now: "{{ states('sensor.pi30_battery_bulk_voltage') | float(0) | round(1) }}"
-      hold_v: >-
-        {{ [states('input_number.pi30_keep_battery_live') | float(25.5), 24.0] | max | round(1) }}
-  - variables:
-      float_target: >-
-        {{ [states('input_number.pi30_charge_float_voltage') | float(27.0) | round(1), bulk_target] | min }}
-      entering: >-
-        {{ not (states('sensor.pi30_output_source_priority') | float(9) == 0.0
-           and states('sensor.pi30_charger_source_priority') | float(9) == 2.0)
-           or bulk_now < (hold_v + bulk_target) / 2 }}
-  # Entrando in CARICA: corrente da rete al minimo
+- variables:
+    bulk_target: '{{ states(''input_number.pi30_charge_bulk_voltage'') | float(29.0) | round(1) }}'
+    bulk_now: '{{ states(''sensor.pi30_battery_bulk_voltage'') | float(0) | round(1) }}'
+    hold_v: '{{ [states(''input_number.pi30_keep_battery_live'') | float(25.5), 24.0] | max | round(1)
+      }}'
+- variables:
+    float_target: '{{ [states(''input_number.pi30_charge_float_voltage'') | float(27.0) | round(1), bulk_target]
+      | min }}'
+    entering: |-
+      {{ not (states('sensor.pi30_output_source_priority') | float(9) == 0.0
+         and states('sensor.pi30_charger_source_priority') | float(9) == 2.0)
+         or bulk_now < (hold_v + bulk_target) / 2 }}
+- variables:
+    do_voltages: '{{ entering or (apply_voltages | default(false) | bool) }}'
+- if:
+  - condition: template
+    value_template: |-
+      {{ entering and
+         states('sensor.pi30_max_utility_charging_current') | int(0) != 2 }}
+  then:
+  - action: select.select_option
+    target:
+      entity_id: select.pi30_set_max_utility_charging_current
+    data:
+      option: '2'
+  - delay: 00:00:02
+- if:
+  - condition: template
+    value_template: '{{ do_voltages }}'
+  then:
   - if:
-      - condition: template
-        value_template: >-
-          {{ entering and
-             states('sensor.pi30_max_utility_charging_current') | int(0) != 2 }}
+    - condition: template
+      value_template: '{{ bulk_target >= bulk_now }}'
     then:
-      - action: select.select_option
-        target:
-          entity_id: select.pi30_set_max_utility_charging_current
-        data:
-          option: "2"
-      - delay: "00:00:02"
-  # Bulk e float di carica
-  - if:
+    - if:
       - condition: template
-        value_template: "{{ bulk_target >= bulk_now }}"
-    then:
-      - if:
-          - condition: template
-            value_template: "{{ bulk_target != bulk_now }}"
-        then:
-          - action: number.set_value
-            target:
-              entity_id: number.pi30_set_battery_bulk_voltage
-            data:
-              value: "{{ bulk_target }}"
-          - delay: "00:00:02"
-      - if:
-          - condition: template
-            value_template: >-
-              {{ states('sensor.pi30_battery_float_voltage') | float(0) | round(1) != float_target }}
-        then:
-          - action: number.set_value
-            target:
-              entity_id: number.pi30_set_battery_float_voltage
-            data:
-              value: "{{ float_target }}"
-          - delay: "00:00:02"
-    else:
-      - if:
-          - condition: template
-            value_template: >-
-              {{ states('sensor.pi30_battery_float_voltage') | float(0) | round(1) != float_target }}
-        then:
-          - action: number.set_value
-            target:
-              entity_id: number.pi30_set_battery_float_voltage
-            data:
-              value: "{{ float_target }}"
-          - delay: "00:00:02"
+        value_template: '{{ bulk_target != bulk_now }}'
+      then:
       - action: number.set_value
         target:
           entity_id: number.pi30_set_battery_bulk_voltage
         data:
-          value: "{{ bulk_target }}"
-      - delay: "00:00:02"
-  # Corrente totale di carica (rete + solare) al massimo: la limita la
-  # corrente da rete
-  - if:
+          value: '{{ bulk_target }}'
+      - delay: 00:00:02
+    - if:
       - condition: template
-        value_template: >-
-          {{ states('sensor.pi30_max_total_charging_current') | int(0) < 60 }}
-    then:
-      - action: select.select_option
+        value_template: '{{ states(''sensor.pi30_battery_float_voltage'') | float(0) | round(1) != float_target
+          }}'
+      then:
+      - action: number.set_value
         target:
-          entity_id: select.pi30_set_max_total_charging_current
+          entity_id: number.pi30_set_battery_float_voltage
         data:
-          option: "60"
-      - delay: "00:00:02"
-  # Priorità
-  - if:
+          value: '{{ float_target }}'
+      - delay: 00:00:02
+    else:
+    - if:
       - condition: template
-        value_template: "{{ entering }}"
-    then:
-      - action: button.press
+        value_template: '{{ states(''sensor.pi30_battery_float_voltage'') | float(0) | round(1) != float_target
+          }}'
+      then:
+      - action: number.set_value
         target:
-          entity_id: button.pi30_charger_solar_utility
-      - delay: "00:00:01"
-      - action: switch.turn_on
-        target:
-          entity_id: switch.pi30_output_priority_utility
-      - delay: "00:00:02"
-mode: queued
-max: 10
+          entity_id: number.pi30_set_battery_float_voltage
+        data:
+          value: '{{ float_target }}'
+      - delay: 00:00:02
+    - action: number.set_value
+      target:
+        entity_id: number.pi30_set_battery_bulk_voltage
+      data:
+        value: '{{ bulk_target }}'
+    - delay: 00:00:02
+- if:
+  - condition: template
+    value_template: '{{ entering }}'
+  then:
+  - action: button.press
+    target:
+      entity_id: button.pi30_charger_solar_utility
+  - delay: 00:00:01
+  - action: switch.turn_on
+    target:
+      entity_id: switch.pi30_output_priority_utility
+  - delay: 00:00:02

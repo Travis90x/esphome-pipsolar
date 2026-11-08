@@ -1,0 +1,39 @@
+# Necessario per l'automazione PI30 Batteria MAN (dall'08/11/2026).
+# La tensione più alta della batteria PI30 nelle ultime 8 ore. Serve a
+# sapere se il bulk è già stato raggiunto in questa sessione di carica,
+# senza un aiutante da azzerare a mano: dopo 8 ore i valori vecchi escono da
+# soli.
+#
+# L'automazione toglie il float anticipato (porta il float al bulk per 10 s)
+# solo se questo massimo è sotto sensor.pi30_battery_bulk_voltage - 0.2V,
+# cioè se il bulk non è stato raggiunto. Se l'aiutante è "sconosciuto" lo
+# tratta come "bulk non raggiunto".
+#
+# NON incollare questo file in un editor YAML. Da interfaccia:
+#   Impostazioni > Dispositivi e servizi > Aiutanti > Crea aiutante >
+#   Statistiche
+#   Nome: PI30 Tensione massima bulk
+#   Entità: sensor.pi30_battery_voltage (Batteria tensione PI30)
+#   Caratteristica statistica: Max value (valore massimo)
+#   Sampling size: 10000 (vuoto o piccolo = massimo calcolato solo sulle
+#     ultime letture, non sulle 8 ore; la tensione cambia al massimo circa
+#     2000 volte in 8 ore)
+#   Max age: 8:00:00
+#   Keep last sample: acceso (di notte la tensione resta ferma per ore e
+#     senza questa opzione l'aiutante diventerebbe "sconosciuto")
+#   Percentile: 50 (non conta), Precision: 2
+# Dopo il salvataggio apri l'aiutante, icona ingranaggio, e controlla che
+# l'ID entità sia sensor.pi30_tensione_massima_bulk.
+#
+# Oppure, solo in configuration.yaml (poi riavvia):
+sensor:
+  - platform: statistics
+    name: PI30 Tensione massima bulk
+    unique_id: pi30_tensione_massima_bulk
+    entity_id: sensor.pi30_battery_voltage
+    state_characteristic: value_max
+    sampling_size: 10000
+    max_age:
+      hours: 8
+    keep_last_sample: true
+    precision: 2

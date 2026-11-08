@@ -2,21 +2,24 @@
 # dashboard e nello storico al posto degli script: uno script è "on" solo
 # per pochi istanti mentre gira.
 #
-#   IN CARICA     uscita "rete prima", carica "solare + rete", bulk di
-#                 carica (PI30 batteria da caricare). Il passaggio da bulk a
-#                 float lo fa da solo il caricabatterie e il sensore resta
-#                 IN CARICA (fino al 04/11/2026 in float mostrava PIENA)
-#   IN SCARICA   uscita SBU, la batteria alimenta i carichi
-#                 (PI30 batteria da scaricare, batteria sopra il minimo)
-#   MANTENIMENTO  batteria scarica tenuta alla tensione minima, carichi sulla
-#                 rete: uscita "rete prima" con il bulk alla tensione minima
-#                 ("PI30 batteria tensione di mantenimento"; conta il bulk
-#                 sotto la metà tra minimo e bulk di carica), oppure uscita
-#                 SBU con la PI30 già sulla rete (Line mode), nel minuto
-#                 prima che l'automazione passi a "rete prima". Niente regola
-#                 sulla tensione: alternava IN SCARICA e MANTENIMENTO ogni
-#                 pochi secondi con la batteria vicina al minimo.
-#   ALTRO         priorità impostate a mano in un'altra combinazione
+#   SCARICAMENTO IN RETE     la batteria alimenta le prese della PI30
+#                            (Battery mode) ed Enel c'è: si scarica fino alla
+#                            tensione di recharge, poi le prese passano su Enel
+#   SCARICAMENTO FUORI RETE  la batteria alimenta le prese ed Enel manca
+#                            (tensione di rete letta dalla PI30 sotto 100V): si
+#                            scarica fino allo stacco di emergenza (under voltage)
+#   BATTERIA SCARICA         prese su Enel, batteria tenuta alla tensione minima
+#                            (input_number.pi30_keep_battery_live): uscita "rete"
+#                            con il bulk sotto la metà tra minimo e bulk di
+#                            carica, oppure uscita SBU già in Line mode
+#   CARICAMENTO BULK         in carica (uscita "rete", caricabatterie "solare +
+#                            rete", bulk di carica), flag di float spento
+#   CARICAMENTO Float        in carica, flag di float acceso, corrente > 2A
+#   BATTERIA CARICA          in carica, flag di float acceso, corrente <= 2A
+#                            (attenzione: anche un float anticipato a 2A finisce qui)
+#   ALTRO                    priorità impostate a mano in un'altra combinazione
+#
+# Nomi in uso dall'08/11/2026 (prima: IN CARICA, IN SCARICA, MANTENIMENTO).
 #
 # La PI30 senza rete in CARICA non si vede qui: la segnala la notifica
 # "PI30 non sta usando la rete" dell'automazione.
@@ -47,10 +50,16 @@ template:
           {% set minimo = [states('input_number.pi30_keep_battery_live') | float(25.5), 24.0] | max %}
           {% set bulk_carica = states('input_number.pi30_charge_bulk_voltage') | float(29.0) %}
           {% set bulk = states('sensor.pi30_battery_bulk_voltage') | float(0) %}
-          {% if o == 0 and c == 2 and bulk < (minimo + bulk_carica) / 2 %}MANTENIMENTO
-          {% elif o == 0 and c == 2 %}IN CARICA
-          {% elif o == 2 and is_state('sensor.pi30_device_mode', 'Line mode') %}MANTENIMENTO
-          {% elif o == 2 %}IN SCARICA
+          {% set modo = states('sensor.pi30_device_mode') %}
+          {% set rete_v = states('sensor.pi30_grid_voltage') | float(0) %}
+          {% set flag_float = is_state('binary_sensor.pi30_charging_to_floating_mode', 'on') %}
+          {% set corrente = states('sensor.pi30_battery_charging_current') | float(0) %}
+          {% if modo == 'Battery mode' and rete_v < 100 %}SCARICAMENTO FUORI RETE
+          {% elif modo == 'Battery mode' %}SCARICAMENTO IN RETE
+          {% elif (o == 0 and c == 2 and bulk < (minimo + bulk_carica) / 2) or (o == 2 and modo == 'Line mode') %}BATTERIA SCARICA
+          {% elif o == 0 and c == 2 and not flag_float %}CARICAMENTO BULK
+          {% elif o == 0 and c == 2 and corrente > 2 %}CARICAMENTO Float
+          {% elif o == 0 and c == 2 %}BATTERIA CARICA
           {% else %}ALTRO{% endif %}
         availability: >-
           {{ has_value('sensor.pi30_output_source_priority')

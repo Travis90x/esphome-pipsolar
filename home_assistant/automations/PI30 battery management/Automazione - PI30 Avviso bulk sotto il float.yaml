@@ -1,0 +1,30 @@
+# PI30 Avviso bulk sotto il float (automation.pi30_avviso_bulk_sotto_il_float).
+# Notifica quando imposti a mano un bulk più basso del float: l'inverter lo
+# rifiuta (provato l'08/11/2026: bulk chiesto 25.5V con float 26.0V, il bulk
+# è rimasto 29.0V). Non cambia nessuna tensione.
+# Per importarla: Impostazioni > Automazioni e scene > Crea automazione >
+# menu in alto a destra > Modifica in YAML, incolla tutto.
+alias: PI30 Avviso bulk sotto il float
+description: 'Avvisa con una notifica quando il bulk impostato (number.pi30_set_battery_bulk_voltage)
+  è più basso del float letto dall''inverter (sensor.pi30_battery_float_voltage): l''inverter rifiuta
+  un bulk sotto il float. Non cambia nessuna tensione.'
+triggers:
+- entity_id: number.pi30_set_battery_bulk_voltage
+  not_to:
+  - unavailable
+  - unknown
+  trigger: state
+conditions:
+- condition: template
+  value_template: '{{ trigger.to_state.state | float(0) < states(''sensor.pi30_battery_float_voltage'')
+    | float(0) }}'
+actions:
+- action: persistent_notification.create
+  data:
+    message: 'Hai impostato il bulk a {{ trigger.to_state.state }} V, ma il float nell''inverter è {{
+      states(''sensor.pi30_battery_float_voltage'') | float(0) | round(1) }} V. L''inverter non accetta
+      un bulk più basso del float: il bulk resta {{ states(''sensor.pi30_battery_bulk_voltage'') }} V.
+      Abbassa prima il float, poi il bulk.'
+    notification_id: pi30_bulk_sotto_float
+    title: 'PI30: bulk più basso del float'
+mode: single
